@@ -142,24 +142,25 @@ export default function DashboardPage() {
   };
 
   return (
-    <div className="space-y-8">
-      <div className="flex items-center justify-between">
+    <div className="space-y-6 md:space-y-8">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
-          <h1 className="text-4xl font-bold text-balance mb-2">Welcome Back</h1>
-          <p className="text-muted-foreground">Here's what's happening with your business today</p>
+          <h1 className="text-3xl md:text-4xl font-bold text-balance mb-2">Welcome Back</h1>
+          <p className="text-sm md:text-base text-muted-foreground">Here's what's happening with your business today</p>
         </div>
         <Button
           size="lg"
-          className="glow-accent"
+          className="glow-accent w-full md:w-auto"
           onClick={() => navigate('/onboarding')}
         >
           <Sparkles className="w-5 h-5 mr-2" />
-          Start New Business Setup
+          <span className="hidden sm:inline">Start New Business Setup</span>
+          <span className="sm:hidden">New Setup</span>
         </Button>
       </div>
 
       {/* Quick Actions */}
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
         <Card className="card-hover cursor-pointer" onClick={() => navigate('/proposals')}>
           <CardContent className="flex items-center gap-4 p-6">
             <div className="w-12 h-12 rounded-lg bg-accent/10 flex items-center justify-center">
@@ -210,7 +211,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 md:gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
         <Card className="card-hover border-l-4 border-l-success">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Total Revenue</CardTitle>
@@ -296,12 +297,19 @@ export default function DashboardPage() {
             </p>
           </div>
 
-          <div className="w-full h-[300px]">
+          <div className="w-full h-[250px] md:h-[300px]">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={adjustedCashflowData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                <XAxis dataKey="month" stroke="hsl(var(--muted-foreground))" />
-                <YAxis stroke="hsl(var(--muted-foreground))" />
+                <XAxis 
+                  dataKey="month" 
+                  stroke="hsl(var(--muted-foreground))"
+                  tick={{ fontSize: 12 }}
+                />
+                <YAxis 
+                  stroke="hsl(var(--muted-foreground))"
+                  tick={{ fontSize: 12 }}
+                />
                 <Tooltip
                   contentStyle={{
                     backgroundColor: 'hsl(var(--card))',
@@ -309,7 +317,7 @@ export default function DashboardPage() {
                     borderRadius: '8px',
                   }}
                 />
-                <Legend />
+                <Legend wrapperStyle={{ paddingTop: 8 }} />
                 <Line
                   type="monotone"
                   dataKey="income"
@@ -337,7 +345,7 @@ export default function DashboardPage() {
         </CardContent>
       </Card>
 
-      <div className="grid gap-6 md:grid-cols-2">
+      <div className="grid gap-4 md:gap-6 grid-cols-1 lg:grid-cols-2">
         {/* Active Projects */}
         <Card className="card-hover">
           <CardHeader>

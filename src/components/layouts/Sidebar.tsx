@@ -3,6 +3,7 @@ import { Home, Users, Briefcase, DollarSign, Calendar, FileText, Zap, Settings, 
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
+import { ThemeToggle } from '@/components/common/ThemeToggle';
 import { useState } from 'react';
 
 const navigation = [
@@ -57,8 +58,8 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
         })}
       </nav>
 
-      <div className="p-4 border-t border-sidebar-border">
-        <div className="flex items-center gap-3 px-4 py-3 mb-2">
+      <div className="p-4 border-t border-sidebar-border space-y-2">
+        <div className="flex items-center gap-3 px-4 py-3">
           <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-primary-foreground font-semibold text-sm">
             {profile?.username?.charAt(0).toUpperCase() || 'U'}
           </div>
@@ -70,6 +71,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
               {profile?.role || 'user'}
             </p>
           </div>
+          <ThemeToggle />
         </div>
         <Button
           variant="ghost"

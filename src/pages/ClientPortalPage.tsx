@@ -1,7 +1,7 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { FileText, DollarSign, Briefcase, CheckCircle2, Clock, Sparkles, Download, Eye } from 'lucide-react';
+import { FileText, DollarSign, Briefcase, CheckCircle2, Clock, Sparkles, Download, Eye, Heart } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 export default function ClientPortalPage() {
@@ -292,12 +292,26 @@ export default function ClientPortalPage() {
         </div>
 
         {/* Footer */}
-        <div className="text-center pt-8 pb-4 border-t border-border">
+        <div className="text-center pt-8 pb-4 border-t border-border space-y-3">
           <p className="text-sm text-muted-foreground mb-2">
             Powered by <span className="font-semibold text-accent">Forgefly</span>
           </p>
           <p className="text-xs text-muted-foreground">
             Questions? Contact your project manager or email support@forgefly.com
+          </p>
+          <p className="text-xs text-muted-foreground pt-2">
+            Built with <Heart className="w-3 h-3 inline text-accent fill-accent mx-0.5" /> using{' '}
+            <span className="font-medium text-accent">MeDo</span> •{' '}
+            <a 
+              href="https://forgefly.io" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="font-medium text-accent hover:underline"
+            >
+              Forgefly.io
+            </a>
+            {' '}By <span className="font-medium">Sourav Nayak</span> &{' '}
+            <span className="font-medium">Grok</span>
           </p>
         </div>
       </div>
