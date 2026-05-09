@@ -159,7 +159,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Quick Actions */}
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-4">
         <Card className="card-hover cursor-pointer" onClick={() => navigate('/proposals')}>
           <CardContent className="flex items-center gap-4 p-6">
             <div className="w-12 h-12 rounded-lg bg-accent/10 flex items-center justify-center">
@@ -192,6 +192,18 @@ export default function DashboardPage() {
             <div>
               <p className="font-semibold">New Project</p>
               <p className="text-sm text-muted-foreground">Start building</p>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="card-hover cursor-pointer border-accent/20" onClick={() => navigate('/client-portal')}>
+          <CardContent className="flex items-center gap-4 p-6">
+            <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-accent to-primary flex items-center justify-center glow-accent">
+              <Sparkles className="w-6 h-6 text-white" />
+            </div>
+            <div>
+              <p className="font-semibold">Client Portal</p>
+              <p className="text-sm text-muted-foreground">Preview demo</p>
             </div>
           </CardContent>
         </Card>
