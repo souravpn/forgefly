@@ -50,36 +50,42 @@ export function AICopilot() {
     const lowerQuery = query.toLowerCase();
     
     if (lowerQuery.includes('proposal')) {
-      return "I can help you create a proposal! Based on your business profile, I'll generate a professional proposal. Would you like me to create one for a specific client?";
+      return "✨ I'll help you create a winning proposal!\n\nHere's what I can generate:\n\n📄 **Professional Proposal Template**\n• Cover page with your branding\n• Service description\n• Detailed pricing breakdown\n• Timeline and deliverables\n• Terms and conditions\n\nWould you like me to:\n1. Create a proposal for TechStart Inc ($3,200 brand identity project)\n2. Generate a custom proposal for a new client\n3. Show you proposal best practices\n\nJust let me know which option!";
     }
     if (lowerQuery.includes('invoice')) {
-      return "I'll help you create an invoice. Please provide the client name and project details, or I can pull from your existing projects.";
+      return "💰 Let me help you create an invoice!\n\n**Quick Invoice Options:**\n\n1. **TechStart Inc** - Brand Identity Project ($3,200)\n2. **Design Co** - Marketing Campaign ($1,800)\n3. **Custom Invoice** - For a new project\n\nI'll include:\n• Professional invoice number\n• Itemized services\n• Payment terms\n• Your business branding\n\nWhich would you like to create?";
     }
     if (lowerQuery.includes('email')) {
-      return "I can draft a professional email for you. What's the purpose of the email? (e.g., follow-up, project update, payment reminder)";
+      return "📧 I can draft professional emails for you!\n\n**Email Templates Available:**\n\n1. **Follow-up Email** - After sending a proposal\n   \"Hi [Client], I wanted to follow up on the proposal I sent...\"\n\n2. **Project Update** - Keep clients informed\n   \"Great progress on your project! Here's what we've completed...\"\n\n3. **Payment Reminder** - Gentle nudge for overdue invoices\n   \"Just a friendly reminder about invoice #...\"\n\n4. **Thank You Note** - After project completion\n   \"It was a pleasure working with you on...\"\n\nWhich type would you like me to draft?";
     }
     if (lowerQuery.includes('automation')) {
-      return "Here are some automation suggestions:\n\n1. Send payment reminders 3 days before invoice due date\n2. Create follow-up tasks when proposals are sent\n3. Notify when projects move to 'Review' stage\n\nWould you like me to set up any of these?";
+      return "⚡ Smart Automation Suggestions:\n\n**High-Impact Automations:**\n\n1. **Payment Reminders** 💸\n   • Auto-send 3 days before due date\n   • Follow-up 1 day after overdue\n   • Saves 5+ hours/month\n\n2. **Proposal Follow-ups** 📨\n   • Auto-create task 3 days after sending\n   • Track proposal opens\n   • Increase close rate by 30%\n\n3. **Project Status Updates** 📊\n   • Notify clients when status changes\n   • Auto-generate progress reports\n   • Improve client satisfaction\n\n4. **Welcome Sequence** 👋\n   • Send onboarding email to new clients\n   • Share important documents\n   • Set professional first impression\n\nWhich automation should I set up first?";
     }
     if (lowerQuery.includes('cashflow') || lowerQuery.includes('finance')) {
-      return "Based on your current data:\n\n• Average monthly income: $8,400\n• Projected next month: $9,200\n• Outstanding invoices: $3,500\n\nWould you like me to create a detailed cashflow forecast?";
+      return "📊 **Your Financial Snapshot:**\n\n**Current Month:**\n• Revenue: $9,500\n• Expenses: $3,100\n• Net Profit: $6,400 (67% margin)\n\n**Outstanding:**\n• Pending Invoices: $6,500 (4 invoices)\n• Overdue: $3,200 (1 invoice - Marketing Pro)\n\n**Projections:**\n• Next Month: $10,200 (+7.4%)\n• Q2 Total: $28,500\n• Annual Run Rate: $114,000\n\n**Recommendations:**\n1. Follow up on overdue invoice from Marketing Pro\n2. Your profit margin is excellent - consider raising rates\n3. Cash reserves look healthy for 2-3 months\n\nWant me to create a detailed cashflow forecast or help with invoice follow-ups?";
+    }
+    if (lowerQuery.includes('client') || lowerQuery.includes('crm')) {
+      return "👥 **Client Management Insights:**\n\n**Active Clients:** 4\n• TechStart Inc - $8,400 lifetime value\n• Design Co - $5,500 lifetime value\n• Marketing Pro - $6,200 lifetime value\n• Startup Labs - $3,200 lifetime value\n\n**Recommendations:**\n1. **TechStart Inc** - Your top client! Consider upselling additional services\n2. **Marketing Pro** - Overdue invoice needs attention\n3. **Startup Labs** - New client, great opportunity to build relationship\n\n**Next Actions:**\n• Schedule check-in calls with top 2 clients\n• Send project update to Design Co\n• Follow up on Marketing Pro payment\n\nWant me to draft any of these communications?";
+    }
+    if (lowerQuery.includes('project')) {
+      return "🚀 **Project Pipeline Overview:**\n\n**Active Projects:** 5\n\n📍 **Lead Stage:** 1 project\n• Product Packaging - $4,200 (Marketing Pro)\n\n⚙️ **In Progress:** 2 projects\n• Brand Identity Redesign - 65% complete\n• Pitch Deck Design - 40% complete\n\n👀 **Review:** 1 project\n• Marketing Campaign - 90% complete\n\n✅ **Completed:** 1 project\n• Website Graphics - $2,400\n\n**Insights:**\n• Total pipeline value: $11,700\n• Average project: $2,340\n• Completion rate: 20%\n\n**Suggestions:**\n1. Push Marketing Campaign to completion\n2. Follow up on Product Packaging lead\n3. Update clients on in-progress work\n\nNeed help with any specific project?";
     }
     
-    return "I'm here to help! I can assist with:\n\n• Generating proposals and contracts\n• Creating invoices\n• Drafting client emails\n• Setting up automations\n• Analyzing your business data\n\nWhat would you like to work on?";
+    return "👋 **Hi! I'm your AI Co-pilot.**\n\nI can help you with:\n\n💼 **Business Operations:**\n• Generate proposals and contracts\n• Create professional invoices\n• Draft client emails\n• Set up smart automations\n\n📊 **Insights & Analytics:**\n• Analyze cashflow and finances\n• Review client relationships\n• Track project progress\n• Forecast revenue\n\n✨ **Quick Actions:**\n• \"Create a proposal for [client]\"\n• \"Draft a follow-up email\"\n• \"Show me my finances\"\n• \"Set up payment reminders\"\n\nWhat would you like to work on?";
   };
 
   return (
     <>
-      {/* Floating button */}
-      {!isOpen && (
-        <Button
-          size="lg"
-          className="fixed bottom-6 right-6 z-50 rounded-full w-14 h-14 shadow-lg glow-primary"
-          onClick={() => setIsOpen(true)}
-        >
-          <Sparkles className="w-6 h-6" />
-        </Button>
-      )}
+      {/* Floating button - Always visible */}
+      <Button
+        size="lg"
+        className={`fixed bottom-6 right-6 z-50 rounded-full w-16 h-16 shadow-2xl glow-accent transition-all ${
+          isOpen ? 'scale-0 opacity-0' : 'scale-100 opacity-100'
+        }`}
+        onClick={() => setIsOpen(true)}
+      >
+        <Sparkles className="w-7 h-7 animate-pulse" />
+      </Button>
 
       {/* Chat panel */}
       {isOpen && (

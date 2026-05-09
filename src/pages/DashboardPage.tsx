@@ -3,15 +3,17 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
-import { DollarSign, Users, FileText, TrendingUp, Calendar, CheckCircle2 } from 'lucide-react';
+import { DollarSign, Users, FileText, TrendingUp, Calendar, CheckCircle2, Sparkles, Zap } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { supabase } from '@/db/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import type { Project, Task, Client, CashflowData } from '@/types/types';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
 
 export default function DashboardPage() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [projects, setProjects] = useState<Project[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
@@ -23,6 +25,7 @@ export default function DashboardPage() {
   });
   const [cashflowData, setCashflowData] = useState<CashflowData[]>([]);
   const [whatIfMultiplier, setWhatIfMultiplier] = useState([1]);
+  const [completedTasks, setCompletedTasks] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (user) {
@@ -121,75 +124,152 @@ export default function DashboardPage() {
     }
   };
 
+  const handleTaskComplete = async (taskId: string) => {
+    setCompletedTasks(prev => new Set(prev).add(taskId));
+    
+    await supabase
+      .from('tasks')
+      .update({ completed: true })
+      .eq('id', taskId);
+
+    toast.success('Task completed!', {
+      description: 'Great work! Keep it up.',
+    });
+
+    setTimeout(() => {
+      loadDashboardData();
+    }, 600);
+  };
+
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-4xl font-bold text-balance mb-2">Welcome Back</h1>
-        <p className="text-muted-foreground">Here's what's happening with your business today</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-4xl font-bold text-balance mb-2">Welcome Back</h1>
+          <p className="text-muted-foreground">Here's what's happening with your business today</p>
+        </div>
+        <Button
+          size="lg"
+          className="glow-accent"
+          onClick={() => navigate('/onboarding')}
+        >
+          <Sparkles className="w-5 h-5 mr-2" />
+          Start New Business Setup
+        </Button>
+      </div>
+
+      {/* Quick Actions */}
+      <div className="grid gap-4 md:grid-cols-3">
+        <Card className="card-hover cursor-pointer" onClick={() => navigate('/proposals')}>
+          <CardContent className="flex items-center gap-4 p-6">
+            <div className="w-12 h-12 rounded-lg bg-accent/10 flex items-center justify-center">
+              <FileText className="w-6 h-6 text-accent" />
+            </div>
+            <div>
+              <p className="font-semibold">Create Proposal</p>
+              <p className="text-sm text-muted-foreground">Win new clients</p>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="card-hover cursor-pointer" onClick={() => navigate('/clients')}>
+          <CardContent className="flex items-center gap-4 p-6">
+            <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center">
+              <Users className="w-6 h-6 text-primary" />
+            </div>
+            <div>
+              <p className="font-semibold">Add Client</p>
+              <p className="text-sm text-muted-foreground">Grow your network</p>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="card-hover cursor-pointer" onClick={() => navigate('/projects')}>
+          <CardContent className="flex items-center gap-4 p-6">
+            <div className="w-12 h-12 rounded-lg bg-warning/10 flex items-center justify-center">
+              <Zap className="w-6 h-6 text-warning" />
+            </div>
+            <div>
+              <p className="font-semibold">New Project</p>
+              <p className="text-sm text-muted-foreground">Start building</p>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Stats Cards */}
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-        <Card>
+        <Card className="card-hover border-l-4 border-l-success">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Total Revenue</CardTitle>
-            <DollarSign className="w-4 h-4 text-muted-foreground" />
+            <div className="w-10 h-10 rounded-lg bg-success/10 flex items-center justify-center">
+              <DollarSign className="w-5 h-5 text-success" />
+            </div>
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold">${stats.totalRevenue.toLocaleString()}</div>
-            <p className="text-xs text-muted-foreground mt-1">
-              <span className="text-success">+12.5%</span> from last month
+            <p className="text-xs text-muted-foreground mt-2">
+              <span className="text-success font-semibold">↑ 12.5%</span> from last month
             </p>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="card-hover border-l-4 border-l-primary">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Active Clients</CardTitle>
-            <Users className="w-4 h-4 text-muted-foreground" />
+            <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+              <Users className="w-5 h-5 text-primary" />
+            </div>
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold">{stats.activeClients}</div>
-            <p className="text-xs text-muted-foreground mt-1">
-              <span className="text-success">+2</span> new this month
+            <p className="text-xs text-muted-foreground mt-2">
+              <span className="text-success font-semibold">+2</span> new this month
             </p>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="card-hover border-l-4 border-l-warning">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Pending Invoices</CardTitle>
-            <FileText className="w-4 h-4 text-muted-foreground" />
+            <div className="w-10 h-10 rounded-lg bg-warning/10 flex items-center justify-center">
+              <FileText className="w-5 h-5 text-warning" />
+            </div>
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold">${stats.pendingInvoices.toLocaleString()}</div>
-            <p className="text-xs text-muted-foreground mt-1">3 invoices awaiting payment</p>
+            <p className="text-xs text-muted-foreground mt-2">3 invoices awaiting payment</p>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="card-hover border-l-4 border-l-accent">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Completion Rate</CardTitle>
-            <TrendingUp className="w-4 h-4 text-muted-foreground" />
+            <div className="w-10 h-10 rounded-lg bg-accent/10 flex items-center justify-center">
+              <TrendingUp className="w-5 h-5 text-accent" />
+            </div>
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold">{stats.completionRate}%</div>
-            <p className="text-xs text-muted-foreground mt-1">Project success rate</p>
+            <p className="text-xs text-muted-foreground mt-2">Project success rate</p>
           </CardContent>
         </Card>
       </div>
 
       {/* Cashflow Chart with What-If Slider */}
-      <Card>
+      <Card className="card-hover glow-accent/20">
         <CardHeader>
-          <CardTitle className="text-balance">Predictive Cashflow</CardTitle>
+          <div className="flex items-center gap-2">
+            <TrendingUp className="w-5 h-5 text-accent" />
+            <CardTitle className="text-balance">Predictive Cashflow</CardTitle>
+          </div>
           <CardDescription>Forecast your income and expenses with what-if scenarios</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="mb-6">
-            <div className="flex items-center justify-between mb-2">
-              <label className="text-sm font-medium">Income Multiplier</label>
-              <span className="text-sm text-muted-foreground">{whatIfMultiplier[0].toFixed(1)}x</span>
+          <div className="mb-8 p-4 rounded-lg bg-accent/5 border border-accent/20">
+            <div className="flex items-center justify-between mb-3">
+              <label className="text-sm font-semibold">Income Multiplier</label>
+              <span className="text-lg font-bold text-accent">{whatIfMultiplier[0].toFixed(1)}x</span>
             </div>
             <Slider
               value={whatIfMultiplier}
@@ -199,8 +279,8 @@ export default function DashboardPage() {
               step={0.1}
               className="w-full"
             />
-            <p className="text-xs text-muted-foreground mt-2">
-              Adjust to see how changes in client acquisition affect your cashflow
+            <p className="text-xs text-muted-foreground mt-3">
+              💡 Adjust to see how changes in client acquisition affect your cashflow
             </p>
           </div>
 
@@ -247,12 +327,14 @@ export default function DashboardPage() {
 
       <div className="grid gap-6 md:grid-cols-2">
         {/* Active Projects */}
-        <Card>
+        <Card className="card-hover">
           <CardHeader>
             <div className="flex items-center justify-between">
               <CardTitle className="text-balance">Active Projects</CardTitle>
               <Link to="/projects">
-                <Button variant="ghost" size="sm">View All</Button>
+                <Button variant="ghost" size="sm" className="text-accent hover:text-accent">
+                  View All →
+                </Button>
               </Link>
             </div>
             <CardDescription>Projects currently in progress</CardDescription>
@@ -260,7 +342,11 @@ export default function DashboardPage() {
           <CardContent>
             <div className="space-y-4">
               {projects.slice(0, 4).map((project) => (
-                <div key={project.id} className="flex items-center justify-between p-3 rounded-lg bg-muted">
+                <div
+                  key={project.id}
+                  className="flex items-center justify-between p-4 rounded-lg bg-muted hover:bg-muted/80 transition-colors cursor-pointer"
+                  onClick={() => navigate('/projects')}
+                >
                   <div className="flex-1 min-w-0">
                     <p className="font-medium text-sm truncate">{project.name}</p>
                     <p className="text-xs text-muted-foreground truncate">
@@ -282,29 +368,44 @@ export default function DashboardPage() {
         </Card>
 
         {/* Today's Tasks */}
-        <Card>
+        <Card className="card-hover">
           <CardHeader>
             <div className="flex items-center justify-between">
               <CardTitle className="text-balance">Today's Tasks</CardTitle>
-              <Calendar className="w-4 h-4 text-muted-foreground" />
+              <Calendar className="w-5 h-5 text-muted-foreground" />
             </div>
             <CardDescription>Upcoming tasks and deadlines</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {tasks.map((task) => (
-                <div key={task.id} className="flex items-start gap-3 p-3 rounded-lg bg-muted">
-                  <CheckCircle2 className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium">{task.title}</p>
-                    {task.due_date && (
-                      <p className="text-xs text-muted-foreground">
-                        Due: {new Date(task.due_date).toLocaleDateString()}
+              {tasks.map((task) => {
+                const isCompleted = completedTasks.has(task.id);
+                return (
+                  <div
+                    key={task.id}
+                    className={`flex items-start gap-3 p-3 rounded-lg bg-muted cursor-pointer hover:bg-muted/80 transition-all ${
+                      isCompleted ? 'animate-success' : ''
+                    }`}
+                    onClick={() => !isCompleted && handleTaskComplete(task.id)}
+                  >
+                    <CheckCircle2
+                      className={`w-4 h-4 mt-0.5 shrink-0 transition-colors ${
+                        isCompleted ? 'text-success' : 'text-muted-foreground'
+                      }`}
+                    />
+                    <div className="flex-1 min-w-0">
+                      <p className={`text-sm font-medium ${isCompleted ? 'line-through text-muted-foreground' : ''}`}>
+                        {task.title}
                       </p>
-                    )}
+                      {task.due_date && (
+                        <p className="text-xs text-muted-foreground">
+                          Due: {new Date(task.due_date).toLocaleDateString()}
+                        </p>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
               {tasks.length === 0 && (
                 <p className="text-sm text-muted-foreground text-center py-8 text-pretty">
                   No pending tasks. You're all caught up!
