@@ -5,7 +5,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { Plus, FileText, Send } from 'lucide-react';
+import { Plus, FileText, Send, Sparkles, CheckCircle2, Clock, DollarSign } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 export default function ProposalsPage() {
@@ -13,10 +13,25 @@ export default function ProposalsPage() {
   const [proposalContent, setProposalContent] = useState({
     title: 'Brand Identity Design Package',
     client: 'TechStart Inc',
+    introduction: 'Thank you for considering our services. We\'re excited to partner with you on this transformative brand identity project.',
     services: 'Complete brand identity including logo design, color palette, typography system, and brand guidelines.',
+    deliverables: [
+      'Custom Logo Design (3 concepts)',
+      'Brand Color Palette',
+      'Typography System',
+      'Brand Guidelines Document',
+      'Business Card Design',
+      'Letterhead Template'
+    ],
     pricing: '3200',
     timeline: '4 weeks',
-    terms: 'Payment terms: 50% upfront, 50% upon completion. 3 revision rounds included.',
+    milestones: [
+      { phase: 'Discovery & Research', duration: '1 week' },
+      { phase: 'Concept Development', duration: '1 week' },
+      { phase: 'Refinement & Finalization', duration: '1 week' },
+      { phase: 'Delivery & Guidelines', duration: '1 week' }
+    ],
+    terms: 'Payment terms: 50% upfront, 50% upon completion. 3 revision rounds included. Project timeline begins upon receipt of initial payment.',
   });
 
   const proposals = [
@@ -50,125 +65,244 @@ export default function ProposalsPage() {
           </Button>
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => {}}>Save Draft</Button>
-            <Button onClick={() => {}}>
+            <Button className="glow-accent" onClick={() => {}}>
               <Send className="w-4 h-4 mr-2" />
               Send to Client
             </Button>
           </div>
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-2">
+        <div className="grid gap-6 lg:grid-cols-[1fr,1.2fr]">
           {/* Editor */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-balance">Edit Proposal</CardTitle>
-              <CardDescription>Customize your proposal content</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="title">Proposal Title</Label>
-                <Input
-                  id="title"
-                  value={proposalContent.title}
-                  onChange={(e) => setProposalContent({ ...proposalContent, title: e.target.value })}
-                />
-              </div>
+          <div className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-balance">Proposal Details</CardTitle>
+                <CardDescription>Edit the core information</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="title">Proposal Title</Label>
+                  <Input
+                    id="title"
+                    value={proposalContent.title}
+                    onChange={(e) => setProposalContent({ ...proposalContent, title: e.target.value })}
+                    placeholder="e.g., Brand Identity Design Package"
+                  />
+                </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="client">Client Name</Label>
-                <Input
-                  id="client"
-                  value={proposalContent.client}
-                  onChange={(e) => setProposalContent({ ...proposalContent, client: e.target.value })}
-                />
-              </div>
+                <div className="space-y-2">
+                  <Label htmlFor="client">Client Name</Label>
+                  <Input
+                    id="client"
+                    value={proposalContent.client}
+                    onChange={(e) => setProposalContent({ ...proposalContent, client: e.target.value })}
+                    placeholder="e.g., TechStart Inc"
+                  />
+                </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="services">Services Description</Label>
-                <Textarea
-                  id="services"
-                  value={proposalContent.services}
-                  onChange={(e) => setProposalContent({ ...proposalContent, services: e.target.value })}
-                  className="min-h-[100px]"
-                />
-              </div>
+                <div className="space-y-2">
+                  <Label htmlFor="introduction">Introduction</Label>
+                  <Textarea
+                    id="introduction"
+                    value={proposalContent.introduction}
+                    onChange={(e) => setProposalContent({ ...proposalContent, introduction: e.target.value })}
+                    className="min-h-[80px]"
+                    placeholder="Brief introduction to the proposal"
+                  />
+                </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="pricing">Total Investment</Label>
-                <Input
-                  id="pricing"
-                  type="number"
-                  value={proposalContent.pricing}
-                  onChange={(e) => setProposalContent({ ...proposalContent, pricing: e.target.value })}
-                />
-              </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="pricing">Total Investment ($)</Label>
+                    <Input
+                      id="pricing"
+                      type="number"
+                      value={proposalContent.pricing}
+                      onChange={(e) => setProposalContent({ ...proposalContent, pricing: e.target.value })}
+                      placeholder="3200"
+                    />
+                  </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="timeline">Timeline</Label>
-                <Input
-                  id="timeline"
-                  value={proposalContent.timeline}
-                  onChange={(e) => setProposalContent({ ...proposalContent, timeline: e.target.value })}
-                />
-              </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="timeline">Timeline</Label>
+                    <Input
+                      id="timeline"
+                      value={proposalContent.timeline}
+                      onChange={(e) => setProposalContent({ ...proposalContent, timeline: e.target.value })}
+                      placeholder="e.g., 4 weeks"
+                    />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
 
-              <div className="space-y-2">
-                <Label htmlFor="terms">Terms & Conditions</Label>
-                <Textarea
-                  id="terms"
-                  value={proposalContent.terms}
-                  onChange={(e) => setProposalContent({ ...proposalContent, terms: e.target.value })}
-                  className="min-h-[100px]"
-                />
-              </div>
-            </CardContent>
-          </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-balance">Services & Deliverables</CardTitle>
+                <CardDescription>What's included in this proposal</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="services">Services Description</Label>
+                  <Textarea
+                    id="services"
+                    value={proposalContent.services}
+                    onChange={(e) => setProposalContent({ ...proposalContent, services: e.target.value })}
+                    className="min-h-[100px]"
+                    placeholder="Describe the services you'll provide"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="terms">Terms & Conditions</Label>
+                  <Textarea
+                    id="terms"
+                    value={proposalContent.terms}
+                    onChange={(e) => setProposalContent({ ...proposalContent, terms: e.target.value })}
+                    className="min-h-[100px]"
+                    placeholder="Payment terms, revision policy, etc."
+                  />
+                </div>
+              </CardContent>
+            </Card>
+          </div>
 
           {/* Live Preview */}
-          <Card className="h-full">
-            <CardHeader>
-              <CardTitle className="text-balance">Live Preview</CardTitle>
-              <CardDescription>How your proposal will look to clients</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-6 p-6 rounded-lg bg-muted/50 border border-border">
-                <div className="text-center border-b border-border pb-6">
-                  <h1 className="text-3xl font-bold mb-2 text-balance">{proposalContent.title}</h1>
-                  <p className="text-muted-foreground">Prepared for {proposalContent.client}</p>
-                  <p className="text-sm text-muted-foreground mt-2">
-                    {new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
-                  </p>
+          <div className="lg:sticky lg:top-6 lg:self-start">
+            <Card className="overflow-hidden">
+              <CardHeader className="bg-gradient-to-br from-primary/5 to-accent/5 border-b">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-5 h-5 text-accent" />
+                  <CardTitle className="text-balance">Live Preview</CardTitle>
                 </div>
+                <CardDescription>Real-time preview of your proposal</CardDescription>
+              </CardHeader>
+              <CardContent className="p-0">
+                <div className="max-h-[calc(100vh-12rem)] overflow-y-auto">
+                  {/* Preview Document */}
+                  <div className="p-8 md:p-12 space-y-8 bg-background">
+                    {/* Header */}
+                    <div className="text-center space-y-4 pb-8 border-b-2 border-accent/20">
+                      <div className="inline-flex items-center justify-center w-16 h-16 rounded-xl bg-gradient-to-br from-accent to-primary glow-accent mb-4">
+                        <Sparkles className="w-8 h-8 text-white" />
+                      </div>
+                      <h1 className="text-4xl font-bold text-balance leading-tight">
+                        {proposalContent.title || 'Untitled Proposal'}
+                      </h1>
+                      <div className="space-y-1">
+                        <p className="text-lg text-muted-foreground">
+                          Prepared for <span className="font-semibold text-foreground">{proposalContent.client || 'Client Name'}</span>
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          {new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
+                        </p>
+                      </div>
+                    </div>
 
-                <div>
-                  <h2 className="text-xl font-semibold mb-3 text-balance">Services Included</h2>
-                  <p className="text-sm text-muted-foreground text-pretty">{proposalContent.services}</p>
-                </div>
+                    {/* Introduction */}
+                    {proposalContent.introduction && (
+                      <div className="space-y-3">
+                        <h2 className="text-2xl font-semibold text-balance">Introduction</h2>
+                        <p className="text-muted-foreground text-pretty leading-relaxed">
+                          {proposalContent.introduction}
+                        </p>
+                      </div>
+                    )}
 
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="p-4 rounded-lg bg-card">
-                    <p className="text-sm text-muted-foreground mb-1">Investment</p>
-                    <p className="text-2xl font-bold text-primary">${Number.parseInt(proposalContent.pricing || '0').toLocaleString()}</p>
+                    {/* Services */}
+                    <div className="space-y-4">
+                      <h2 className="text-2xl font-semibold text-balance">Services Included</h2>
+                      <p className="text-muted-foreground text-pretty leading-relaxed">
+                        {proposalContent.services || 'No services description provided.'}
+                      </p>
+                      
+                      {/* Deliverables */}
+                      <div className="grid gap-3 mt-6">
+                        {proposalContent.deliverables.map((deliverable, idx) => (
+                          <div key={idx} className="flex items-start gap-3 p-4 rounded-lg bg-muted/50 border border-border">
+                            <CheckCircle2 className="w-5 h-5 text-accent shrink-0 mt-0.5" />
+                            <span className="text-sm font-medium">{deliverable}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Investment & Timeline */}
+                    <div className="grid md:grid-cols-2 gap-6">
+                      <div className="p-6 rounded-xl bg-gradient-to-br from-accent/10 to-primary/10 border-2 border-accent/20">
+                        <div className="flex items-center gap-3 mb-3">
+                          <div className="w-10 h-10 rounded-lg bg-accent/20 flex items-center justify-center">
+                            <DollarSign className="w-5 h-5 text-accent" />
+                          </div>
+                          <p className="text-sm font-medium text-muted-foreground">Total Investment</p>
+                        </div>
+                        <p className="text-4xl font-bold text-accent">
+                          ${Number.parseInt(proposalContent.pricing || '0').toLocaleString()}
+                        </p>
+                      </div>
+
+                      <div className="p-6 rounded-xl bg-muted/50 border-2 border-border">
+                        <div className="flex items-center gap-3 mb-3">
+                          <div className="w-10 h-10 rounded-lg bg-primary/20 flex items-center justify-center">
+                            <Clock className="w-5 h-5 text-primary" />
+                          </div>
+                          <p className="text-sm font-medium text-muted-foreground">Timeline</p>
+                        </div>
+                        <p className="text-4xl font-bold">
+                          {proposalContent.timeline || 'TBD'}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Project Milestones */}
+                    <div className="space-y-4">
+                      <h2 className="text-2xl font-semibold text-balance">Project Milestones</h2>
+                      <div className="space-y-3">
+                        {proposalContent.milestones.map((milestone, idx) => (
+                          <div key={idx} className="flex items-center gap-4 p-4 rounded-lg bg-muted/50 border border-border">
+                            <div className="w-8 h-8 rounded-full bg-accent/20 flex items-center justify-center shrink-0">
+                              <span className="text-sm font-bold text-accent">{idx + 1}</span>
+                            </div>
+                            <div className="flex-1">
+                              <p className="font-semibold">{milestone.phase}</p>
+                              <p className="text-sm text-muted-foreground">{milestone.duration}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Terms */}
+                    <div className="space-y-3 p-6 rounded-lg bg-muted/30 border border-border">
+                      <h2 className="text-xl font-semibold text-balance">Terms & Conditions</h2>
+                      <p className="text-sm text-muted-foreground text-pretty leading-relaxed">
+                        {proposalContent.terms || 'No terms specified.'}
+                      </p>
+                    </div>
+
+                    {/* CTA */}
+                    <div className="pt-8 border-t-2 border-accent/20 text-center space-y-4">
+                      <Button size="lg" className="w-full md:w-auto px-12 glow-accent" onClick={() => {}}>
+                        <CheckCircle2 className="w-5 h-5 mr-2" />
+                        Accept Proposal
+                      </Button>
+                      <p className="text-xs text-muted-foreground">
+                        By accepting, you agree to the terms and conditions outlined above
+                      </p>
+                    </div>
+
+                    {/* Footer */}
+                    <div className="pt-8 border-t text-center">
+                      <p className="text-sm text-muted-foreground">
+                        Powered by <span className="font-semibold text-accent">Forgefly</span>
+                      </p>
+                    </div>
                   </div>
-                  <div className="p-4 rounded-lg bg-card">
-                    <p className="text-sm text-muted-foreground mb-1">Timeline</p>
-                    <p className="text-2xl font-bold">{proposalContent.timeline}</p>
-                  </div>
                 </div>
-
-                <div>
-                  <h2 className="text-xl font-semibold mb-3 text-balance">Terms & Conditions</h2>
-                  <p className="text-sm text-muted-foreground text-pretty">{proposalContent.terms}</p>
-                </div>
-
-                <div className="pt-6 border-t border-border text-center">
-                  <Button className="w-full" size="lg" onClick={() => {}}>
-                    Accept Proposal
-                  </Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          </div>
         </div>
       </div>
     );
