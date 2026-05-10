@@ -1,6 +1,21 @@
+<div align="center">
+
+<img src="public/favicon.png" width="180" alt="FORGEFLY" />
+
+# ForgeFly
+
+### AI-First Business OS
+
+_A voice-first AI assistant built on Claude — for anyone, for everything._
+
+[![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)](https://typescriptlang.org)
+
+</div>
+
 # Welcome to Your Miaoda Project
+
 Miaoda Application Link URL
-    URL:https://medo.dev/projects/app-bj1thg4coydd
+URL:https://medo.dev/projects/app-bj1thg4coydd
 
 # Welcome to Your Miaoda Project
 
