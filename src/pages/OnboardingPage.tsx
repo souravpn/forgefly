@@ -240,7 +240,7 @@ export default function OnboardingPage() {
           <div className="space-y-4">
             {previews.length > 0 && (
               <div className="flex items-center gap-2 mb-4">
-                <Badge variant="secondary" className="text-sm">
+                <Badge variant="secondary" className="text-sm bg-sidebar text-sidebar-foreground border-sidebar-border">
                   <Sparkles className="w-3 h-3 mr-1" />
                   AI Generated Preview
                 </Badge>

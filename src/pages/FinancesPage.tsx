@@ -1,11 +1,36 @@
 import { useState } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Slider } from '@/components/ui/slider';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { DollarSign, TrendingUp, TrendingDown, Plus } from 'lucide-react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, TooltipProps } from 'recharts';
 import type { CashflowData } from '@/types/types';
+
+// Custom Tooltip Component matching shadcn style
+function CustomTooltip({ active, payload, label }: TooltipProps<number, string>) {
+  if (!active || !payload || !payload.length) return null;
+
+  return (
+    <div className="rounded-lg border bg-card text-card-foreground shadow-sm p-3">
+      <div className="font-medium mb-2">{label}</div>
+      <div className="space-y-1">
+        {payload.map((entry, index) => (
+          <div key={index} className="flex items-center justify-between gap-4 text-sm">
+            <div className="flex items-center gap-2">
+              <div 
+                className="w-2 h-2 rounded-full" 
+                style={{ backgroundColor: entry.color }}
+              />
+              <span className="text-muted-foreground">{entry.name}</span>
+            </div>
+            <span className="font-medium">${entry.value?.toLocaleString()}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 export default function FinancesPage() {
   const [newClients, setNewClients] = useState([3]);
@@ -152,17 +177,30 @@ export default function FinancesPage() {
           <div className="w-full h-[350px]">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={projectedCashflow}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                <XAxis dataKey="month" stroke="hsl(var(--muted-foreground))" />
-                <YAxis stroke="hsl(var(--muted-foreground))" />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: 'hsl(var(--card))',
-                    border: '1px solid hsl(var(--border))',
-                    borderRadius: '8px',
-                  }}
+                <CartesianGrid 
+                  strokeDasharray="3 3" 
+                  stroke="hsl(var(--border))" 
+                  vertical={false}
                 />
-                <Legend />
+                <XAxis 
+                  dataKey="month" 
+                  stroke="hsl(var(--muted-foreground))"
+                  fontSize={12}
+                  tickLine={false}
+                  axisLine={false}
+                />
+                <YAxis 
+                  stroke="hsl(var(--muted-foreground))"
+                  fontSize={12}
+                  tickLine={false}
+                  axisLine={false}
+                  tickFormatter={(value) => `$${value}`}
+                />
+                <Tooltip content={<CustomTooltip />} />
+                <Legend 
+                  wrapperStyle={{ paddingTop: '20px' }}
+                  iconType="circle"
+                />
                 <Line
                   type="monotone"
                   dataKey="income"
@@ -170,6 +208,7 @@ export default function FinancesPage() {
                   strokeWidth={2}
                   strokeDasharray="5 5"
                   name="Actual Income"
+                  dot={false}
                 />
                 <Line
                   type="monotone"
@@ -177,6 +216,7 @@ export default function FinancesPage() {
                   stroke="hsl(var(--chart-1))"
                   strokeWidth={2}
                   name="Projected Income"
+                  dot={false}
                 />
                 <Line
                   type="monotone"
@@ -184,6 +224,7 @@ export default function FinancesPage() {
                   stroke="hsl(var(--chart-2))"
                   strokeWidth={2}
                   name="Projected Expenses"
+                  dot={false}
                 />
                 <Line
                   type="monotone"
@@ -191,31 +232,21 @@ export default function FinancesPage() {
                   stroke="hsl(var(--chart-3))"
                   strokeWidth={2}
                   name="Projected Profit"
+                  dot={false}
                 />
               </LineChart>
             </ResponsiveContainer>
           </div>
-
-          <div className="p-4 rounded-lg bg-muted">
-            <p className="text-sm font-medium mb-2">Forecast Summary</p>
-            <div className="grid gap-2 md:grid-cols-3 text-sm">
-              <div>
-                <span className="text-muted-foreground">Projected Monthly Income:</span>
-                <span className="ml-2 font-semibold">${(newClients[0] * avgProjectValue[0]).toLocaleString()}</span>
-              </div>
-              <div>
-                <span className="text-muted-foreground">Monthly Expenses:</span>
-                <span className="ml-2 font-semibold">${monthlyExpenses[0].toLocaleString()}</span>
-              </div>
-              <div>
-                <span className="text-muted-foreground">Net Profit:</span>
-                <span className="ml-2 font-semibold text-success">
-                  ${(newClients[0] * avgProjectValue[0] - monthlyExpenses[0]).toLocaleString()}
-                </span>
-              </div>
-            </div>
-          </div>
         </CardContent>
+        <CardFooter className="flex-col items-start gap-2 text-sm">
+          <div className="flex gap-2 font-medium leading-none">
+            Based on {newClients[0]} new client{newClients[0] !== 1 ? 's' : ''} per month at ${avgProjectValue[0].toLocaleString()} average project value
+          </div>
+          <div className="leading-none text-muted-foreground">
+            Projected monthly profit: ${(newClients[0] * avgProjectValue[0] - monthlyExpenses[0]).toLocaleString()} 
+            ({Math.round(((newClients[0] * avgProjectValue[0] - monthlyExpenses[0]) / (newClients[0] * avgProjectValue[0])) * 100)}% margin)
+          </div>
+        </CardFooter>
       </Card>
 
       {/* Invoices */}

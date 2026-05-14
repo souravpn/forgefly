@@ -3,13 +3,38 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
-import { DollarSign, Users, FileText, TrendingUp, Calendar, CheckCircle2, Sparkles, Zap } from 'lucide-react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import { DollarSign, Users, FileText, TrendingUp, Calendar, CheckCircle2, Sparkles, Zap, CreditCard } from 'lucide-react';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, TooltipProps } from 'recharts';
 import { supabase } from '@/db/supabase';
 import { useAuth } from '@/contexts/AuthContext';
-import type { Project, Task, Client, CashflowData } from '@/types/types';
+import type { Project, Task, Client, CashflowData, Payment } from '@/types/types';
 import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
+
+// Custom Tooltip Component matching shadcn style
+function CustomTooltip({ active, payload, label }: TooltipProps<number, string>) {
+  if (!active || !payload || !payload.length) return null;
+
+  return (
+    <div className="rounded-lg border bg-card text-card-foreground shadow-sm p-3">
+      <div className="font-medium mb-2">{label}</div>
+      <div className="space-y-1">
+        {payload.map((entry, index) => (
+          <div key={index} className="flex items-center justify-between gap-4 text-sm">
+            <div className="flex items-center gap-2">
+              <div 
+                className="w-2 h-2 rounded-full" 
+                style={{ backgroundColor: entry.color }}
+              />
+              <span className="text-muted-foreground">{entry.name}</span>
+            </div>
+            <span className="font-medium">${Math.round(entry.value || 0).toLocaleString()}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 export default function DashboardPage() {
   const { user } = useAuth();
@@ -17,6 +42,7 @@ export default function DashboardPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
+  const [payments, setPayments] = useState<Payment[]>([]);
   const [stats, setStats] = useState({
     totalRevenue: 0,
     activeClients: 0,
@@ -71,9 +97,40 @@ export default function DashboardPage() {
       setClients(clientsData);
     }
 
-    // Calculate stats
-    const totalRevenue = projectsData?.reduce((sum, p) => sum + (p.value || 0), 0) || 0;
+    const { data: paymentsData } = await supabase
+      .from('payments')
+      .select(`
+        *,
+        client:clients(name),
+        invoice:invoices(invoice_number)
+      `)
+      .eq('user_id', user.id)
+      .eq('status', 'succeeded')
+      .order('created_at', { ascending: false })
+      .limit(5);
+
+    if (paymentsData) {
+      setPayments(paymentsData);
+    }
+
+    const { data: allPaymentsData } = await supabase
+      .from('payments')
+      .select('amount, status')
+      .eq('user_id', user.id)
+      .eq('status', 'succeeded');
+
+    const { data: invoicesData } = await supabase
+      .from('invoices')
+      .select('amount, status, payment_status')
+      .eq('user_id', user.id);
+
+    const totalPaymentRevenue = allPaymentsData?.reduce((sum, p) => sum + (p.amount || 0), 0) || 0;
+    const paidInvoicesRevenue = invoicesData?.filter(i => i.payment_status === 'paid').reduce((sum, i) => sum + (Number(i.amount) || 0), 0) || 0;
+    const totalProjectRevenue = projectsData?.reduce((sum, p) => sum + (p.value || 0), 0) || 0;
+    const totalRevenue = totalPaymentRevenue + paidInvoicesRevenue + totalProjectRevenue;
+    
     const activeClients = clientsData?.length || 0;
+    const pendingInvoices = invoicesData?.filter(i => i.payment_status === 'unpaid' && (i.status === 'sent' || i.status === 'overdue')).reduce((sum, i) => sum + (Number(i.amount) || 0), 0) || 0;
     const completedProjects = projectsData?.filter(p => p.status === 'completed').length || 0;
     const totalProjects = projectsData?.length || 1;
     const completionRate = Math.round((completedProjects / totalProjects) * 100);
@@ -81,11 +138,10 @@ export default function DashboardPage() {
     setStats({
       totalRevenue,
       activeClients,
-      pendingInvoices: 3500,
+      pendingInvoices,
       completionRate,
     });
 
-    // Generate cashflow data
     const baseCashflow = generateCashflowData();
     setCashflowData(baseCashflow);
   };
@@ -199,9 +255,11 @@ export default function DashboardPage() {
 
         <Card className="card-hover cursor-pointer border-accent/20" onClick={() => navigate('/client-portal')}>
           <CardContent className="flex items-center gap-4 p-6">
-            <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-accent to-primary flex items-center justify-center glow-accent">
-              <Sparkles className="w-6 h-6 text-white" />
-            </div>
+            <img 
+              src="https://miaoda-conversation-file.s3cdn.medo.dev/user-bj1cwp7n1qm8/conv-bj1thg4coydc/20260510/file-bj7c19f23ym8.png" 
+              alt="Forgefly Logo" 
+              className="w-12 h-12 rounded-lg glow-accent"
+            />
             <div>
               <p className="font-semibold">Client Portal</p>
               <p className="text-sm text-muted-foreground">Preview demo</p>
@@ -220,7 +278,7 @@ export default function DashboardPage() {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold">${stats.totalRevenue.toLocaleString()}</div>
+            <div className="text-3xl font-bold">${Math.round(stats.totalRevenue).toLocaleString()}</div>
             <p className="text-xs text-muted-foreground mt-2">
               <span className="text-success font-semibold">↑ 12.5%</span> from last month
             </p>
@@ -250,7 +308,7 @@ export default function DashboardPage() {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold">${stats.pendingInvoices.toLocaleString()}</div>
+            <div className="text-3xl font-bold">${Math.round(stats.pendingInvoices).toLocaleString()}</div>
             <p className="text-xs text-muted-foreground mt-2">3 invoices awaiting payment</p>
           </CardContent>
         </Card>
@@ -310,13 +368,7 @@ export default function DashboardPage() {
                   stroke="hsl(var(--muted-foreground))"
                   tick={{ fontSize: 12 }}
                 />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: 'hsl(var(--card))',
-                    border: '1px solid hsl(var(--border))',
-                    borderRadius: '8px',
-                  }}
-                />
+                <Tooltip content={<CustomTooltip />} />
                 <Legend wrapperStyle={{ paddingTop: 8 }} />
                 <Line
                   type="monotone"
@@ -429,6 +481,51 @@ export default function DashboardPage() {
               {tasks.length === 0 && (
                 <p className="text-sm text-muted-foreground text-center py-8 text-pretty">
                   No pending tasks. You're all caught up!
+                </p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Recent Payments */}
+        <Card className="card-hover">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-balance">Recent Payments</CardTitle>
+                <CardDescription>Latest Stripe transactions</CardDescription>
+              </div>
+              <CreditCard className="w-5 h-5 text-accent" />
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {payments.map((payment) => (
+                <div
+                  key={payment.id}
+                  className="flex items-center justify-between p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors"
+                >
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">
+                      {payment.client?.name || 'Unknown Client'}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {payment.invoice?.invoice_number || 'N/A'} • {new Date(payment.created_at).toLocaleDateString()}
+                    </p>
+                  </div>
+                  <div className="text-right shrink-0 ml-4">
+                    <p className="text-sm font-semibold text-success">
+                      +${Math.round(payment.amount).toLocaleString()}
+                    </p>
+                    <Badge variant="outline" className="text-xs bg-success/10 text-success border-success/20">
+                      Paid
+                    </Badge>
+                  </div>
+                </div>
+              ))}
+              {payments.length === 0 && (
+                <p className="text-sm text-muted-foreground text-center py-8 text-pretty">
+                  No payments received yet. Start accepting payments with Stripe!
                 </p>
               )}
             </div>

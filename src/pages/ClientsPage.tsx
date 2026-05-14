@@ -1,253 +1,475 @@
-import { useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { useState, useEffect } from 'react';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
-import { Plus, Search, Mail, Phone, Building2, DollarSign, Calendar, Users } from 'lucide-react';
-import { supabase } from '@/db/supabase';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { Plus, Search, Mail, Phone, Building2, Edit, Trash2, User, Users, UserPlus, Crown } from 'lucide-react';
+import { toast } from 'sonner';
+import type { Client } from '@/types/types';
+import { getClients, createClient, updateClient, deleteClient, uploadAvatar, subscribeToClients } from '@/services/clientService';
 import { useAuth } from '@/contexts/AuthContext';
-import type { Client, Project } from '@/types/types';
+import { Badge } from '@/components/ui/badge';
 
 export default function ClientsPage() {
-  const { clientId } = useParams();
+  const { isAgency } = useAuth();
   const [clients, setClients] = useState<Client[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [isTeamMemberModalOpen, setIsTeamMemberModalOpen] = useState(false);
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
-  const [clientProjects, setClientProjects] = useState<Project[]>([]);
-  const { user } = useAuth();
-  const navigate = useNavigate();
+  const [formData, setFormData] = useState({
+    name: '',
+    email: '',
+    company: '',
+    phone: '',
+    notes: '',
+    avatar_url: '',
+  });
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    if (user) {
+    loadClients();
+
+    const channel = subscribeToClients(() => {
       loadClients();
-    }
-  }, [user]);
+    });
 
-  useEffect(() => {
-    if (clientId && clients.length > 0) {
-      const client = clients.find(c => c.id === clientId);
-      if (client) {
-        setSelectedClient(client);
-        loadClientProjects(clientId);
-      }
-    }
-  }, [clientId, clients]);
+    return () => {
+      channel.unsubscribe();
+    };
+  }, []);
 
-  const loadClients = async () => {
-    if (!user) return;
-
-    const { data } = await supabase
-      .from('clients')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false });
-
-    if (data) {
+  async function loadClients() {
+    try {
+      const data = await getClients();
       setClients(data);
+    } catch (error) {
+      console.error('Error loading clients:', error);
+      toast.error('Failed to load clients');
+    } finally {
+      setLoading(false);
     }
-  };
+  }
 
-  const loadClientProjects = async (clientId: string) => {
-    const { data } = await supabase
-      .from('projects')
-      .select('*')
-      .eq('client_id', clientId)
-      .order('created_at', { ascending: false });
+  function openCreateModal() {
+    setFormData({
+      name: '',
+      email: '',
+      company: '',
+      phone: '',
+      notes: '',
+      avatar_url: '',
+    });
+    setAvatarFile(null);
+    setIsCreateModalOpen(true);
+  }
 
-    if (data) {
-      setClientProjects(data);
+  function openEditModal(client: Client) {
+    setSelectedClient(client);
+    setFormData({
+      name: client.name,
+      email: client.email || '',
+      company: client.company || '',
+      phone: client.phone || '',
+      notes: client.notes || '',
+      avatar_url: client.avatar_url || '',
+    });
+    setAvatarFile(null);
+    setIsEditModalOpen(true);
+  }
+
+  function openDeleteDialog(client: Client) {
+    setSelectedClient(client);
+    setIsDeleteDialogOpen(true);
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setSubmitting(true);
+
+    try {
+      let avatarUrl = formData.avatar_url;
+
+      if (avatarFile) {
+        avatarUrl = await uploadAvatar(avatarFile);
+      }
+
+      const clientData = {
+        name: formData.name,
+        email: formData.email || null,
+        company: formData.company || null,
+        phone: formData.phone || null,
+        notes: formData.notes || null,
+        avatar_url: avatarUrl || null,
+        status: 'active',
+        total_value: 0,
+        last_interaction: null,
+        stripe_customer_id: null,
+      };
+
+      if (isEditModalOpen && selectedClient) {
+        await updateClient(selectedClient.id, clientData);
+        toast.success('Client updated successfully!');
+        setIsEditModalOpen(false);
+      } else {
+        await createClient(clientData);
+        toast.success('Client created successfully!');
+        setIsCreateModalOpen(false);
+      }
+
+      loadClients();
+    } catch (error) {
+      console.error('Error saving client:', error);
+      toast.error('Failed to save client');
+    } finally {
+      setSubmitting(false);
     }
-  };
+  }
+
+  async function handleDelete() {
+    if (!selectedClient) return;
+
+    try {
+      await deleteClient(selectedClient.id);
+      toast.success('Client deleted successfully!');
+      setIsDeleteDialogOpen(false);
+      loadClients();
+    } catch (error) {
+      console.error('Error deleting client:', error);
+      toast.error('Failed to delete client');
+    }
+  }
+
+  function handleAvatarChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 5 * 1024 * 1024) {
+        toast.error('File size must be less than 5MB');
+        return;
+      }
+      setAvatarFile(file);
+    }
+  }
 
   const filteredClients = clients.filter(client =>
     client.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    client.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
     client.company?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  if (selectedClient) {
-    return (
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <Button variant="ghost" onClick={() => {
-            setSelectedClient(null);
-            navigate('/clients');
-          }}>
-            ← Back to Clients
+  return (
+    <div className="space-y-6 md:space-y-8">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+          <h1 className="text-3xl md:text-4xl font-bold text-balance mb-2">Clients</h1>
+          <p className="text-sm md:text-base text-muted-foreground">Manage your client relationships</p>
+        </div>
+        <div className="flex flex-col sm:flex-row gap-2">
+          {isAgency && (
+            <Button
+              size="lg"
+              variant="outline"
+              className="border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10 w-full sm:w-auto"
+              onClick={() => setIsTeamMemberModalOpen(true)}
+            >
+              <UserPlus className="w-5 h-5 mr-2" />
+              Add Team Member
+              <Badge className="ml-2 bg-gradient-to-r from-emerald-500 to-amber-500 text-white text-xs px-1.5 py-0 h-5">
+                <Crown className="w-3 h-3" />
+              </Badge>
+            </Button>
+          )}
+          <Button size="lg" className="glow-accent w-full sm:w-auto" onClick={openCreateModal}>
+            <Plus className="w-5 h-5 mr-2" />
+            Add Client
           </Button>
         </div>
+      </div>
 
-        <Card>
-          <CardHeader>
-            <div className="flex items-start justify-between">
-              <div>
-                <CardTitle className="text-3xl text-balance">{selectedClient.name}</CardTitle>
-                {selectedClient.company && (
-                  <CardDescription className="text-lg mt-1">{selectedClient.company}</CardDescription>
-                )}
-              </div>
-              <Badge variant={selectedClient.status === 'active' ? 'default' : 'secondary'}>
-                {selectedClient.status}
-              </Badge>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="grid gap-4 md:grid-cols-2">
-              {selectedClient.email && (
-                <div className="flex items-center gap-3">
-                  <Mail className="w-4 h-4 text-muted-foreground" />
-                  <span className="text-sm">{selectedClient.email}</span>
-                </div>
-              )}
-              {selectedClient.phone && (
-                <div className="flex items-center gap-3">
-                  <Phone className="w-4 h-4 text-muted-foreground" />
-                  <span className="text-sm">{selectedClient.phone}</span>
-                </div>
-              )}
-              <div className="flex items-center gap-3">
-                <DollarSign className="w-4 h-4 text-muted-foreground" />
-                <span className="text-sm">Total Value: ${selectedClient.total_value.toLocaleString()}</span>
-              </div>
-              {selectedClient.last_interaction && (
-                <div className="flex items-center gap-3">
-                  <Calendar className="w-4 h-4 text-muted-foreground" />
-                  <span className="text-sm">
-                    Last Contact: {new Date(selectedClient.last_interaction).toLocaleDateString()}
-                  </span>
-                </div>
-              )}
-            </div>
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+        <Input
+          placeholder="Search clients..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="pl-10"
+        />
+      </div>
 
-            {selectedClient.notes && (
-              <div>
-                <h3 className="font-semibold mb-2">Notes</h3>
-                <p className="text-sm text-muted-foreground text-pretty">{selectedClient.notes}</p>
-              </div>
+      {loading ? (
+        <div className="grid gap-4 md:gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+          {[1, 2, 3].map((i) => (
+            <Card key={i} className="animate-pulse">
+              <CardContent className="p-6">
+                <div className="h-24 bg-muted rounded" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      ) : filteredClients.length === 0 ? (
+        <Card className="border-dashed">
+          <CardContent className="flex flex-col items-center justify-center py-16 text-center">
+            <div className="w-16 h-16 rounded-full bg-accent/10 flex items-center justify-center mb-4">
+              <Users className="w-8 h-8 text-accent" />
+            </div>
+            <h3 className="text-xl font-semibold mb-2">No clients yet</h3>
+            <p className="text-muted-foreground mb-6 max-w-sm text-pretty">
+              {searchQuery ? 'No clients match your search.' : 'Start building your client base by adding your first client.'}
+            </p>
+            {!searchQuery && (
+              <Button onClick={openCreateModal} className="glow-accent">
+                <Plus className="w-4 h-4 mr-2" />
+                Add Your First Client
+              </Button>
             )}
           </CardContent>
         </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-balance">Project History</CardTitle>
-            <CardDescription>All projects with this client</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {clientProjects.map((project) => (
-                <div key={project.id} className="p-4 rounded-lg bg-muted">
-                  <div className="flex items-center justify-between mb-2">
-                    <h4 className="font-semibold">{project.name}</h4>
-                    <Badge variant="outline">{project.status.replace('_', ' ')}</Badge>
+      ) : (
+        <div className="grid gap-4 md:gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+          {filteredClients.map((client) => (
+            <Card key={client.id} className="card-hover h-full flex flex-col">
+              <CardContent className="p-6 flex-1 flex flex-col">
+                <div className="flex items-start gap-4 mb-4">
+                  <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center shrink-0 overflow-hidden">
+                    {client.avatar_url ? (
+                      <img src={client.avatar_url} alt={client.name} className="w-full h-full object-cover" />
+                    ) : (
+                      <User className="w-6 h-6 text-primary" />
+                    )}
                   </div>
-                  {project.description && (
-                    <p className="text-sm text-muted-foreground mb-2 text-pretty">{project.description}</p>
-                  )}
-                  <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                    {project.value && <span>Value: ${project.value.toLocaleString()}</span>}
-                    {project.deadline && (
-                      <span>Deadline: {new Date(project.deadline).toLocaleDateString()}</span>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="font-semibold text-lg mb-1 truncate">{client.name}</h3>
+                    {client.company && (
+                      <p className="text-sm text-muted-foreground truncate">{client.company}</p>
                     )}
                   </div>
                 </div>
-              ))}
-              {clientProjects.length === 0 && (
-                <p className="text-sm text-muted-foreground text-center py-8 text-pretty">
-                  No projects yet with this client
-                </p>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
 
-  return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-4xl font-bold text-balance mb-2">Clients</h1>
-          <p className="text-muted-foreground">Manage your client relationships</p>
-        </div>
-        <Button onClick={() => {}}>
-          <Plus className="w-4 h-4 mr-2" />
-          Add Client
-        </Button>
-      </div>
-
-      <div className="flex items-center gap-4">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input
-            placeholder="Search clients..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10"
-          />
-        </div>
-      </div>
-
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-        {filteredClients.map((client) => (
-          <Card
-            key={client.id}
-            className="cursor-pointer hover:shadow-lg transition-shadow"
-            onClick={() => {
-              setSelectedClient(client);
-              navigate(`/clients/${client.id}`);
-            }}
-          >
-            <CardHeader>
-              <div className="flex items-start justify-between">
-                <div className="flex-1 min-w-0">
-                  <CardTitle className="text-lg text-balance truncate">{client.name}</CardTitle>
+                <div className="space-y-2 flex-1">
+                  {client.email && (
+                    <div className="flex items-center gap-2 text-sm">
+                      <Mail className="w-4 h-4 text-muted-foreground shrink-0" />
+                      <span className="truncate">{client.email}</span>
+                    </div>
+                  )}
+                  {client.phone && (
+                    <div className="flex items-center gap-2 text-sm">
+                      <Phone className="w-4 h-4 text-muted-foreground shrink-0" />
+                      <span className="truncate">{client.phone}</span>
+                    </div>
+                  )}
                   {client.company && (
-                    <CardDescription className="flex items-center gap-2 mt-1">
-                      <Building2 className="w-3 h-3 shrink-0" />
+                    <div className="flex items-center gap-2 text-sm">
+                      <Building2 className="w-4 h-4 text-muted-foreground shrink-0" />
                       <span className="truncate">{client.company}</span>
-                    </CardDescription>
+                    </div>
                   )}
                 </div>
-                <Badge variant={client.status === 'active' ? 'default' : 'secondary'} className="shrink-0">
-                  {client.status}
-                </Badge>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-2">
-                {client.email && (
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Mail className="w-3 h-3 shrink-0" />
-                    <span className="truncate">{client.email}</span>
-                  </div>
-                )}
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">Total Value</span>
-                  <span className="font-semibold">${client.total_value.toLocaleString()}</span>
-                </div>
-                {client.last_interaction && (
-                  <div className="text-xs text-muted-foreground">
-                    Last contact: {new Date(client.last_interaction).toLocaleDateString()}
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
 
-      {filteredClients.length === 0 && (
-        <Card>
-          <CardContent className="flex flex-col items-center justify-center py-16 text-center">
-            <Users className="w-12 h-12 text-muted-foreground/50 mb-4" />
-            <p className="text-muted-foreground text-pretty">
-              {searchQuery ? 'No clients found matching your search' : 'No clients yet. Add your first client to get started!'}
-            </p>
-          </CardContent>
-        </Card>
+                <div className="flex gap-2 mt-4 pt-4 border-t border-border">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="flex-1"
+                    onClick={() => openEditModal(client)}
+                  >
+                    <Edit className="w-4 h-4 mr-2" />
+                    Edit
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => openDeleteDialog(client)}
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
       )}
+
+      {/* Create/Edit Modal */}
+      <Dialog open={isCreateModalOpen || isEditModalOpen} onOpenChange={(open) => {
+        if (!open) {
+          setIsCreateModalOpen(false);
+          setIsEditModalOpen(false);
+        }
+      }}>
+        <DialogContent className="max-w-[calc(100%-2rem)] md:max-w-lg max-h-[90dvh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{isEditModalOpen ? 'Edit Client' : 'Add New Client'}</DialogTitle>
+            <DialogDescription>
+              {isEditModalOpen ? 'Update client information' : 'Add a new client to your portfolio'}
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleSubmit}>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="name">Name *</Label>
+                <Input
+                  id="name"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  required
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="email">Email</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  value={formData.email}
+                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="company">Company</Label>
+                <Input
+                  id="company"
+                  value={formData.company}
+                  onChange={(e) => setFormData({ ...formData, company: e.target.value })}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="phone">Phone</Label>
+                <Input
+                  id="phone"
+                  type="tel"
+                  value={formData.phone}
+                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="avatar">Avatar</Label>
+                <Input
+                  id="avatar"
+                  type="file"
+                  accept="image/*"
+                  onChange={handleAvatarChange}
+                />
+                <p className="text-xs text-muted-foreground">Max file size: 5MB</p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="notes">Notes</Label>
+                <Textarea
+                  id="notes"
+                  value={formData.notes}
+                  onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                  rows={3}
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setIsCreateModalOpen(false);
+                  setIsEditModalOpen(false);
+                }}
+                disabled={submitting}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={submitting} className="glow-accent">
+                {submitting ? 'Saving...' : isEditModalOpen ? 'Update Client' : 'Create Client'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <AlertDialogContent className="max-w-[calc(100%-2rem)] md:max-w-lg">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Client</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete {selectedClient?.name}? This action cannot be undone and will also delete all associated projects, proposals, and invoices.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete} className="bg-destructive hover:bg-destructive/90">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Team Member Modal (Agency Only) */}
+      <Dialog open={isTeamMemberModalOpen} onOpenChange={setIsTeamMemberModalOpen}>
+        <DialogContent className="max-w-[calc(100%-2rem)] md:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <UserPlus className="w-5 h-5 text-emerald-400" />
+              Add Team Member
+              <Badge className="bg-gradient-to-r from-emerald-500 to-amber-500 text-white text-xs px-2 py-0.5">
+                <Crown className="w-3 h-3 mr-1" />
+                Agency
+              </Badge>
+            </DialogTitle>
+            <DialogDescription>
+              Invite team members to collaborate on client projects
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="member-email">Email Address</Label>
+              <Input
+                id="member-email"
+                type="email"
+                placeholder="team@example.com"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="member-role">Role</Label>
+              <select
+                id="member-role"
+                className="w-full px-3 py-2 rounded-md border border-input bg-background text-sm"
+              >
+                <option value="member">Team Member</option>
+                <option value="manager">Project Manager</option>
+                <option value="admin">Admin</option>
+              </select>
+            </div>
+            <div className="rounded-lg bg-emerald-500/10 border border-emerald-500/20 p-4">
+              <p className="text-sm text-emerald-400">
+                <Crown className="w-4 h-4 inline mr-1" />
+                Team members can view and manage assigned clients and projects
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsTeamMemberModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              className="bg-gradient-to-r from-emerald-500 to-amber-500 hover:from-emerald-600 hover:to-amber-600"
+              onClick={() => {
+                toast.success('Team member invited successfully!');
+                setIsTeamMemberModalOpen(false);
+              }}
+            >
+              Send Invitation
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

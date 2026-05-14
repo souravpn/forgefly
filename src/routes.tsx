@@ -1,16 +1,21 @@
 import type { ReactNode } from 'react';
+import LandingPage from './pages/LandingPage';
 import LoginPage from './pages/LoginPage';
 import SignupPage from './pages/SignupPage';
 import OnboardingPage from './pages/OnboardingPage';
 import DashboardPage from './pages/DashboardPage';
 import ClientsPage from './pages/ClientsPage';
 import ProjectsPage from './pages/ProjectsPage';
+import PackagesPage from './pages/PackagesPage';
 import FinancesPage from './pages/FinancesPage';
 import CalendarPage from './pages/CalendarPage';
 import ProposalsPage from './pages/ProposalsPage';
+import InvoicesPage from './pages/InvoicesPage';
 import AutomationsPage from './pages/AutomationsPage';
 import SettingsPage from './pages/SettingsPage';
 import ClientPortalPage from './pages/ClientPortalPage';
+import PaymentSuccessPage from './pages/PaymentSuccessPage';
+import PaymentCancelPage from './pages/PaymentCancelPage';
 
 export interface RouteConfig {
   name: string;
@@ -22,6 +27,12 @@ export interface RouteConfig {
 }
 
 export const routes: RouteConfig[] = [
+  {
+    name: 'Landing',
+    path: '/',
+    element: <LandingPage />,
+    public: true,
+  },
   {
     name: 'Login',
     path: '/login',
@@ -60,6 +71,11 @@ export const routes: RouteConfig[] = [
     element: <ProjectsPage />,
   },
   {
+    name: 'Packages',
+    path: '/packages',
+    element: <PackagesPage />,
+  },
+  {
     name: 'Finances',
     path: '/finances',
     element: <FinancesPage />,
@@ -75,6 +91,11 @@ export const routes: RouteConfig[] = [
     element: <ProposalsPage />,
   },
   {
+    name: 'Invoices',
+    path: '/invoices',
+    element: <InvoicesPage />,
+  },
+  {
     name: 'Automations',
     path: '/automations',
     element: <AutomationsPage />,
@@ -86,8 +107,18 @@ export const routes: RouteConfig[] = [
   },
   {
     name: 'Client Portal',
-    path: '/portal',
+    path: '/portal/:token',
     element: <ClientPortalPage />,
     public: true,
+  },
+  {
+    name: 'Payment Success',
+    path: '/payment/success',
+    element: <PaymentSuccessPage />,
+  },
+  {
+    name: 'Payment Cancel',
+    path: '/payment/cancel',
+    element: <PaymentCancelPage />,
   },
 ];

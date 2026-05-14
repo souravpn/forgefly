@@ -1,318 +1,423 @@
+import { useState, useEffect } from 'react';
+import { useParams } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { FileText, DollarSign, Briefcase, CheckCircle2, Clock, Sparkles, Download, Eye, Heart } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { Badge } from '@/components/ui/badge';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Briefcase, FileText, Receipt, Download, ExternalLink, CheckCircle2, Clock, AlertCircle, Sparkles, Mail, Phone } from 'lucide-react';
+import { supabase } from '@/db/supabase';
+import type { Project, Proposal, Invoice, Client } from '@/types/types';
+import { toast } from 'sonner';
 
 export default function ClientPortalPage() {
-  const navigate = useNavigate();
-  
-  const clientData = {
-    name: 'TechStart Inc',
-    contactPerson: 'Sarah Johnson',
-    projects: [
-      { 
-        id: '1', 
-        name: 'Brand Identity Design', 
-        status: 'in_progress', 
-        progress: 65,
-        description: 'Complete brand identity including logo, color palette, and brand guidelines',
-        startDate: '2026-04-01',
-        dueDate: '2026-05-30',
-        deliverables: ['Logo Design', 'Brand Guidelines', 'Business Cards', 'Letterhead']
-      },
-      { 
-        id: '2', 
-        name: 'Website Mockups', 
-        status: 'completed', 
-        progress: 100,
-        description: 'High-fidelity mockups for homepage and key landing pages',
-        startDate: '2026-03-15',
-        dueDate: '2026-04-15',
-        deliverables: ['Homepage Design', 'About Page', 'Services Page', 'Contact Page']
-      },
-      { 
-        id: '3', 
-        name: 'Marketing Collateral', 
-        status: 'review', 
-        progress: 90,
-        description: 'Brochures, flyers, and social media templates',
-        startDate: '2026-04-20',
-        dueDate: '2026-05-25',
-        deliverables: ['Tri-fold Brochure', 'Flyer Design', 'Social Templates']
-      },
-    ],
-    proposals: [
-      { 
-        id: '1', 
-        title: 'Social Media Package', 
-        status: 'pending', 
-        value: 1800,
-        description: 'Monthly social media content creation and management',
-        validUntil: '2026-05-31'
-      },
-      { 
-        id: '2', 
-        title: 'Video Production Services', 
-        status: 'approved', 
-        value: 4500,
-        description: 'Brand story video and product showcase videos',
-        validUntil: '2026-06-15'
-      },
-    ],
-    invoices: [
-      { id: '1', number: 'INV-001', amount: 3200, status: 'paid', dueDate: '2026-04-15', description: 'Brand Identity - Initial Payment' },
-      { id: '2', number: 'INV-002', amount: 2400, status: 'pending', dueDate: '2026-05-20', description: 'Website Mockups - Final Payment' },
-      { id: '3', number: 'INV-003', amount: 1600, status: 'pending', dueDate: '2026-05-28', description: 'Brand Identity - Milestone 2' },
-    ],
+  const { token } = useParams<{ token: string }>();
+  const [client, setClient] = useState<Client | null>(null);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [proposals, setProposals] = useState<Proposal[]>([]);
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (token) {
+      validateTokenAndLoadData();
+    }
+  }, [token]);
+
+  async function validateTokenAndLoadData() {
+    try {
+      setLoading(true);
+      setError(null);
+
+      // Validate token and get client ID
+      const { data: tokenData, error: tokenError } = await supabase
+        .from('client_portal_tokens')
+        .select('client_id, expires_at')
+        .eq('token', token)
+        .single();
+
+      if (tokenError || !tokenData) {
+        setError('Invalid or expired portal link. Please contact your service provider for a new link.');
+        return;
+      }
+
+      // Check if token is expired
+      if (new Date(tokenData.expires_at) < new Date()) {
+        setError('This portal link has expired. Please contact your service provider for a new link.');
+        return;
+      }
+
+      // Update last accessed time
+      await supabase
+        .from('client_portal_tokens')
+        .update({ last_accessed_at: new Date().toISOString() })
+        .eq('token', token);
+
+      // Load client data
+      const { data: clientData, error: clientError } = await supabase
+        .from('clients')
+        .select('*')
+        .eq('id', tokenData.client_id)
+        .single();
+
+      if (clientError || !clientData) {
+        setError('Unable to load client data. Please try again later.');
+        return;
+      }
+
+      setClient(clientData);
+
+      // Load projects, proposals, and invoices for this client
+      const [projectsData, proposalsData, invoicesData] = await Promise.all([
+        supabase
+          .from('projects')
+          .select('*')
+          .eq('client_id', tokenData.client_id)
+          .order('created_at', { ascending: false }),
+        supabase
+          .from('proposals')
+          .select('*')
+          .eq('client_id', tokenData.client_id)
+          .order('created_at', { ascending: false }),
+        supabase
+          .from('invoices')
+          .select('*')
+          .eq('client_id', tokenData.client_id)
+          .order('created_at', { ascending: false }),
+      ]);
+
+      if (projectsData.data) setProjects(projectsData.data);
+      if (proposalsData.data) setProposals(proposalsData.data);
+      if (invoicesData.data) setInvoices(invoicesData.data);
+    } catch (error) {
+      console.error('Error loading portal data:', error);
+      setError('An unexpected error occurred. Please try again later.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const getStatusIcon = (status: string) => {
+    switch (status?.toLowerCase()) {
+      case 'completed':
+      case 'paid':
+      case 'accepted':
+        return <CheckCircle2 className="w-4 h-4 text-emerald-500" />;
+      case 'in_progress':
+      case 'sent':
+      case 'pending':
+        return <Clock className="w-4 h-4 text-amber-500" />;
+      default:
+        return <AlertCircle className="w-4 h-4 text-muted-foreground" />;
+    }
   };
 
   const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'in_progress':
-        return 'bg-blue-500/10 text-blue-500 border-blue-500/20';
-      case 'review':
-        return 'bg-purple-500/10 text-purple-500 border-purple-500/20';
+    switch (status?.toLowerCase()) {
       case 'completed':
-        return 'bg-green-500/10 text-green-500 border-green-500/20';
-      case 'pending':
-        return 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20';
-      case 'approved':
-        return 'bg-green-500/10 text-green-500 border-green-500/20';
       case 'paid':
-        return 'bg-green-500/10 text-green-500 border-green-500/20';
+      case 'accepted':
+        return 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20';
+      case 'in_progress':
+      case 'sent':
+      case 'pending':
+        return 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20';
+      case 'overdue':
+      case 'rejected':
+        return 'bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20';
       default:
         return 'bg-muted text-muted-foreground';
     }
   };
 
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-primary/5 via-background to-accent/5">
-      {/* Branded Header */}
-      <div className="border-b border-border bg-background/80 backdrop-blur-sm sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-6 md:px-12 py-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-accent to-primary flex items-center justify-center glow-accent">
-                <Sparkles className="w-6 h-6 text-white" />
-              </div>
-              <div>
-                <h1 className="text-2xl font-bold text-balance">Forgefly</h1>
-                <p className="text-xs text-muted-foreground">Client Portal</p>
-              </div>
-            </div>
-            <Button variant="outline" onClick={() => navigate('/settings')}>
-              Exit Preview
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-background to-muted/20">
+        <div className="border-b bg-card/50 backdrop-blur-sm">
+          <div className="container mx-auto px-4 py-6">
+            <Skeleton className="h-10 w-64 mb-2" />
+            <Skeleton className="h-4 w-96" />
+          </div>
+        </div>
+        <div className="container mx-auto px-4 py-8">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+            {[1, 2, 3].map((i) => (
+              <Card key={i}>
+                <CardContent className="p-6">
+                  <Skeleton className="h-20 w-full" />
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-background to-muted/20 flex items-center justify-center p-4">
+        <Card className="max-w-md w-full">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-destructive">
+              <AlertCircle className="w-5 h-5" />
+              Access Error
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-muted-foreground mb-4">{error}</p>
+            <Button variant="outline" onClick={() => window.location.href = '/'} className="w-full">
+              Return to Home
             </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  const activeProjects = projects.filter(p => p.status === 'In Progress').length;
+  const pendingProposals = proposals.filter(p => p.status === 'sent').length;
+  const unpaidInvoices = invoices.filter(i => i.payment_status === 'unpaid').length;
+
+  return (
+    <div className="min-h-screen bg-gradient-to-b from-background to-muted/20">
+      {/* Header */}
+      <div className="border-b bg-card/50 backdrop-blur-sm sticky top-0 z-10">
+        <div className="container mx-auto px-4 py-6">
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+            <div>
+              <h1 className="text-3xl font-bold text-balance mb-2 flex items-center gap-2">
+                <Sparkles className="w-8 h-8 text-emerald-500" />
+                Client Portal
+              </h1>
+              <p className="text-muted-foreground">Welcome, {client?.name || 'Valued Client'}</p>
+            </div>
+            <div className="text-left md:text-right">
+              <p className="text-sm text-muted-foreground">Powered by</p>
+              <p className="text-2xl font-bold bg-gradient-to-r from-emerald-500 to-amber-500 bg-clip-text text-transparent">
+                Forgefly
+              </p>
+            </div>
           </div>
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-6 md:px-12 py-12 space-y-8">
-        {/* Welcome Section */}
-        <div className="text-center space-y-3">
-          <h2 className="text-4xl md:text-5xl font-bold text-balance">
-            Welcome back, {clientData.contactPerson}
-          </h2>
-          <p className="text-lg text-muted-foreground">{clientData.name}</p>
-          <div className="flex items-center justify-center gap-6 mt-6">
-            <div className="text-center">
-              <p className="text-3xl font-bold text-accent">{clientData.projects.length}</p>
-              <p className="text-sm text-muted-foreground">Active Projects</p>
-            </div>
-            <div className="w-px h-12 bg-border" />
-            <div className="text-center">
-              <p className="text-3xl font-bold text-warning">{clientData.invoices.filter(i => i.status === 'pending').length}</p>
-              <p className="text-sm text-muted-foreground">Pending Invoices</p>
-            </div>
-            <div className="w-px h-12 bg-border" />
-            <div className="text-center">
-              <p className="text-3xl font-bold text-primary">{clientData.proposals.filter(p => p.status === 'pending').length}</p>
-              <p className="text-sm text-muted-foreground">Awaiting Review</p>
-            </div>
-          </div>
+      <div className="container mx-auto px-4 py-8">
+        {/* Overview Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+          <Card className="card-hover border-emerald-500/20">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-muted-foreground mb-1">Active Projects</p>
+                  <p className="text-3xl font-bold">{activeProjects}</p>
+                </div>
+                <div className="w-12 h-12 rounded-full bg-emerald-500/10 flex items-center justify-center">
+                  <Briefcase className="w-6 h-6 text-emerald-500" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="card-hover border-amber-500/20">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-muted-foreground mb-1">Pending Proposals</p>
+                  <p className="text-3xl font-bold">{pendingProposals}</p>
+                </div>
+                <div className="w-12 h-12 rounded-full bg-amber-500/10 flex items-center justify-center">
+                  <FileText className="w-6 h-6 text-amber-500" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="card-hover border-blue-500/20">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-muted-foreground mb-1">Unpaid Invoices</p>
+                  <p className="text-3xl font-bold">{unpaidInvoices}</p>
+                </div>
+                <div className="w-12 h-12 rounded-full bg-blue-500/10 flex items-center justify-center">
+                  <Receipt className="w-6 h-6 text-blue-500" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         </div>
 
-        {/* Active Projects */}
-        <Card className="card-hover">
-          <CardHeader>
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                <Briefcase className="w-5 h-5 text-primary" />
-              </div>
-              <div>
-                <CardTitle className="text-balance">Your Projects</CardTitle>
-                <CardDescription>Track progress and view deliverables</CardDescription>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-6">
-              {clientData.projects.map((project) => (
-                <div key={project.id} className="p-6 rounded-lg bg-muted/50 border border-border hover:border-accent/50 transition-all">
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="flex-1">
-                      <h3 className="font-semibold text-lg text-balance mb-2">{project.name}</h3>
-                      <p className="text-sm text-muted-foreground text-pretty mb-3">{project.description}</p>
-                      <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                        <span>Start: {new Date(project.startDate).toLocaleDateString()}</span>
-                        <span>•</span>
-                        <span>Due: {new Date(project.dueDate).toLocaleDateString()}</span>
+        {/* Projects, Proposals, Invoices Sections */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Projects */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-balance flex items-center gap-2">
+                <Briefcase className="w-5 h-5 text-emerald-500" />
+                Projects
+              </CardTitle>
+              <CardDescription>Your ongoing work</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {projects.length === 0 ? (
+                <div className="text-center py-12">
+                  <Briefcase className="w-12 h-12 text-muted-foreground mx-auto mb-4 opacity-50" />
+                  <p className="text-muted-foreground">No projects yet</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {projects.map((project) => (
+                    <div key={project.id} className="p-4 rounded-lg bg-muted/50 hover:bg-muted transition-colors border border-transparent hover:border-emerald-500/20">
+                      <div className="flex items-start justify-between mb-2">
+                        <h4 className="font-semibold text-balance">{project.name}</h4>
+                        <Badge variant="outline" className={getStatusColor(project.status)}>
+                          {getStatusIcon(project.status)}
+                          <span className="ml-1 capitalize">{project.status}</span>
+                        </Badge>
+                      </div>
+                      {project.description && (
+                        <p className="text-sm text-muted-foreground mb-2 text-pretty line-clamp-2">{project.description}</p>
+                      )}
+                      <div className="flex items-center justify-between text-sm mt-3">
+                        <span className="text-muted-foreground">
+                          {project.deadline && `Due: ${new Date(project.deadline).toLocaleDateString()}`}
+                        </span>
+                        {project.value && (
+                          <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+                            ${project.value.toLocaleString()}
+                          </span>
+                        )}
                       </div>
                     </div>
-                    <Badge className={getStatusColor(project.status)}>
-                      {project.status.replace('_', ' ')}
-                    </Badge>
-                  </div>
-                  
-                  <div className="mb-4">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm font-medium">Progress</span>
-                      <span className="text-sm font-bold text-accent">{project.progress}%</span>
-                    </div>
-                    <div className="w-full h-3 bg-background rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-gradient-to-r from-accent to-primary transition-all duration-500"
-                        style={{ width: `${project.progress}%` }}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="pt-4 border-t border-border">
-                    <p className="text-xs font-medium text-muted-foreground mb-2">Deliverables:</p>
-                    <div className="flex flex-wrap gap-2">
-                      {project.deliverables.map((deliverable, idx) => (
-                        <Badge key={idx} variant="outline" className="text-xs">
-                          <CheckCircle2 className="w-3 h-3 mr-1" />
-                          {deliverable}
-                        </Badge>
-                      ))}
-                    </div>
-                  </div>
-
-                  {project.status === 'review' && (
-                    <div className="mt-4 pt-4 border-t border-border">
-                      <Button className="w-full" variant="outline" onClick={() => {}}>
-                        <Eye className="w-4 h-4 mr-2" />
-                        Review Deliverables
-                      </Button>
-                    </div>
-                  )}
+                  ))}
                 </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+              )}
+            </CardContent>
+          </Card>
 
-        <div className="grid gap-6 md:grid-cols-2">
           {/* Proposals */}
           <Card>
             <CardHeader>
-              <div className="flex items-center gap-3">
-                <FileText className="w-5 h-5 text-primary" />
-                <CardTitle className="text-balance">Proposals</CardTitle>
-              </div>
-              <CardDescription>Review and accept proposals</CardDescription>
+              <CardTitle className="text-balance flex items-center gap-2">
+                <FileText className="w-5 h-5 text-amber-500" />
+                Proposals
+              </CardTitle>
+              <CardDescription>Review and respond</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-3">
-                {clientData.proposals.map((proposal) => (
-                  <div key={proposal.id} className="p-4 rounded-lg bg-muted">
-                    <div className="flex items-center justify-between mb-2">
-                      <h4 className="font-semibold text-balance">{proposal.title}</h4>
-                      <Badge variant="outline">{proposal.status}</Badge>
+              {proposals.length === 0 ? (
+                <div className="text-center py-12">
+                  <FileText className="w-12 h-12 text-muted-foreground mx-auto mb-4 opacity-50" />
+                  <p className="text-muted-foreground">No proposals yet</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {proposals.map((proposal) => (
+                    <div key={proposal.id} className="p-4 rounded-lg bg-muted/50 hover:bg-muted transition-colors border border-transparent hover:border-amber-500/20">
+                      <div className="flex items-start justify-between mb-2">
+                        <h4 className="font-semibold text-balance">{proposal.title}</h4>
+                        <Badge variant="outline" className={getStatusColor(proposal.status)}>
+                          {getStatusIcon(proposal.status)}
+                          <span className="ml-1 capitalize">{proposal.status}</span>
+                        </Badge>
+                      </div>
+                      <p className="text-sm text-muted-foreground mb-3">
+                        Sent: {new Date(proposal.created_at).toLocaleDateString()}
+                      </p>
+                      {(proposal.status === 'sent') && (
+                        <Button size="sm" variant="outline" className="w-full" onClick={() => toast.info('Proposal viewing coming soon!')}>
+                          <ExternalLink className="w-4 h-4 mr-2" />
+                          View Proposal
+                        </Button>
+                      )}
                     </div>
-                    <p className="text-sm font-semibold text-primary mb-3">
-                      ${proposal.value.toLocaleString()}
-                    </p>
-                    <Button size="sm" className="w-full" onClick={() => {}}>
-                      View Proposal
-                    </Button>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
 
           {/* Invoices */}
-          <Card className="card-hover">
+          <Card className="lg:col-span-2">
             <CardHeader>
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-warning/10 flex items-center justify-center">
-                  <DollarSign className="w-5 h-5 text-warning" />
-                </div>
-                <div>
-                  <CardTitle className="text-balance">Invoices</CardTitle>
-                  <CardDescription>View and pay outstanding invoices</CardDescription>
-                </div>
-              </div>
+              <CardTitle className="text-balance flex items-center gap-2">
+                <Receipt className="w-5 h-5 text-blue-500" />
+                Invoices
+              </CardTitle>
+              <CardDescription>Payment information</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                {clientData.invoices.map((invoice) => (
-                  <div key={invoice.id} className="p-5 rounded-lg bg-muted/50 border border-border hover:border-warning/50 transition-all">
-                    <div className="flex items-start justify-between mb-3">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                          <h4 className="font-semibold">{invoice.number}</h4>
-                          <Badge className={getStatusColor(invoice.status)}>
-                            {invoice.status}
-                          </Badge>
+              {invoices.length === 0 ? (
+                <div className="text-center py-12">
+                  <Receipt className="w-12 h-12 text-muted-foreground mx-auto mb-4 opacity-50" />
+                  <p className="text-muted-foreground">No invoices yet</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {invoices.map((invoice) => (
+                    <div key={invoice.id} className="p-4 rounded-lg bg-muted/50 hover:bg-muted transition-colors border border-transparent hover:border-blue-500/20">
+                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-3 mb-2">
+                            <h4 className="font-semibold">{invoice.invoice_number}</h4>
+                            <Badge variant="outline" className={getStatusColor(invoice.payment_status)}>
+                              {getStatusIcon(invoice.payment_status)}
+                              <span className="ml-1 capitalize">{invoice.payment_status}</span>
+                            </Badge>
+                          </div>
+                          <div className="flex flex-col md:flex-row md:items-center gap-2 md:gap-4 text-sm text-muted-foreground">
+                            <span>Due: {invoice.due_date && new Date(invoice.due_date).toLocaleDateString()}</span>
+                            <span className="text-xl font-bold text-blue-600 dark:text-blue-400">
+                              ${typeof invoice.amount === 'string' ? parseFloat(invoice.amount).toLocaleString() : invoice.amount.toLocaleString()}
+                            </span>
+                          </div>
                         </div>
-                        <p className="text-xs text-muted-foreground text-pretty">{invoice.description}</p>
+                        {invoice.payment_status === 'unpaid' && (
+                          <Button className="bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 shrink-0" onClick={() => toast.info('Payment processing coming soon!')}>
+                            <Receipt className="w-4 h-4 mr-2" />
+                            Pay Now
+                          </Button>
+                        )}
                       </div>
                     </div>
-                    <div className="flex items-center justify-between mb-4">
-                      <div>
-                        <p className="text-2xl font-bold">
-                          ${invoice.amount.toLocaleString()}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          Due: {new Date(invoice.dueDate).toLocaleDateString()}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex gap-2">
-                      <Button size="sm" variant="outline" onClick={() => {}}>
-                        <Download className="w-4 h-4 mr-2" />
-                        Download
-                      </Button>
-                      {invoice.status === 'pending' && (
-                        <Button size="sm" className="flex-1 glow-success" onClick={() => {}}>
-                          <DollarSign className="w-4 h-4 mr-2" />
-                          Pay Now
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
 
+        {/* Contact Section */}
+        {client && (client.email || client.phone) && (
+          <Card className="mt-6">
+            <CardHeader>
+              <CardTitle className="text-balance">Need Help?</CardTitle>
+              <CardDescription>Get in touch with us</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-col md:flex-row gap-4">
+                {client.email && (
+                  <Button variant="outline" className="flex-1" onClick={() => window.location.href = `mailto:${client.email}`}>
+                    <Mail className="w-4 h-4 mr-2" />
+                    {client.email}
+                  </Button>
+                )}
+                {client.phone && (
+                  <Button variant="outline" className="flex-1" onClick={() => window.location.href = `tel:${client.phone}`}>
+                    <Phone className="w-4 h-4 mr-2" />
+                    {client.phone}
+                  </Button>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Footer */}
-        <div className="text-center pt-8 pb-4 border-t border-border space-y-3">
-          <p className="text-sm text-muted-foreground mb-2">
-            Powered by <span className="font-semibold text-accent">Forgefly</span>
-          </p>
-          <p className="text-xs text-muted-foreground">
-            Questions? Contact your project manager or email support@forgefly.com
-          </p>
-          <p className="text-xs text-muted-foreground pt-2">
-            Built with <Heart className="w-3 h-3 inline text-accent fill-accent mx-0.5" /> using{' '}
-            <span className="font-medium text-accent">MeDo</span> •{' '}
-            <a 
-              href="https://forgefly.io" 
-              target="_blank" 
-              rel="noopener noreferrer"
-              className="font-medium text-accent hover:underline"
-            >
-              Forgefly.io
-            </a>
-            {' '}By <span className="font-medium">Sourav Nayak</span> &{' '}
-            <span className="font-medium">Grok</span>
-          </p>
+        <div className="mt-12 text-center text-sm text-muted-foreground">
+          <p>This portal is secured and private. Only you can access this information.</p>
+          <p className="mt-2">Powered by <span className="font-semibold text-emerald-600 dark:text-emerald-400">Forgefly</span> - AI Business OS for Solopreneurs</p>
         </div>
       </div>
     </div>

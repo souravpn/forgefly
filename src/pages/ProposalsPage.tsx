@@ -1,369 +1,591 @@
-import { useState } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { useState, useEffect } from 'react';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
-import { Plus, FileText, Send, Sparkles, CheckCircle2, Clock, DollarSign } from 'lucide-react';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Plus, FileText, Send, Edit, Trash2, Eye, CheckCircle2, Clock, XCircle, FileCheck, Mail } from 'lucide-react';
+import { toast } from 'sonner';
+import { supabase } from '@/db/supabase';
+import type { Proposal, ProposalStatus, Client, Project } from '@/types/types';
+import { getProposals, createProposal, updateProposal, sendProposal, updateProposalStatus, deleteProposal, subscribeToProposals } from '@/services/proposalService';
+import { getClients } from '@/services/clientService';
+import { getProjects } from '@/services/projectService';
 
 export default function ProposalsPage() {
-  const [selectedProposal, setSelectedProposal] = useState<string | null>(null);
-  const [proposalContent, setProposalContent] = useState({
-    title: 'Brand Identity Design Package',
-    client: 'TechStart Inc',
-    introduction: 'Thank you for considering our services. We\'re excited to partner with you on this transformative brand identity project.',
-    services: 'Complete brand identity including logo design, color palette, typography system, and brand guidelines.',
-    deliverables: [
-      'Custom Logo Design (3 concepts)',
-      'Brand Color Palette',
-      'Typography System',
-      'Brand Guidelines Document',
-      'Business Card Design',
-      'Letterhead Template'
-    ],
-    pricing: '3200',
-    timeline: '4 weeks',
-    milestones: [
-      { phase: 'Discovery & Research', duration: '1 week' },
-      { phase: 'Concept Development', duration: '1 week' },
-      { phase: 'Refinement & Finalization', duration: '1 week' },
-      { phase: 'Delivery & Guidelines', duration: '1 week' }
-    ],
-    terms: 'Payment terms: 50% upfront, 50% upon completion. 3 revision rounds included. Project timeline begins upon receipt of initial payment.',
+  const [proposals, setProposals] = useState<Proposal[]>([]);
+  const [clients, setClients] = useState<Client[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [isSendDialogOpen, setIsSendDialogOpen] = useState(false);
+  const [selectedProposal, setSelectedProposal] = useState<Proposal | null>(null);
+  const [sendingEmail, setSendingEmail] = useState(false);
+  const [formData, setFormData] = useState({
+    title: '',
+    client_id: '',
+    project_id: '',
+    introduction: '',
+    services: '',
+    deliverables: '',
+    pricing: '',
+    timeline: '',
+    terms: '',
   });
+  const [submitting, setSubmitting] = useState(false);
 
-  const proposals = [
-    { id: '1', title: 'Brand Identity Package', client: 'TechStart Inc', status: 'sent', value: 3200, date: '2026-05-01' },
-    { id: '2', title: 'Website Redesign', client: 'Design Co', status: 'draft', value: 5500, date: '2026-05-05' },
-    { id: '3', title: 'Marketing Materials', client: 'Marketing Pro', status: 'accepted', value: 2400, date: '2026-04-28' },
-    { id: '4', title: 'Social Media Graphics', client: 'Startup Labs', status: 'sent', value: 1800, date: '2026-05-03' },
-  ];
+  useEffect(() => {
+    loadData();
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'draft':
-        return 'bg-gray-500/10 text-gray-500 border-gray-500/20';
-      case 'sent':
-        return 'bg-blue-500/10 text-blue-500 border-blue-500/20';
-      case 'accepted':
-        return 'bg-green-500/10 text-green-500 border-green-500/20';
-      case 'rejected':
-        return 'bg-red-500/10 text-red-500 border-red-500/20';
-      default:
-        return 'bg-muted text-muted-foreground';
+    const channel = subscribeToProposals(() => {
+      loadProposals();
+    });
+
+    return () => {
+      channel.unsubscribe();
+    };
+  }, []);
+
+  async function loadData() {
+    try {
+      const [proposalsData, clientsData, projectsData] = await Promise.all([
+        getProposals(),
+        getClients(),
+        getProjects(),
+      ]);
+      setProposals(proposalsData);
+      setClients(clientsData);
+      setProjects(projectsData);
+    } catch (error) {
+      console.error('Error loading data:', error);
+      toast.error('Failed to load data');
+    } finally {
+      setLoading(false);
     }
-  };
+  }
 
-  if (selectedProposal) {
+  async function loadProposals() {
+    try {
+      const data = await getProposals();
+      setProposals(data);
+    } catch (error) {
+      console.error('Error loading proposals:', error);
+    }
+  }
+
+  function openCreateModal() {
+    setFormData({
+      title: '',
+      client_id: '',
+      project_id: '',
+      introduction: '',
+      services: '',
+      deliverables: '',
+      pricing: '',
+      timeline: '',
+      terms: '',
+    });
+    setIsCreateModalOpen(true);
+  }
+
+  function openEditModal(proposal: Proposal) {
+    setSelectedProposal(proposal);
+    setFormData({
+      title: proposal.title,
+      client_id: proposal.client_id || '',
+      project_id: proposal.project_id || '',
+      introduction: proposal.introduction || '',
+      services: proposal.services || '',
+      deliverables: proposal.deliverables || '',
+      pricing: proposal.pricing?.toString() || '',
+      timeline: proposal.timeline || '',
+      terms: proposal.terms || '',
+    });
+    setIsEditModalOpen(true);
+  }
+
+  function openDeleteDialog(proposal: Proposal) {
+    setSelectedProposal(proposal);
+    setIsDeleteDialogOpen(true);
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setSubmitting(true);
+
+    try {
+      const proposalData = {
+        title: formData.title,
+        client_id: formData.client_id || null,
+        project_id: formData.project_id || null,
+        introduction: formData.introduction || null,
+        services: formData.services || null,
+        deliverables: formData.deliverables || null,
+        pricing: formData.pricing ? parseFloat(formData.pricing) : null,
+        timeline: formData.timeline || null,
+        terms: formData.terms || null,
+        status: 'draft' as ProposalStatus,
+        sent_at: null,
+      };
+
+      if (isEditModalOpen && selectedProposal) {
+        await updateProposal(selectedProposal.id, proposalData);
+        toast.success('Proposal updated successfully!');
+        setIsEditModalOpen(false);
+      } else {
+        await createProposal(proposalData);
+        toast.success('Proposal created successfully!');
+        setIsCreateModalOpen(false);
+      }
+
+      loadProposals();
+    } catch (error) {
+      console.error('Error saving proposal:', error);
+      toast.error('Failed to save proposal');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  function openSendDialog(proposal: Proposal) {
+    setSelectedProposal(proposal);
+    setIsSendDialogOpen(true);
+  }
+
+  async function handleSendEmail() {
+    if (!selectedProposal || !selectedProposal.client) {
+      toast.error('Client information missing');
+      return;
+    }
+
+    if (!selectedProposal.client.email) {
+      toast.error('Client email address is required');
+      return;
+    }
+
+    setSendingEmail(true);
+    try {
+      // Generate proposal link (in production, this would be a secure shareable link)
+      const proposalLink = `${window.location.origin}/proposals/${selectedProposal.id}`;
+      
+      const { data, error } = await supabase.functions.invoke('send-email', {
+        body: {
+          type: 'proposal',
+          to: selectedProposal.client.email,
+          data: {
+            clientName: selectedProposal.client.name,
+            proposalTitle: selectedProposal.title,
+            amount: typeof selectedProposal.pricing === 'string' ? parseFloat(selectedProposal.pricing || '0') : (selectedProposal.pricing || 0),
+            proposalLink,
+          },
+        },
+      });
+
+      if (error) {
+        const errorMsg = await error?.context?.text();
+        console.error('Email sending error:', errorMsg || error?.message);
+        toast.error('Failed to send email. Please try again.');
+        return;
+      }
+
+      await sendProposal(selectedProposal.id);
+      toast.success('Proposal sent successfully! 📧');
+      setIsSendDialogOpen(false);
+      loadProposals();
+    } catch (error) {
+      console.error('Error sending proposal:', error);
+      toast.error('Failed to send proposal');
+    } finally {
+      setSendingEmail(false);
+    }
+  }
+
+  async function handleStatusChange(proposal: Proposal, status: ProposalStatus) {
+    try {
+      await updateProposalStatus(proposal.id, status);
+      toast.success('Proposal status updated!');
+      loadProposals();
+    } catch (error) {
+      console.error('Error updating proposal status:', error);
+      toast.error('Failed to update proposal status');
+    }
+  }
+
+  async function handleDelete() {
+    if (!selectedProposal) return;
+
+    try {
+      await deleteProposal(selectedProposal.id);
+      toast.success('Proposal deleted successfully!');
+      setIsDeleteDialogOpen(false);
+      loadProposals();
+    } catch (error) {
+      console.error('Error deleting proposal:', error);
+      toast.error('Failed to delete proposal');
+    }
+  }
+
+  function getStatusBadge(status: ProposalStatus) {
+    const config = {
+      draft: { icon: Clock, label: 'Draft', className: 'bg-muted text-muted-foreground' },
+      sent: { icon: Send, label: 'Sent', className: 'bg-blue-500/10 text-blue-500 border-blue-500/20' },
+      approved: { icon: CheckCircle2, label: 'Approved', className: 'bg-success/10 text-success border-success/20' },
+      rejected: { icon: XCircle, label: 'Rejected', className: 'bg-destructive/10 text-destructive border-destructive/20' },
+    };
+
+    const statusConfig = config[status] || config.draft;
+    const { icon: Icon, label, className } = statusConfig;
     return (
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <Button variant="ghost" onClick={() => setSelectedProposal(null)}>
-            ← Back to Proposals
-          </Button>
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={() => {}}>Save Draft</Button>
-            <Button className="glow-accent" onClick={() => {}}>
-              <Send className="w-4 h-4 mr-2" />
-              Send to Client
-            </Button>
-          </div>
-        </div>
-
-        <div className="grid gap-6 lg:grid-cols-[1fr,1.2fr]">
-          {/* Editor */}
-          <div className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-balance">Proposal Details</CardTitle>
-                <CardDescription>Edit the core information</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="title">Proposal Title</Label>
-                  <Input
-                    id="title"
-                    value={proposalContent.title}
-                    onChange={(e) => setProposalContent({ ...proposalContent, title: e.target.value })}
-                    placeholder="e.g., Brand Identity Design Package"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="client">Client Name</Label>
-                  <Input
-                    id="client"
-                    value={proposalContent.client}
-                    onChange={(e) => setProposalContent({ ...proposalContent, client: e.target.value })}
-                    placeholder="e.g., TechStart Inc"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="introduction">Introduction</Label>
-                  <Textarea
-                    id="introduction"
-                    value={proposalContent.introduction}
-                    onChange={(e) => setProposalContent({ ...proposalContent, introduction: e.target.value })}
-                    className="min-h-[80px]"
-                    placeholder="Brief introduction to the proposal"
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="pricing">Total Investment ($)</Label>
-                    <Input
-                      id="pricing"
-                      type="number"
-                      value={proposalContent.pricing}
-                      onChange={(e) => setProposalContent({ ...proposalContent, pricing: e.target.value })}
-                      placeholder="3200"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="timeline">Timeline</Label>
-                    <Input
-                      id="timeline"
-                      value={proposalContent.timeline}
-                      onChange={(e) => setProposalContent({ ...proposalContent, timeline: e.target.value })}
-                      placeholder="e.g., 4 weeks"
-                    />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-balance">Services & Deliverables</CardTitle>
-                <CardDescription>What's included in this proposal</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="services">Services Description</Label>
-                  <Textarea
-                    id="services"
-                    value={proposalContent.services}
-                    onChange={(e) => setProposalContent({ ...proposalContent, services: e.target.value })}
-                    className="min-h-[100px]"
-                    placeholder="Describe the services you'll provide"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="terms">Terms & Conditions</Label>
-                  <Textarea
-                    id="terms"
-                    value={proposalContent.terms}
-                    onChange={(e) => setProposalContent({ ...proposalContent, terms: e.target.value })}
-                    className="min-h-[100px]"
-                    placeholder="Payment terms, revision policy, etc."
-                  />
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Live Preview */}
-          <div className="lg:sticky lg:top-6 lg:self-start">
-            <Card className="overflow-hidden">
-              <CardHeader className="bg-gradient-to-br from-primary/5 to-accent/5 border-b">
-                <div className="flex items-center gap-2">
-                  <Sparkles className="w-5 h-5 text-accent" />
-                  <CardTitle className="text-balance">Live Preview</CardTitle>
-                </div>
-                <CardDescription>Real-time preview of your proposal</CardDescription>
-              </CardHeader>
-              <CardContent className="p-0">
-                <div className="max-h-[calc(100vh-12rem)] overflow-y-auto">
-                  {/* Preview Document */}
-                  <div className="p-8 md:p-12 space-y-8 bg-background">
-                    {/* Header */}
-                    <div className="text-center space-y-4 pb-8 border-b-2 border-accent/20">
-                      <div className="inline-flex items-center justify-center w-16 h-16 rounded-xl bg-gradient-to-br from-accent to-primary glow-accent mb-4">
-                        <Sparkles className="w-8 h-8 text-white" />
-                      </div>
-                      <h1 className="text-4xl font-bold text-balance leading-tight">
-                        {proposalContent.title || 'Untitled Proposal'}
-                      </h1>
-                      <div className="space-y-1">
-                        <p className="text-lg text-muted-foreground">
-                          Prepared for <span className="font-semibold text-foreground">{proposalContent.client || 'Client Name'}</span>
-                        </p>
-                        <p className="text-sm text-muted-foreground">
-                          {new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Introduction */}
-                    {proposalContent.introduction && (
-                      <div className="space-y-3">
-                        <h2 className="text-2xl font-semibold text-balance">Introduction</h2>
-                        <p className="text-muted-foreground text-pretty leading-relaxed">
-                          {proposalContent.introduction}
-                        </p>
-                      </div>
-                    )}
-
-                    {/* Services */}
-                    <div className="space-y-4">
-                      <h2 className="text-2xl font-semibold text-balance">Services Included</h2>
-                      <p className="text-muted-foreground text-pretty leading-relaxed">
-                        {proposalContent.services || 'No services description provided.'}
-                      </p>
-                      
-                      {/* Deliverables */}
-                      <div className="grid gap-3 mt-6">
-                        {proposalContent.deliverables.map((deliverable, idx) => (
-                          <div key={idx} className="flex items-start gap-3 p-4 rounded-lg bg-muted/50 border border-border">
-                            <CheckCircle2 className="w-5 h-5 text-accent shrink-0 mt-0.5" />
-                            <span className="text-sm font-medium">{deliverable}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Investment & Timeline */}
-                    <div className="grid md:grid-cols-2 gap-6">
-                      <div className="p-6 rounded-xl bg-gradient-to-br from-accent/10 to-primary/10 border-2 border-accent/20">
-                        <div className="flex items-center gap-3 mb-3">
-                          <div className="w-10 h-10 rounded-lg bg-accent/20 flex items-center justify-center">
-                            <DollarSign className="w-5 h-5 text-accent" />
-                          </div>
-                          <p className="text-sm font-medium text-muted-foreground">Total Investment</p>
-                        </div>
-                        <p className="text-4xl font-bold text-accent">
-                          ${Number.parseInt(proposalContent.pricing || '0').toLocaleString()}
-                        </p>
-                      </div>
-
-                      <div className="p-6 rounded-xl bg-muted/50 border-2 border-border">
-                        <div className="flex items-center gap-3 mb-3">
-                          <div className="w-10 h-10 rounded-lg bg-primary/20 flex items-center justify-center">
-                            <Clock className="w-5 h-5 text-primary" />
-                          </div>
-                          <p className="text-sm font-medium text-muted-foreground">Timeline</p>
-                        </div>
-                        <p className="text-4xl font-bold">
-                          {proposalContent.timeline || 'TBD'}
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Project Milestones */}
-                    <div className="space-y-4">
-                      <h2 className="text-2xl font-semibold text-balance">Project Milestones</h2>
-                      <div className="space-y-3">
-                        {proposalContent.milestones.map((milestone, idx) => (
-                          <div key={idx} className="flex items-center gap-4 p-4 rounded-lg bg-muted/50 border border-border">
-                            <div className="w-8 h-8 rounded-full bg-accent/20 flex items-center justify-center shrink-0">
-                              <span className="text-sm font-bold text-accent">{idx + 1}</span>
-                            </div>
-                            <div className="flex-1">
-                              <p className="font-semibold">{milestone.phase}</p>
-                              <p className="text-sm text-muted-foreground">{milestone.duration}</p>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Terms */}
-                    <div className="space-y-3 p-6 rounded-lg bg-muted/30 border border-border">
-                      <h2 className="text-xl font-semibold text-balance">Terms & Conditions</h2>
-                      <p className="text-sm text-muted-foreground text-pretty leading-relaxed">
-                        {proposalContent.terms || 'No terms specified.'}
-                      </p>
-                    </div>
-
-                    {/* CTA */}
-                    <div className="pt-8 border-t-2 border-accent/20 text-center space-y-4">
-                      <Button size="lg" className="w-full md:w-auto px-12 glow-accent" onClick={() => {}}>
-                        <CheckCircle2 className="w-5 h-5 mr-2" />
-                        Accept Proposal
-                      </Button>
-                      <p className="text-xs text-muted-foreground">
-                        By accepting, you agree to the terms and conditions outlined above
-                      </p>
-                    </div>
-
-                    {/* Footer */}
-                    <div className="pt-8 border-t text-center">
-                      <p className="text-sm text-muted-foreground">
-                        Powered by <span className="font-semibold text-accent">Forgefly</span>
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
-      </div>
+      <Badge variant="outline" className={className}>
+        <Icon className="w-3 h-3 mr-1" />
+        {label}
+      </Badge>
     );
   }
 
+  const filteredProjects = projects.filter(p => p.client_id === formData.client_id);
+
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="space-y-6 md:space-y-8">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
-          <h1 className="text-4xl font-bold text-balance mb-2">Proposals</h1>
-          <p className="text-muted-foreground">Create and manage client proposals</p>
+          <h1 className="text-3xl md:text-4xl font-bold text-balance mb-2">Proposals</h1>
+          <p className="text-sm md:text-base text-muted-foreground">Create and manage client proposals</p>
         </div>
-        <Button onClick={() => setSelectedProposal('new')}>
-          <Plus className="w-4 h-4 mr-2" />
-          New Proposal
+        <Button size="lg" className="glow-accent w-full md:w-auto" onClick={openCreateModal}>
+          <Plus className="w-5 h-5 mr-2" />
+          Create Proposal
         </Button>
       </div>
 
-      <Tabs defaultValue="all">
-        <TabsList>
-          <TabsTrigger value="all">All</TabsTrigger>
-          <TabsTrigger value="draft">Drafts</TabsTrigger>
-          <TabsTrigger value="sent">Sent</TabsTrigger>
-          <TabsTrigger value="accepted">Accepted</TabsTrigger>
-        </TabsList>
+      {loading ? (
+        <div className="grid gap-4 md:gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+          {[1, 2, 3].map((i) => (
+            <Card key={i} className="animate-pulse">
+              <CardContent className="p-6">
+                <div className="h-32 bg-muted rounded" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      ) : proposals.length === 0 ? (
+        <Card className="border-dashed">
+          <CardContent className="flex flex-col items-center justify-center py-16 text-center">
+            <div className="w-16 h-16 rounded-full bg-accent/10 flex items-center justify-center mb-4">
+              <FileText className="w-8 h-8 text-accent" />
+            </div>
+            <h3 className="text-xl font-semibold mb-2">No proposals yet</h3>
+            <p className="text-muted-foreground mb-6 max-w-sm text-pretty">
+              Start winning more clients by creating professional proposals.
+            </p>
+            <Button onClick={openCreateModal} className="glow-accent">
+              <Plus className="w-4 h-4 mr-2" />
+              Create Your First Proposal
+            </Button>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="grid gap-4 md:gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+          {proposals.map((proposal) => (
+            <Card key={proposal.id} className="card-hover h-full flex flex-col">
+              <CardContent className="p-6 flex-1 flex flex-col">
+                <div className="flex items-start justify-between mb-4">
+                  <div className="flex-1 min-w-0">
+                    <h3 className="font-semibold text-lg mb-1 truncate">{proposal.title}</h3>
+                    {proposal.client && (
+                      <p className="text-sm text-muted-foreground truncate">{proposal.client.name}</p>
+                    )}
+                  </div>
+                  {getStatusBadge(proposal.status)}
+                </div>
 
-        <TabsContent value="all" className="mt-6">
-          <div className="grid gap-4">
-            {proposals.map((proposal) => (
-              <Card
-                key={proposal.id}
-                className="cursor-pointer hover:shadow-md transition-shadow"
-                onClick={() => setSelectedProposal(proposal.id)}
+                <div className="space-y-2 flex-1 mb-4">
+                  {proposal.pricing && (
+                    <div className="flex items-center gap-2 text-sm">
+                      <span className="text-accent font-semibold">${proposal.pricing.toLocaleString()}</span>
+                    </div>
+                  )}
+                  {proposal.timeline && (
+                    <div className="text-sm text-muted-foreground">
+                      Timeline: {proposal.timeline}
+                    </div>
+                  )}
+                  <div className="text-xs text-muted-foreground">
+                    Created {new Date(proposal.created_at).toLocaleDateString()}
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-2 pt-4 border-t border-border">
+                  {proposal.status === 'draft' && (
+                    <>
+                      <Button
+                        variant="default"
+                        size="sm"
+                        className="w-full glow-accent"
+                        onClick={() => openSendDialog(proposal)}
+                      >
+                        <Mail className="w-4 h-4 mr-2" />
+                        Send to Client
+                      </Button>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="flex-1"
+                          onClick={() => openEditModal(proposal)}
+                        >
+                          <Edit className="w-4 h-4 mr-2" />
+                          Edit
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => openDeleteDialog(proposal)}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </>
+                  )}
+                  {proposal.status === 'sent' && (
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="flex-1"
+                        onClick={() => handleStatusChange(proposal, 'approved')}
+                      >
+                        <CheckCircle2 className="w-4 h-4 mr-2" />
+                        Approve
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="flex-1"
+                        onClick={() => handleStatusChange(proposal, 'rejected')}
+                      >
+                        <XCircle className="w-4 h-4 mr-2" />
+                        Reject
+                      </Button>
+                    </div>
+                  )}
+                  {(proposal.status === 'approved' || proposal.status === 'rejected') && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full"
+                      onClick={() => {}}
+                    >
+                      <Eye className="w-4 h-4 mr-2" />
+                      View Details
+                    </Button>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {/* Create/Edit Modal */}
+      <Dialog open={isCreateModalOpen || isEditModalOpen} onOpenChange={(open) => {
+        if (!open) {
+          setIsCreateModalOpen(false);
+          setIsEditModalOpen(false);
+        }
+      }}>
+        <DialogContent className="max-w-[calc(100%-2rem)] md:max-w-2xl max-h-[90dvh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{isEditModalOpen ? 'Edit Proposal' : 'Create New Proposal'}</DialogTitle>
+            <DialogDescription>
+              {isEditModalOpen ? 'Update proposal information' : 'Create a professional proposal for your client'}
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleSubmit}>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="title">Proposal Title *</Label>
+                <Input
+                  id="title"
+                  value={formData.title}
+                  onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                  placeholder="e.g., Brand Identity Design Package"
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="client">Client *</Label>
+                  <Select value={formData.client_id} onValueChange={(value) => setFormData({ ...formData, client_id: value, project_id: '' })}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a client" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {clients.map((client) => (
+                        <SelectItem key={client.id} value={client.id}>
+                          {client.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="project">Project (Optional)</Label>
+                  <Select value={formData.project_id} onValueChange={(value) => setFormData({ ...formData, project_id: value })} disabled={!formData.client_id}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a project" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {filteredProjects.map((project) => (
+                        <SelectItem key={project.id} value={project.id}>
+                          {project.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="introduction">Introduction</Label>
+                <Textarea
+                  id="introduction"
+                  value={formData.introduction}
+                  onChange={(e) => setFormData({ ...formData, introduction: e.target.value })}
+                  placeholder="Thank you for considering our services..."
+                  rows={3}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="services">Services Description</Label>
+                <Textarea
+                  id="services"
+                  value={formData.services}
+                  onChange={(e) => setFormData({ ...formData, services: e.target.value })}
+                  placeholder="Describe the services you'll provide..."
+                  rows={3}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="deliverables">Deliverables</Label>
+                <Textarea
+                  id="deliverables"
+                  value={formData.deliverables}
+                  onChange={(e) => setFormData({ ...formData, deliverables: e.target.value })}
+                  placeholder="List deliverables (one per line)..."
+                  rows={4}
+                />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="pricing">Pricing ($)</Label>
+                  <Input
+                    id="pricing"
+                    type="number"
+                    step="0.01"
+                    value={formData.pricing}
+                    onChange={(e) => setFormData({ ...formData, pricing: e.target.value })}
+                    placeholder="3200"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="timeline">Timeline</Label>
+                  <Input
+                    id="timeline"
+                    value={formData.timeline}
+                    onChange={(e) => setFormData({ ...formData, timeline: e.target.value })}
+                    placeholder="e.g., 4 weeks"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="terms">Terms & Conditions</Label>
+                <Textarea
+                  id="terms"
+                  value={formData.terms}
+                  onChange={(e) => setFormData({ ...formData, terms: e.target.value })}
+                  placeholder="Payment terms, revision policy, etc..."
+                  rows={3}
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setIsCreateModalOpen(false);
+                  setIsEditModalOpen(false);
+                }}
+                disabled={submitting}
               >
-                <CardContent className="flex items-center justify-between p-6">
-                  <div className="flex items-center gap-4 flex-1 min-w-0">
-                    <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                      <FileText className="w-6 h-6 text-primary" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <h3 className="font-semibold text-lg mb-1 text-balance">{proposal.title}</h3>
-                      <p className="text-sm text-muted-foreground">{proposal.client}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-6 shrink-0">
-                    <div className="text-right">
-                      <p className="font-semibold text-lg">${proposal.value.toLocaleString()}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {new Date(proposal.date).toLocaleDateString()}
-                      </p>
-                    </div>
-                    <Badge variant="outline" className={getStatusColor(proposal.status)}>
-                      {proposal.status}
-                    </Badge>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+                Cancel
+              </Button>
+              <Button type="submit" disabled={submitting} className="glow-accent">
+                {submitting ? 'Saving...' : isEditModalOpen ? 'Update Proposal' : 'Create Proposal'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <AlertDialogContent className="max-w-[calc(100%-2rem)] md:max-w-lg">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Proposal</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete {selectedProposal?.title}? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete} className="bg-destructive hover:bg-destructive/90">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Send Email Confirmation Dialog */}
+      <AlertDialog open={isSendDialogOpen} onOpenChange={setIsSendDialogOpen}>
+        <AlertDialogContent className="max-w-[calc(100%-2rem)] md:max-w-lg">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Send Proposal via Email</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will send the proposal to {selectedProposal?.client?.name} at{' '}
+              <strong className="text-accent">{selectedProposal?.client?.email}</strong>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="py-4">
+            <div className="bg-muted/50 rounded-lg p-4 space-y-2">
+              <p className="text-sm font-medium">Proposal: {selectedProposal?.title}</p>
+              <p className="text-xs text-muted-foreground">
+                A beautifully branded email will be sent with a link to view the full proposal.
+              </p>
+            </div>
           </div>
-        </TabsContent>
-      </Tabs>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={sendingEmail}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleSendEmail} disabled={sendingEmail} className="glow-accent">
+              {sendingEmail ? 'Sending...' : 'Send Email'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

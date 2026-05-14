@@ -190,9 +190,11 @@ export default function SettingsPage() {
             <CardContent className="space-y-6">
               <div className="p-6 rounded-lg bg-gradient-to-br from-accent/10 to-primary/10 border border-accent/20">
                 <div className="flex items-start gap-4">
-                  <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-accent to-primary flex items-center justify-center shrink-0 glow-accent">
-                    <ExternalLink className="w-6 h-6 text-white" />
-                  </div>
+                  <img 
+                    src="https://miaoda-conversation-file.s3cdn.medo.dev/user-bj1cwp7n1qm8/conv-bj1thg4coydc/20260510/file-bj7c19f23ym8.png" 
+                    alt="Forgefly Logo" 
+                    className="w-12 h-12 rounded-lg shrink-0 glow-accent"
+                  />
                   <div className="flex-1">
                     <h3 className="font-semibold text-lg mb-2">Client Portal Preview</h3>
                     <p className="text-sm text-muted-foreground text-pretty mb-4">
