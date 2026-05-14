@@ -27,3 +27,7 @@ package-lock.json
 .sync
 history/*.json
 .vite_cache
+
+# Project env files
+.env*.local
+.env
