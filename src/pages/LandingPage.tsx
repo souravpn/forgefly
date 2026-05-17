@@ -1,15 +1,16 @@
-import { useEffect, useState, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
-import { 
-  Sparkles, 
-  Zap, 
-  Target, 
-  TrendingUp, 
-  Users, 
-  Calendar, 
-  FileText, 
+import { useEffect, useState, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import {
+  Sparkles,
+  TestTubeDiagonal,
+  Zap,
+  Target,
+  TrendingUp,
+  Users,
+  Calendar,
+  FileText,
   DollarSign,
   Briefcase,
   ArrowRight,
@@ -17,11 +18,11 @@ import {
   Rocket,
   ChevronLeft,
   ChevronRight,
-  Star
-} from 'lucide-react';
-import { useAuth } from '@/contexts/AuthContext';
-import useEmblaCarousel from 'embla-carousel-react';
-import Autoplay from 'embla-carousel-autoplay';
+  Star,
+} from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
+import useEmblaCarousel from "embla-carousel-react";
+import Autoplay from "embla-carousel-autoplay";
 
 export default function LandingPage() {
   const navigate = useNavigate();
@@ -30,120 +31,141 @@ export default function LandingPage() {
   // Redirect logged-in users to dashboard
   useEffect(() => {
     if (user) {
-      navigate('/dashboard');
+      navigate("/dashboard");
     }
   }, [user, navigate]);
 
   const features = [
     {
       icon: Users,
-      title: 'Client Management',
-      description: 'Organize clients, track relationships, and manage communications in one place.'
+      title: "Client Management",
+      description:
+        "Organize clients, track relationships, and manage communications in one place.",
     },
     {
       icon: Briefcase,
-      title: 'Project Tracking',
-      description: 'Monitor project progress, deadlines, and deliverables with visual timelines.'
+      title: "Project Tracking",
+      description:
+        "Monitor project progress, deadlines, and deliverables with visual timelines.",
     },
     {
       icon: FileText,
-      title: 'Smart Proposals',
-      description: 'Generate professional proposals with AI assistance and send them instantly.'
+      title: "Smart Proposals",
+      description:
+        "Generate professional proposals with AI assistance and send them instantly.",
     },
     {
       icon: DollarSign,
-      title: 'Financial Insights',
-      description: 'Track income, expenses, and forecast cashflow with interactive simulators.'
+      title: "Financial Insights",
+      description:
+        "Track income, expenses, and forecast cashflow with interactive simulators.",
     },
     {
       icon: Calendar,
-      title: 'Unified Calendar',
-      description: 'Manage deadlines, meetings, and tasks in a single integrated calendar.'
+      title: "Unified Calendar",
+      description:
+        "Manage deadlines, meetings, and tasks in a single integrated calendar.",
     },
     {
       icon: Zap,
-      title: 'AI Co-pilot',
-      description: 'Context-aware AI assistant that understands your business and takes action.'
-    }
+      title: "AI Co-pilot",
+      description:
+        "Context-aware AI assistant that understands your business and takes action.",
+    },
   ];
 
   const steps = [
     {
       icon: Rocket,
-      title: 'Quick Setup',
-      description: 'Describe your business in plain English. Our AI understands your needs instantly.'
+      title: "Quick Setup",
+      description:
+        "Describe your business in plain English. Our AI understands your needs instantly.",
     },
     {
       icon: Sparkles,
-      title: 'AI Configuration',
-      description: 'Watch as Forgefly automatically sets up your workspace, packages, and workflows.'
+      title: "AI Configuration",
+      description:
+        "Watch as Forgefly automatically sets up your workspace, packages, and workflows.",
     },
     {
       icon: Target,
-      title: 'Start Growing',
-      description: 'Manage clients, send proposals, track finances, and scale your business effortlessly.'
-    }
+      title: "Start Growing",
+      description:
+        "Manage clients, send proposals, track finances, and scale your business effortlessly.",
+    },
   ];
 
   const benefits = [
-    'Save 10+ hours per week on admin tasks',
-    'Professional proposals in minutes, not hours',
-    'Never miss a deadline or payment',
-    'Data-driven decisions with financial forecasting',
-    'Client portal for seamless collaboration',
-    'All-in-one platform, no tool juggling',
-    '24/7 on-call support for your business needs',
-    'Effortless payments with secure Stripe integration'
+    "Save 10+ hours per week on admin tasks",
+    "Professional proposals in minutes, not hours",
+    "Never miss a deadline or payment",
+    "Data-driven decisions with financial forecasting",
+    "Client portal for seamless collaboration",
+    "All-in-one platform, no tool juggling",
+    "24/7 on-call support for your business needs",
+    "Effortless payments with secure Stripe integration",
   ];
 
   const testimonials = [
     {
-      quote: "Forgefly turned my chaotic freelance life into a real business in under 10 minutes. The AI onboarding is pure magic.",
+      quote:
+        "Forgefly turned my chaotic freelance life into a real business in under 10 minutes. The AI onboarding is pure magic.",
       name: "Sarah Chen",
       role: "Brand Designer",
-      avatar: "https://miaoda-site-img.s3cdn.medo.dev/images/KLing_b3e4f5ce-8894-444b-9753-7c3a08c58518.jpg",
-      rating: 5
+      avatar:
+        "https://miaoda-site-img.s3cdn.medo.dev/images/KLing_b3e4f5ce-8894-444b-9753-7c3a08c58518.jpg",
+      rating: 5,
     },
     {
-      quote: "Finally one tool that handles proposals, invoices, clients AND cashflow forecasting. I closed two clients this week because of the professional proposals.",
+      quote:
+        "Finally one tool that handles proposals, invoices, clients AND cashflow forecasting. I closed two clients this week because of the professional proposals.",
       name: "Marcus Okoro",
       role: "Web Developer",
-      avatar: "https://miaoda-site-img.s3cdn.medo.dev/images/KLing_5453a9f8-1e61-4b65-8d1e-812b5d956173.jpg",
-      rating: 5
+      avatar:
+        "https://miaoda-site-img.s3cdn.medo.dev/images/KLing_5453a9f8-1e61-4b65-8d1e-812b5d956173.jpg",
+      rating: 5,
     },
     {
-      quote: "The contextual AI Co-pilot feels like having a business partner. It actually understands my agency workflow.",
+      quote:
+        "The contextual AI Co-pilot feels like having a business partner. It actually understands my agency workflow.",
       name: "Priya Sharma",
       role: "Freelance Strategist",
-      avatar: "https://miaoda-site-img.s3cdn.medo.dev/images/KLing_d60fe409-c0ac-4f94-aa01-824044ec4c3d.jpg",
-      rating: 5
+      avatar:
+        "https://miaoda-site-img.s3cdn.medo.dev/images/KLing_d60fe409-c0ac-4f94-aa01-824044ec4c3d.jpg",
+      rating: 5,
     },
     {
-      quote: "Stripe integration is seamless. Getting paid feels effortless now.",
+      quote:
+        "Stripe integration is seamless. Getting paid feels effortless now.",
       name: "Diego Morales",
       role: "Graphic Illustrator",
-      avatar: "https://miaoda-site-img.s3cdn.medo.dev/images/KLing_652adae2-c426-40ff-b4ed-42987dbf4d24.jpg",
-      rating: 5
+      avatar:
+        "https://miaoda-site-img.s3cdn.medo.dev/images/KLing_652adae2-c426-40ff-b4ed-42987dbf4d24.jpg",
+      rating: 5,
     },
     {
-      quote: "I went from 7 different tools to just Forgefly. My clients love the professional portal too.",
+      quote:
+        "I went from 7 different tools to just Forgefly. My clients love the professional portal too.",
       name: "Aisha Khan",
       role: "UI/UX Designer",
-      avatar: "https://miaoda-site-img.s3cdn.medo.dev/images/KLing_4514af45-40f3-43c5-ab0a-3b85ec13b583.jpg",
-      rating: 5
+      avatar:
+        "https://miaoda-site-img.s3cdn.medo.dev/images/KLing_4514af45-40f3-43c5-ab0a-3b85ec13b583.jpg",
+      rating: 5,
     },
     {
       quote: "Best investment of 2026 for any solopreneur. Highly recommend.",
       name: "Jamal Wright",
       role: "Motion Designer",
-      avatar: "https://miaoda-site-img.s3cdn.medo.dev/images/KLing_f020a5e2-d58e-4919-92bd-11122bb19132.jpg",
-      rating: 5
-    }
+      avatar:
+        "https://miaoda-site-img.s3cdn.medo.dev/images/KLing_f020a5e2-d58e-4919-92bd-11122bb19132.jpg",
+      rating: 5,
+    },
+    {},
   ];
 
   const [emblaRef, emblaApi] = useEmblaCarousel(
-    { loop: true, align: 'start' },
-    [Autoplay({ delay: 5000, stopOnInteraction: false })]
+    { loop: true, align: "start" },
+    [Autoplay({ delay: 5000, stopOnInteraction: false })],
   );
 
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -156,9 +178,12 @@ export default function LandingPage() {
     if (emblaApi) emblaApi.scrollNext();
   }, [emblaApi]);
 
-  const scrollTo = useCallback((index: number) => {
-    if (emblaApi) emblaApi.scrollTo(index);
-  }, [emblaApi]);
+  const scrollTo = useCallback(
+    (index: number) => {
+      if (emblaApi) emblaApi.scrollTo(index);
+    },
+    [emblaApi],
+  );
 
   const onSelect = useCallback(() => {
     if (!emblaApi) return;
@@ -168,9 +193,9 @@ export default function LandingPage() {
   useEffect(() => {
     if (!emblaApi) return;
     onSelect();
-    emblaApi.on('select', onSelect);
+    emblaApi.on("select", onSelect);
     return () => {
-      emblaApi.off('select', onSelect);
+      emblaApi.off("select", onSelect);
     };
   }, [emblaApi, onSelect]);
 
@@ -181,9 +206,9 @@ export default function LandingPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center gap-3">
-              <img 
-                src="https://miaoda-conversation-file.s3cdn.medo.dev/user-bj1cwp7n1qm8/conv-bj1thg4coydc/20260510/file-bj7c19f23ym8.png" 
-                alt="Forgefly Logo" 
+              <img
+                src="https://miaoda-conversation-file.s3cdn.medo.dev/user-bj1cwp7n1qm8/conv-bj1thg4coydc/20260510/file-bj7c19f23ym8.png"
+                alt="Forgefly Logo"
                 className="w-10 h-10 rounded-lg"
               />
               <div>
@@ -192,16 +217,16 @@ export default function LandingPage() {
               </div>
             </div>
             <div className="flex items-center gap-4">
-              <Button 
-                variant="ghost" 
+              <Button
+                variant="ghost"
                 className="text-white hover:text-emerald-400 hover:bg-white/5"
-                onClick={() => navigate('/login')}
+                onClick={() => navigate("/login")}
               >
                 Sign In
               </Button>
-              <Button 
+              <Button
                 className="bg-emerald-500 hover:bg-emerald-600 text-white"
-                onClick={() => navigate('/login')}
+                onClick={() => navigate("/login")}
               >
                 Get Started
               </Button>
@@ -213,42 +238,42 @@ export default function LandingPage() {
       {/* Hero Section */}
       <section className="pt-32 pb-20 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto text-center">
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm mb-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
-            <Sparkles className="w-4 h-4" />
-            <span>Built for the Build with MeDo Hackathon</span>
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-emerald-500/10  border border-emerald-500/20 text-emerald-400 text-sm mb-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+            <TestTubeDiagonal className="w-4 h-4" />
+            <span>• In Beta</span>
           </div>
-          
+
           <h1 className="text-5xl md:text-7xl font-bold text-white mb-6 animate-in fade-in slide-in-from-bottom-4 duration-700 delay-100">
             Forge Your Freedom
           </h1>
-          
+
           <p className="text-2xl md:text-3xl text-emerald-400 mb-4 animate-in fade-in slide-in-from-bottom-4 duration-700 delay-200">
             AI Business OS for Solopreneurs
           </p>
-          
+
           <p className="text-lg md:text-xl text-gray-400 max-w-3xl mx-auto mb-12 animate-in fade-in slide-in-from-bottom-4 duration-700 delay-300">
-            The all-in-one platform that combines client management, project tracking, 
-            financial forecasting, and AI assistance to help freelancers and solopreneurs 
-            scale their business with confidence.
+            The all-in-one platform that combines client management, project
+            tracking, financial forecasting, and AI assistance to help
+            freelancers and solopreneurs scale their business with confidence.
           </p>
-          
+
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 animate-in fade-in slide-in-from-bottom-4 duration-700 delay-500">
-            <Button 
+            <Button
               size="lg"
               className="bg-emerald-500 hover:bg-emerald-600 text-white text-lg px-8 py-6 h-auto"
-              onClick={() => navigate('/login')}
+              onClick={() => navigate("/login")}
             >
               Start Free Trial
               <ArrowRight className="w-5 h-5 ml-2" />
             </Button>
-            <Button 
+            <Button
               size="lg"
               variant="outline"
               className="border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10 text-lg px-8 py-6 h-auto"
               onClick={() => {
-                const featuresSection = document.getElementById('features');
+                const featuresSection = document.getElementById("features");
                 if (featuresSection) {
-                  featuresSection.scrollIntoView({ behavior: 'smooth' });
+                  featuresSection.scrollIntoView({ behavior: "smooth" });
                 }
               }}
             >
@@ -260,7 +285,7 @@ export default function LandingPage() {
           <div className="mt-20 relative animate-in fade-in slide-in-from-bottom-8 duration-1000 delay-700">
             <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/20 to-amber-500/20 blur-3xl" />
             <div className="relative rounded-2xl overflow-hidden border border-white/10 shadow-2xl">
-              <img 
+              <img
                 src="https://miaoda-conversation-file.s3cdn.medo.dev/user-bj1cwp7n1qm8/conv-bj1thg4coydc/20260511/file-bk5cvo48cv0g.png"
                 alt="Forgefly Dashboard"
                 className="w-full h-auto"
@@ -284,7 +309,7 @@ export default function LandingPage() {
 
           <div className="grid md:grid-cols-3 gap-8">
             {steps.map((step, index) => (
-              <Card 
+              <Card
                 key={index}
                 className="bg-white/5 backdrop-blur-sm border-white/10 hover:border-emerald-500/30 transition-all duration-300 animate-in fade-in slide-in-from-bottom-4"
                 style={{ animationDelay: `${index * 150}ms` }}
@@ -310,20 +335,24 @@ export default function LandingPage() {
       </section>
 
       {/* Features Section */}
-      <section id="features" className="py-20 px-4 sm:px-6 lg:px-8 bg-gradient-to-b from-transparent via-emerald-500/5 to-transparent">
+      <section
+        id="features"
+        className="py-20 px-4 sm:px-6 lg:px-8 bg-gradient-to-b from-transparent via-emerald-500/5 to-transparent"
+      >
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-16">
             <h2 className="text-4xl md:text-5xl font-bold text-white mb-4">
               Everything You Need to Scale
             </h2>
             <p className="text-xl text-gray-400 max-w-2xl mx-auto">
-              Powerful features designed specifically for solopreneurs and freelancers
+              Powerful features designed specifically for solopreneurs and
+              freelancers
             </p>
           </div>
 
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
             {features.map((feature, index) => (
-              <Card 
+              <Card
                 key={index}
                 className="bg-white/5 backdrop-blur-sm border-white/10 hover:border-amber-500/30 transition-all duration-300 group animate-in fade-in slide-in-from-bottom-4"
                 style={{ animationDelay: `${index * 100}ms` }}
@@ -354,8 +383,8 @@ export default function LandingPage() {
               Built for Freelancers Who Want More
             </h2>
             <p className="text-xl text-gray-400 max-w-2xl mx-auto text-pretty">
-              Stop juggling multiple tools and spreadsheets. Forgefly brings everything 
-              together in one beautiful, intelligent platform.
+              Stop juggling multiple tools and spreadsheets. Forgefly brings
+              everything together in one beautiful, intelligent platform.
             </p>
           </div>
 
@@ -363,7 +392,7 @@ export default function LandingPage() {
           <div className="grid lg:grid-cols-2 gap-12 items-center">
             <div className="space-y-4">
               {benefits.map((benefit, index) => (
-                <div 
+                <div
                   key={index}
                   className="flex items-start gap-3 animate-in fade-in slide-in-from-left-4"
                   style={{ animationDelay: `${index * 100}ms` }}
@@ -379,22 +408,32 @@ export default function LandingPage() {
                 <CardContent className="p-8 space-y-4">
                   <div className="flex items-center justify-between p-4 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
                     <div>
-                      <div className="text-sm text-emerald-400 mb-1">Monthly Revenue</div>
-                      <div className="text-2xl font-bold text-white">$12,450</div>
+                      <div className="text-sm text-emerald-400 mb-1">
+                        Monthly Revenue
+                      </div>
+                      <div className="text-2xl font-bold text-white">
+                        $12,450
+                      </div>
                     </div>
                     <TrendingUp className="w-8 h-8 text-emerald-400" />
                   </div>
                   <div className="flex items-center justify-between p-4 rounded-lg bg-amber-500/10 border border-amber-500/20">
                     <div>
-                      <div className="text-sm text-amber-400 mb-1">Active Projects</div>
+                      <div className="text-sm text-amber-400 mb-1">
+                        Active Projects
+                      </div>
                       <div className="text-2xl font-bold text-white">8</div>
                     </div>
                     <Briefcase className="w-8 h-8 text-amber-400" />
                   </div>
                   <div className="flex items-center justify-between p-4 rounded-lg bg-blue-500/10 border border-blue-500/20">
                     <div>
-                      <div className="text-sm text-blue-400 mb-1">Time Saved</div>
-                      <div className="text-2xl font-bold text-white">12 hrs/week</div>
+                      <div className="text-sm text-blue-400 mb-1">
+                        Time Saved
+                      </div>
+                      <div className="text-2xl font-bold text-white">
+                        12 hrs/week
+                      </div>
                     </div>
                     <Zap className="w-8 h-8 text-blue-400" />
                   </div>
@@ -413,7 +452,8 @@ export default function LandingPage() {
               Real Freelancers, Real Freedom
             </h2>
             <p className="text-xl text-gray-400 max-w-2xl mx-auto">
-              Join thousands of solopreneurs who transformed their business with Forgefly
+              Join thousands of solopreneurs who transformed their business with
+              Forgefly
             </p>
           </div>
 
@@ -430,9 +470,14 @@ export default function LandingPage() {
                       <CardContent className="p-8 flex flex-col h-full">
                         {/* Rating Stars */}
                         <div className="flex gap-1 mb-4">
-                          {Array.from({ length: testimonial.rating }).map((_, i) => (
-                            <Star key={i} className="w-5 h-5 fill-amber-400 text-amber-400" />
-                          ))}
+                          {Array.from({ length: testimonial.rating }).map(
+                            (_, i) => (
+                              <Star
+                                key={i}
+                                className="w-5 h-5 fill-amber-400 text-amber-400"
+                              />
+                            ),
+                          )}
                         </div>
 
                         {/* Quote */}
@@ -448,8 +493,12 @@ export default function LandingPage() {
                             className="w-12 h-12 rounded-full object-cover border-2 border-emerald-500/30"
                           />
                           <div>
-                            <div className="font-semibold text-white">{testimonial.name}</div>
-                            <div className="text-sm text-emerald-400">{testimonial.role}</div>
+                            <div className="font-semibold text-white">
+                              {testimonial.name}
+                            </div>
+                            <div className="text-sm text-emerald-400">
+                              {testimonial.role}
+                            </div>
                           </div>
                         </div>
                       </CardContent>
@@ -484,8 +533,8 @@ export default function LandingPage() {
                   key={index}
                   className={`w-2 h-2 rounded-full transition-all duration-300 ${
                     index === selectedIndex
-                      ? 'bg-emerald-400 w-8'
-                      : 'bg-white/20 hover:bg-white/40'
+                      ? "bg-emerald-400 w-8"
+                      : "bg-white/20 hover:bg-white/40"
                   }`}
                   onClick={() => scrollTo(index)}
                   aria-label={`Go to testimonial ${index + 1}`}
@@ -506,12 +555,13 @@ export default function LandingPage() {
                 Ready to Forge Your Freedom?
               </h2>
               <p className="text-xl text-gray-300 mb-8 max-w-2xl mx-auto">
-                Join solopreneurs who are scaling their business with AI-powered automation
+                Join solopreneurs who are scaling their business with AI-powered
+                automation
               </p>
-              <Button 
+              <Button
                 size="lg"
                 className="bg-emerald-500 hover:bg-emerald-600 text-white text-lg px-12 py-6 h-auto"
-                onClick={() => navigate('/login')}
+                onClick={() => navigate("/login")}
               >
                 Start Your Free Trial
                 <ArrowRight className="w-5 h-5 ml-2" />
@@ -529,9 +579,9 @@ export default function LandingPage() {
         <div className="max-w-7xl mx-auto">
           <div className="flex flex-col md:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-3">
-              <img 
-                src="https://miaoda-conversation-file.s3cdn.medo.dev/user-bj1cwp7n1qm8/conv-bj1thg4coydc/20260510/file-bj7c19f23ym8.png" 
-                alt="Forgefly Logo" 
+              <img
+                src="https://miaoda-conversation-file.s3cdn.medo.dev/user-bj1cwp7n1qm8/conv-bj1thg4coydc/20260510/file-bj7c19f23ym8.png"
+                alt="Forgefly Logo"
                 className="w-8 h-8 rounded-lg"
               />
               <div>
@@ -540,16 +590,7 @@ export default function LandingPage() {
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-3 text-sm text-gray-400">
-              <span>• Forgefly.io</span>
-              <span>• Built with ❤️ by Sourav Nayak •</span>
-              <a 
-                href="https://medo.ai" 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-gradient-to-r from-emerald-500/10 to-emerald-600/10 border border-emerald-500/30 text-emerald-400 hover:border-emerald-500/50 transition-colors text-xs font-medium"
-              >
-                Made by MeDo
-              </a>
+              <span>• Built with ❤️ in California by Sourav Nayak</span>
             </div>
           </div>
         </div>
