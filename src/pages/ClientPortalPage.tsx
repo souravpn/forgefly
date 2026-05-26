@@ -4,7 +4,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Briefcase, FileText, Receipt, Download, ExternalLink, CheckCircle2, Clock, AlertCircle, Sparkles, Mail, Phone } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Separator } from '@/components/ui/separator';
+import { Briefcase, FileText, Receipt, Download, ExternalLink, CheckCircle2, Clock, AlertCircle, Sparkles, Mail, Phone, DollarSign, CalendarDays, List, BookOpen, ScrollText } from 'lucide-react';
 import { supabase } from '@/db/supabase';
 import type { Project, Proposal, Invoice, Client } from '@/types/types';
 import { toast } from 'sonner';
@@ -17,6 +19,7 @@ export default function ClientPortalPage() {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [viewingProposal, setViewingProposal] = useState<Proposal | null>(null);
 
   useEffect(() => {
     if (token) {
@@ -326,7 +329,7 @@ export default function ClientPortalPage() {
                         Sent: {new Date(proposal.created_at).toLocaleDateString()}
                       </p>
                       {(proposal.status === 'sent') && (
-                        <Button size="sm" variant="outline" className="w-full" onClick={() => toast.info('Proposal viewing coming soon!')}>
+                        <Button size="sm" variant="outline" className="w-full" onClick={() => setViewingProposal(proposal)}>
                           <ExternalLink className="w-4 h-4 mr-2" />
                           View Proposal
                         </Button>
@@ -413,6 +416,106 @@ export default function ClientPortalPage() {
             </CardContent>
           </Card>
         )}
+
+        {/* Proposal View Modal */}
+        <Dialog open={!!viewingProposal} onOpenChange={(open) => !open && setViewingProposal(null)}>
+          <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-xl">
+                <FileText className="w-5 h-5 text-amber-500" />
+                {viewingProposal?.title}
+              </DialogTitle>
+            </DialogHeader>
+
+            {viewingProposal && (
+              <div className="space-y-5 pt-2">
+                {viewingProposal.introduction && (
+                  <div>
+                    <div className="flex items-center gap-2 text-sm font-semibold text-muted-foreground mb-2">
+                      <BookOpen className="w-4 h-4" />
+                      Introduction
+                    </div>
+                    <p className="text-sm leading-relaxed whitespace-pre-wrap">{viewingProposal.introduction}</p>
+                  </div>
+                )}
+
+                {viewingProposal.services && (
+                  <>
+                    <Separator />
+                    <div>
+                      <div className="flex items-center gap-2 text-sm font-semibold text-muted-foreground mb-2">
+                        <Briefcase className="w-4 h-4" />
+                        Services
+                      </div>
+                      <p className="text-sm leading-relaxed whitespace-pre-wrap">{viewingProposal.services}</p>
+                    </div>
+                  </>
+                )}
+
+                {viewingProposal.deliverables && (
+                  <>
+                    <Separator />
+                    <div>
+                      <div className="flex items-center gap-2 text-sm font-semibold text-muted-foreground mb-2">
+                        <List className="w-4 h-4" />
+                        Deliverables
+                      </div>
+                      <p className="text-sm leading-relaxed whitespace-pre-wrap">{viewingProposal.deliverables}</p>
+                    </div>
+                  </>
+                )}
+
+                <Separator />
+                <div className="grid grid-cols-2 gap-4">
+                  {viewingProposal.pricing != null && (
+                    <div className="p-4 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+                      <div className="flex items-center gap-2 text-sm font-semibold text-muted-foreground mb-1">
+                        <DollarSign className="w-4 h-4 text-emerald-500" />
+                        Investment
+                      </div>
+                      <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">
+                        ${Number(viewingProposal.pricing).toLocaleString()}
+                      </p>
+                    </div>
+                  )}
+                  {viewingProposal.timeline && (
+                    <div className="p-4 rounded-lg bg-amber-500/10 border border-amber-500/20">
+                      <div className="flex items-center gap-2 text-sm font-semibold text-muted-foreground mb-1">
+                        <CalendarDays className="w-4 h-4 text-amber-500" />
+                        Timeline
+                      </div>
+                      <p className="text-lg font-semibold text-amber-600 dark:text-amber-400">
+                        {viewingProposal.timeline}
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                {viewingProposal.terms && (
+                  <>
+                    <Separator />
+                    <div>
+                      <div className="flex items-center gap-2 text-sm font-semibold text-muted-foreground mb-2">
+                        <ScrollText className="w-4 h-4" />
+                        Terms & Conditions
+                      </div>
+                      <p className="text-sm leading-relaxed whitespace-pre-wrap text-muted-foreground">{viewingProposal.terms}</p>
+                    </div>
+                  </>
+                )}
+
+                <Separator />
+                <div className="flex items-center justify-between text-xs text-muted-foreground pt-1">
+                  <span>Sent on {new Date(viewingProposal.created_at).toLocaleDateString()}</span>
+                  <Badge variant="outline" className={getStatusColor(viewingProposal.status)}>
+                    {getStatusIcon(viewingProposal.status)}
+                    <span className="ml-1 capitalize">{viewingProposal.status}</span>
+                  </Badge>
+                </div>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
 
         {/* Footer */}
         <div className="mt-12 text-center text-sm text-muted-foreground">
