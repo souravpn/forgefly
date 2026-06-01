@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import LandingPage from './pages/LandingPage';
+import LandingPageV2 from './pages/LandingPageV2';
 import LoginPage from './pages/LoginPage';
 import SignupPage from './pages/SignupPage';
 import OnboardingPage from './pages/OnboardingPage';
@@ -31,6 +32,12 @@ export const routes: RouteConfig[] = [
     name: 'Landing',
     path: '/',
     element: <LandingPage />,
+    public: true,
+  },
+  {
+    name: 'Landing V2',
+    path: '/v2',
+    element: <LandingPageV2 />,
     public: true,
   },
   {

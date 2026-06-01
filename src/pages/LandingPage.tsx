@@ -160,7 +160,6 @@ export default function LandingPage() {
         "https://miaoda-site-img.s3cdn.medo.dev/images/KLing_f020a5e2-d58e-4919-92bd-11122bb19132.jpg",
       rating: 5,
     },
-    {},
   ];
 
   const [emblaRef, emblaApi] = useEmblaCarousel(
@@ -460,11 +459,11 @@ export default function LandingPage() {
           <div className="relative">
             {/* Carousel Container */}
             <div className="overflow-hidden" ref={emblaRef}>
-              <div className="flex gap-6">
+              <div className="flex ml-[-24px]">
                 {testimonials.map((testimonial, index) => (
                   <div
                     key={index}
-                    className="flex-[0_0_100%] md:flex-[0_0_calc(50%-12px)] lg:flex-[0_0_calc(33.333%-16px)] min-w-0"
+                    className="flex-[0_0_100%] md:flex-[0_0_50%] lg:flex-[0_0_33.333%] min-w-0 pl-6"
                   >
                     <Card className="h-full bg-white/5 backdrop-blur-sm border-white/10 hover:border-amber-500/30 transition-all duration-300">
                       <CardContent className="p-8 flex flex-col h-full">
