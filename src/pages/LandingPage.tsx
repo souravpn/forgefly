@@ -206,7 +206,7 @@ export default function LandingPage() {
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center gap-3">
               <img
-                src="https://miaoda-conversation-file.s3cdn.medo.dev/user-bj1cwp7n1qm8/conv-bj1thg4coydc/20260510/file-bj7c19f23ym8.png"
+                src="/public/forgefly-icon.png"
                 alt="Forgefly Logo"
                 className="w-10 h-10 rounded-lg"
               />
@@ -579,7 +579,7 @@ export default function LandingPage() {
           <div className="flex flex-col md:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               <img
-                src="https://miaoda-conversation-file.s3cdn.medo.dev/user-bj1cwp7n1qm8/conv-bj1thg4coydc/20260510/file-bj7c19f23ym8.png"
+                src="/public/forgefly-icon.png"
                 alt="Forgefly Logo"
                 className="w-8 h-8 rounded-lg"
               />

@@ -34,6 +34,9 @@ interface AuthContextType {
   isAgency: boolean;
   signInWithUsername: (username: string, password: string) => Promise<{ error: Error | null }>;
   signUpWithUsername: (username: string, password: string) => Promise<{ error: Error | null }>;
+  signInWithEmail: (email: string, password: string) => Promise<{ error: Error | null }>;
+  signUpWithEmail: (email: string, password: string) => Promise<{ error: Error | null; isNew?: boolean }>;
+  signInWithOAuth: (provider: 'google' | 'apple') => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
   refreshSubscription: () => Promise<void>;
@@ -176,6 +179,52 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const signInWithEmail = async (email: string, password: string) => {
+    try {
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+      return { error: null };
+    } catch (error) {
+      return { error: error as Error };
+    }
+  };
+
+  const signUpWithEmail = async (email: string, password: string) => {
+    try {
+      const { data, error } = await supabase.auth.signUp({ email, password });
+      if (error) throw error;
+
+      if (data.user) {
+        try {
+          await supabase.functions.invoke('send-email', {
+            body: { type: 'welcome', to: email, data: { username: email.split('@')[0] } },
+          });
+        } catch {
+          // Don't fail signup if email fails
+        }
+      }
+
+      return { error: null, isNew: !!data.user && !data.session };
+    } catch (error) {
+      return { error: error as Error };
+    }
+  };
+
+  const signInWithOAuth = async (provider: 'google' | 'apple') => {
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider,
+        options: {
+          redirectTo: `${window.location.origin}/auth/callback`,
+        },
+      });
+      if (error) throw error;
+      return { error: null };
+    } catch (error) {
+      return { error: error as Error };
+    }
+  };
+
   const signOut = async () => {
     await supabase.auth.signOut();
     setUser(null);
@@ -184,7 +233,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, profile, subscription, loading, isAgency, signInWithUsername, signUpWithUsername, signOut, refreshProfile, refreshSubscription }}>
+    <AuthContext.Provider value={{ user, profile, subscription, loading, isAgency, signInWithUsername, signUpWithUsername, signInWithEmail, signUpWithEmail, signInWithOAuth, signOut, refreshProfile, refreshSubscription }}>
       {children}
     </AuthContext.Provider>
   );

@@ -128,7 +128,7 @@ export function getWelcomeEmailTemplate(username: string): string {
 <body>
   <div class="email-container">
     <div class="email-header">
-      <img src="https://miaoda-conversation-file.s3cdn.medo.dev/user-bj1cwp7n1qm8/conv-bj1thg4coydc/20260510/file-bj7c19f23ym8.png" alt="Forgefly Logo" class="logo" />
+      <img src="/public/forgefly-icon.png" alt="Forgefly Logo" class="logo" />
       <h1 class="brand-name">Forgefly</h1>
       <p class="tagline">Forge Your Freedom</p>
     </div>
@@ -164,7 +164,7 @@ export function getWelcomeEmailTemplate(username: string): string {
       </div>
       
       <center>
-        <a href="${Deno.env.get('SUPABASE_URL')?.replace('/rest/v1', '')}/dashboard" class="button">
+        <a href="${Deno.env.get("SUPABASE_URL")?.replace("/rest/v1", "")}/dashboard" class="button">
           Get Started →
         </a>
       </center>
@@ -195,7 +195,7 @@ export function getProposalEmailTemplate(
   clientName: string,
   proposalTitle: string,
   amount: number,
-  proposalLink: string
+  proposalLink: string,
 ): string {
   return `
 <!DOCTYPE html>
@@ -209,7 +209,7 @@ export function getProposalEmailTemplate(
 <body>
   <div class="email-container">
     <div class="email-header">
-      <img src="https://miaoda-conversation-file.s3cdn.medo.dev/user-bj1cwp7n1qm8/conv-bj1thg4coydc/20260510/file-bj7c19f23ym8.png" alt="Forgefly Logo" class="logo" />
+      <img src="/public/forgefly-icon.png" alt="Forgefly Logo" class="logo" />
       <h1 class="brand-name">Forgefly</h1>
       <p class="tagline">Professional Proposal</p>
     </div>
@@ -268,7 +268,7 @@ export function getInvoiceEmailTemplate(
   invoiceNumber: string,
   amount: number,
   dueDate: string,
-  paymentLink: string
+  paymentLink: string,
 ): string {
   return `
 <!DOCTYPE html>
@@ -282,7 +282,7 @@ export function getInvoiceEmailTemplate(
 <body>
   <div class="email-container">
     <div class="email-header">
-      <img src="https://miaoda-conversation-file.s3cdn.medo.dev/user-bj1cwp7n1qm8/conv-bj1thg4coydc/20260510/file-bj7c19f23ym8.png" alt="Forgefly Logo" class="logo" />
+      <img src="/public/forgefly-icon.png" alt="Forgefly Logo" class="logo" />
       <h1 class="brand-name">Forgefly</h1>
       <p class="tagline">Invoice</p>
     </div>
