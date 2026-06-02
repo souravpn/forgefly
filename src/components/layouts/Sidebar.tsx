@@ -60,8 +60,20 @@ function SidebarContent({
   onToggleCollapse?: () => void;
 }) {
   const location = useLocation();
-  const { profile, signOut, isAgency, refreshSubscription } = useAuth();
+  const { user, profile, signOut, isAgency, refreshSubscription } = useAuth();
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+
+  // Resolve display name and email from profile first, then OAuth user_metadata as fallback
+  const displayName =
+    profile?.username ||
+    user?.user_metadata?.full_name ||
+    user?.user_metadata?.name ||
+    user?.email?.split("@")[0] ||
+    "User";
+  const displayEmail = profile?.email || user?.email || profile?.role || "";
+  const avatarInitial = displayName.charAt(0).toUpperCase();
+  const avatarUrl: string | undefined =
+    profile?.avatar_url || user?.user_metadata?.avatar_url;
   const [theme, setTheme] = useState<"light" | "dark">("dark");
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
@@ -134,7 +146,7 @@ function SidebarContent({
             className={`flex items-center ${isCollapsed ? "justify-center" : "gap-3"}`}
           >
             <img
-              src="/public/forgefly-icon.png"
+              src="/forgefly-icon.png"
               alt="Forgefly Logo"
               className="w-10 h-10 rounded-lg shrink-0"
             />
@@ -226,13 +238,21 @@ function SidebarContent({
                   onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
                   className="w-full flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-sidebar-accent transition-colors"
                 >
-                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-emerald-500 to-emerald-600 flex items-center justify-center text-white font-semibold text-sm shrink-0 shadow-lg">
-                    {profile?.username?.charAt(0).toUpperCase() || "U"}
+                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-emerald-500 to-emerald-600 flex items-center justify-center text-white font-semibold text-sm shrink-0 shadow-lg overflow-hidden">
+                    {avatarUrl ? (
+                      <img
+                        src={avatarUrl}
+                        alt={displayName}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      avatarInitial
+                    )}
                   </div>
                   <div className="flex-1 min-w-0 text-left">
                     <div className="flex items-center gap-2">
                       <p className="text-sm font-semibold text-sidebar-foreground truncate">
-                        {profile?.username || "User"}
+                        {displayName}
                       </p>
                       {isAgency && (
                         <Badge className="bg-gradient-to-r from-emerald-500 to-amber-500 text-white text-xs px-1.5 py-0 h-5">
@@ -242,7 +262,7 @@ function SidebarContent({
                       )}
                     </div>
                     <p className="text-xs text-sidebar-foreground/60 truncate">
-                      {profile?.email || profile?.role || "user"}
+                      {displayEmail}
                     </p>
                   </div>
                   <ChevronDown
@@ -334,13 +354,21 @@ function SidebarContent({
                         onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
                         className="w-full flex justify-center py-2 relative"
                       >
-                        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-emerald-500 to-emerald-600 flex items-center justify-center text-white font-semibold text-sm shadow-lg">
-                          {profile?.username?.charAt(0).toUpperCase() || "U"}
+                        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-emerald-500 to-emerald-600 flex items-center justify-center text-white font-semibold text-sm shadow-lg overflow-hidden">
+                          {avatarUrl ? (
+                            <img
+                              src={avatarUrl}
+                              alt={displayName}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            avatarInitial
+                          )}
                         </div>
                       </button>
                     </TooltipTrigger>
                     <TooltipContent side="right">
-                      <p>{profile?.username || "User"}</p>
+                      <p>{displayName}</p>
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
@@ -352,10 +380,10 @@ function SidebarContent({
                       {/* User Info Header */}
                       <div className="px-3 py-2 border-b border-sidebar-border">
                         <p className="text-sm font-semibold text-sidebar-foreground truncate">
-                          {profile?.username || "User"}
+                          {displayName}
                         </p>
                         <p className="text-xs text-sidebar-foreground/60 truncate">
-                          {profile?.email || profile?.role || "user"}
+                          {displayEmail}
                         </p>
                       </div>
 

@@ -330,7 +330,7 @@ export default function DashboardPage() {
         >
           <CardContent className="flex items-center gap-4 p-6">
             <img
-              src="/public/forgefly-icon.png"
+              src="/forgefly-icon.png"
               alt="Forgefly Logo"
               className="w-12 h-12 rounded-lg glow-accent"
             />

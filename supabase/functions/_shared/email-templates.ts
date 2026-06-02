@@ -128,7 +128,7 @@ export function getWelcomeEmailTemplate(username: string): string {
 <body>
   <div class="email-container">
     <div class="email-header">
-      <img src="/public/forgefly-icon.png" alt="Forgefly Logo" class="logo" />
+      <img src="/forgefly-icon.png" alt="Forgefly Logo" class="logo" />
       <h1 class="brand-name">Forgefly</h1>
       <p class="tagline">Forge Your Freedom</p>
     </div>
@@ -209,7 +209,7 @@ export function getProposalEmailTemplate(
 <body>
   <div class="email-container">
     <div class="email-header">
-      <img src="/public/forgefly-icon.png" alt="Forgefly Logo" class="logo" />
+      <img src="/forgefly-icon.png" alt="Forgefly Logo" class="logo" />
       <h1 class="brand-name">Forgefly</h1>
       <p class="tagline">Professional Proposal</p>
     </div>
@@ -282,7 +282,7 @@ export function getInvoiceEmailTemplate(
 <body>
   <div class="email-container">
     <div class="email-header">
-      <img src="/public/forgefly-icon.png" alt="Forgefly Logo" class="logo" />
+      <img src="/forgefly-icon.png" alt="Forgefly Logo" class="logo" />
       <h1 class="brand-name">Forgefly</h1>
       <p class="tagline">Invoice</p>
     </div>

@@ -138,7 +138,7 @@ export default function LoginPage() {
             transition={{ delay: 0.1 }}
           >
             <img
-              src="/public/forgefly-icon.png"
+              src="/forgefly-icon.png"
               alt="Forgefly Logo"
               className="w-10 h-10 rounded-lg"
             />

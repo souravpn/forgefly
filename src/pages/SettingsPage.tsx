@@ -222,7 +222,7 @@ export default function SettingsPage() {
               <div className="p-6 rounded-lg bg-gradient-to-br from-accent/10 to-primary/10 border border-accent/20">
                 <div className="flex items-start gap-4">
                   <img
-                    src="/public/forgefly-icon.png"
+                    src="/forgefly-icon.png"
                     alt="Forgefly Logo"
                     className="w-10 h-10 rounded-lg"
                   />
