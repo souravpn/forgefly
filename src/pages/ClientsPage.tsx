@@ -6,15 +6,17 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { Plus, Search, Mail, Phone, Building2, Edit, Trash2, User, Users, UserPlus, Crown } from 'lucide-react';
+import { Plus, Search, Mail, Phone, Building2, Edit, Trash2, User, Users, UserPlus, Crown, Send } from 'lucide-react';
 import { toast } from 'sonner';
 import type { Client } from '@/types/types';
 import { getClients, createClient, updateClient, deleteClient, uploadAvatar, subscribeToClients } from '@/services/clientService';
 import { useAuth } from '@/contexts/AuthContext';
+// @ts-ignore
+import { supabase } from '@/db/supabase';
 import { Badge } from '@/components/ui/badge';
 
 export default function ClientsPage() {
-  const { isAgency } = useAuth();
+  const { isAgency, profile, user } = useAuth();
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -22,6 +24,9 @@ export default function ClientsPage() {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isTeamMemberModalOpen, setIsTeamMemberModalOpen] = useState(false);
+  const [isEmailModalOpen, setIsEmailModalOpen] = useState(false);
+  const [emailData, setEmailData] = useState({ subject: '', message: '' });
+  const [emailSending, setEmailSending] = useState(false);
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [formData, setFormData] = useState({
     name: '',
@@ -158,6 +163,45 @@ export default function ClientsPage() {
     }
   }
 
+  function openEmailModal(client: Client) {
+    setSelectedClient(client);
+    setEmailData({ subject: '', message: '' });
+    setIsEmailModalOpen(true);
+  }
+
+  async function handleSendEmail(e: React.FormEvent) {
+    e.preventDefault();
+    if (!selectedClient?.email) return;
+    setEmailSending(true);
+    try {
+      const senderName = profile?.username ||
+        user?.user_metadata?.full_name ||
+        user?.email?.split('@')[0] ||
+        'Your Freelancer';
+
+      const { error } = await supabase.functions.invoke('send-email', {
+        body: {
+          type: 'client_message',
+          to: selectedClient.email,
+          data: {
+            clientName: selectedClient.name,
+            senderName,
+            subject: emailData.subject,
+            message: emailData.message,
+          },
+        },
+      });
+      if (error) throw error;
+      toast.success(`Email sent to ${selectedClient.name}`);
+      setIsEmailModalOpen(false);
+    } catch (err) {
+      console.error(err);
+      toast.error('Failed to send email');
+    } finally {
+      setEmailSending(false);
+    }
+  }
+
   const filteredClients = clients.filter(client =>
     client.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     client.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -274,10 +318,21 @@ export default function ClientsPage() {
                 </div>
 
                 <div className="flex gap-2 mt-4 pt-4 border-t border-border">
+                  {client.email && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="flex-1"
+                      onClick={() => openEmailModal(client)}
+                    >
+                      <Send className="w-4 h-4 mr-2" />
+                      Email
+                    </Button>
+                  )}
                   <Button
                     variant="outline"
                     size="sm"
-                    className="flex-1"
+                    className={client.email ? '' : 'flex-1'}
                     onClick={() => openEditModal(client)}
                   >
                     <Edit className="w-4 h-4 mr-2" />
@@ -410,6 +465,55 @@ export default function ClientsPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Email Compose Modal */}
+      <Dialog open={isEmailModalOpen} onOpenChange={setIsEmailModalOpen}>
+        <DialogContent className="max-w-[calc(100%-2rem)] md:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Send className="w-5 h-5 text-emerald-400" />
+              Email {selectedClient?.name}
+            </DialogTitle>
+            <DialogDescription>
+              Sent from <span className="text-emerald-400 font-medium">hello@forgefly.io</span> to {selectedClient?.email}
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleSendEmail}>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="email-subject">Subject *</Label>
+                <Input
+                  id="email-subject"
+                  placeholder="e.g. Project update, Quick question..."
+                  value={emailData.subject}
+                  onChange={(e) => setEmailData({ ...emailData, subject: e.target.value })}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="email-message">Message *</Label>
+                <Textarea
+                  id="email-message"
+                  placeholder="Write your message here..."
+                  value={emailData.message}
+                  onChange={(e) => setEmailData({ ...emailData, message: e.target.value })}
+                  rows={6}
+                  required
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setIsEmailModalOpen(false)} disabled={emailSending}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={emailSending} className="glow-accent">
+                <Send className="w-4 h-4 mr-2" />
+                {emailSending ? 'Sending...' : 'Send Email'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       {/* Team Member Modal (Agency Only) */}
       <Dialog open={isTeamMemberModalOpen} onOpenChange={setIsTeamMemberModalOpen}>

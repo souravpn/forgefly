@@ -1,6 +1,6 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'jsr:@supabase/supabase-js@2';
-import { getWelcomeEmailTemplate, getProposalEmailTemplate, getInvoiceEmailTemplate } from '../_shared/email-templates.ts';
+import { getWelcomeEmailTemplate, getProposalEmailTemplate, getInvoiceEmailTemplate, getClientMessageTemplate } from '../_shared/email-templates.ts';
 
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY');
 const RESEND_API_URL = 'https://api.resend.com/emails';
@@ -77,13 +77,14 @@ serve(async (req) => {
 
     let subject = '';
     let html = '';
-    let from = 'Forgefly <onboarding@resend.dev>'; // Use your verified domain
+    let from = 'Forgefly <hello@forgefly.io>';
 
     // Generate email based on type
     switch (type) {
       case 'welcome':
         subject = 'Welcome to Forgefly! 🚀';
         html = getWelcomeEmailTemplate(data.username);
+        from = 'Forgefly <hello@forgefly.io>';
         break;
 
       case 'proposal':
@@ -105,6 +106,24 @@ serve(async (req) => {
           data.dueDate,
           data.paymentLink
         );
+        from = 'Forgefly Billing <billing@forgefly.io>';
+        break;
+
+      case 'client_message':
+        if (!data.subject || !data.message) {
+          return new Response(
+            JSON.stringify({ error: 'subject and message are required for client_message' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        subject = data.subject;
+        html = getClientMessageTemplate(
+          data.clientName,
+          data.senderName || 'Your Freelancer',
+          data.subject,
+          data.message,
+        );
+        from = `${data.senderName || 'Forgefly'} <hello@forgefly.io>`;
         break;
 
       default:

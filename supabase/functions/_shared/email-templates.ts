@@ -263,6 +263,49 @@ export function getProposalEmailTemplate(
   `;
 }
 
+export function getClientMessageTemplate(
+  clientName: string,
+  senderName: string,
+  subject: string,
+  message: string,
+): string {
+  const messageHtml = message.replace(/\n/g, '<br/>');
+  return `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${subject}</title>
+  <style>${emailStyles}</style>
+</head>
+<body>
+  <div class="email-container">
+    <div class="email-header">
+      <img src="https://miaoda-conversation-file.s3cdn.medo.dev/user-bj1cwp7n1qm8/conv-bj1thg4coydc/20260510/file-bj7c19f23ym8.png" alt="Forgefly Logo" class="logo" />
+      <h1 class="brand-name">Forgefly</h1>
+      <p class="tagline">Message from ${senderName}</p>
+    </div>
+    <div class="email-body">
+      <h2 class="greeting">Hi ${clientName},</h2>
+      <p class="content">${messageHtml}</p>
+      <p class="content" style="margin-top: 32px;">
+        Best regards,<br/>
+        <strong style="color: #FFFFFF;">${senderName}</strong>
+      </p>
+    </div>
+    <div class="footer">
+      <p class="footer-text"><strong>Forgefly</strong> — AI Business OS for Solopreneurs</p>
+      <p class="footer-text" style="font-size: 12px; color: #6B7280; margin-top: 16px;">
+        Sent via Forgefly on behalf of ${senderName}
+      </p>
+    </div>
+  </div>
+</body>
+</html>
+  `;
+}
+
 export function getInvoiceEmailTemplate(
   clientName: string,
   invoiceNumber: string,

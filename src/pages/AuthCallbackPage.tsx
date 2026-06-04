@@ -1,24 +1,38 @@
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { useAuth } from "@/contexts/AuthContext";
+// @ts-ignore
+import { supabase } from "@/db/supabase";
+import { getProfile } from "@/contexts/AuthContext";
 
 export default function AuthCallbackPage() {
-  const { user, profile, loading } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (loading) return;
-    if (!user) {
-      navigate("/login", { replace: true });
-      return;
-    }
-    // New OAuth user has no profile yet → onboarding
-    if (!profile) {
-      navigate("/onboarding", { replace: true });
-    } else {
-      navigate("/dashboard", { replace: true });
-    }
-  }, [user, profile, loading, navigate]);
+    const redirect = async (userId: string) => {
+      const profile = await getProfile(userId);
+      navigate(profile ? "/dashboard" : "/onboarding", { replace: true });
+    };
+
+    // Listen for the SIGNED_IN event fired when Supabase processes OAuth tokens
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (event: string, session: { user?: { id: string } } | null) => {
+        if (event === "SIGNED_IN" && session?.user) {
+          redirect(session.user.id);
+        }
+      },
+    );
+
+    // Also handle the case where session is already established (e.g. page refresh)
+    supabase.auth.getSession().then(
+      ({ data: { session } }: { data: { session: { user?: { id: string } } | null } }) => {
+        if (session?.user) {
+          redirect(session.user.id);
+        }
+      },
+    );
+
+    return () => subscription.unsubscribe();
+  }, [navigate]);
 
   return (
     <div
@@ -26,7 +40,7 @@ export default function AuthCallbackPage() {
       style={{ background: "#020810" }}
     >
       <div
-        className="w-12 h-12 rounded-full border-2 border-t-transparent animate-spin"
+        className="w-12 h-12 rounded-full border-2 animate-spin"
         style={{ borderColor: "#00f0c8", borderTopColor: "transparent" }}
       />
       <p className="text-sm" style={{ color: "rgba(0,240,200,0.7)" }}>
