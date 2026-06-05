@@ -168,7 +168,7 @@ export default function InvoicesPage() {
     setSendingEmail(true);
     try {
       // Create Stripe payment link for the invoice
-      const { data: paymentData, error: paymentError } = await supabase.functions.invoke('create-payment-link', {
+      const { data: paymentData, error: paymentError } = await supabase.functions.invoke('create-invoice-checkout', {
         body: {
           amount: selectedInvoice.amount,
           description: `Invoice ${selectedInvoice.invoice_number}`,
@@ -177,8 +177,8 @@ export default function InvoicesPage() {
       });
 
       let paymentLink = `${window.location.origin}/invoices/${selectedInvoice.id}/pay`;
-      if (paymentData?.url) {
-        paymentLink = paymentData.url;
+      if (paymentData?.data?.url) {
+        paymentLink = paymentData.data.url;
       }
 
       // Format due date
