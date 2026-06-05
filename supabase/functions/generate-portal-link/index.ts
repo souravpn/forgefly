@@ -84,7 +84,8 @@ serve(async (req) => {
     }
 
     // Generate portal URL
-    const portalUrl = `${Deno.env.get('SUPABASE_URL')?.replace('/rest/v1', '')}/portal/${token}`;
+    const siteUrl = Deno.env.get('SITE_URL') || 'https://www.forgefly.io';
+    const portalUrl = `${siteUrl}/portal/${token}`;
 
     // Log success
     console.log(`Portal token created for client ${client.name} (${clientId})`);
