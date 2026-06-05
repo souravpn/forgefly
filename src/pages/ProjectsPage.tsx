@@ -18,10 +18,10 @@ import { getProjects, createProject, updateProject, updateProjectStatus, deleteP
 import { getClients } from '@/services/clientService';
 
 const COLUMNS: { id: ProjectStatus; title: string }[] = [
-  { id: 'To Do', title: 'To Do' },
-  { id: 'In Progress', title: 'In Progress' },
-  { id: 'Review', title: 'Review' },
-  { id: 'Done', title: 'Done' },
+  { id: 'lead', title: 'To Do' },
+  { id: 'in_progress', title: 'In Progress' },
+  { id: 'review', title: 'Review' },
+  { id: 'completed', title: 'Done' },
 ];
 
 function ProjectCard({ project, onEdit, onDelete }: { project: Project; onEdit: (project: Project) => void; onDelete: (project: Project) => void }) {
@@ -118,7 +118,7 @@ export default function ProjectsPage() {
     client_id: '',
     value: '',
     deadline: '',
-    status: 'To Do' as ProjectStatus,
+    status: 'lead' as ProjectStatus,
   });
   const [submitting, setSubmitting] = useState(false);
 
@@ -174,7 +174,7 @@ export default function ProjectsPage() {
       client_id: '',
       value: '',
       deadline: '',
-      status: 'To Do',
+      status: 'lead',
     });
     setIsCreateModalOpen(true);
   }

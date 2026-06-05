@@ -1,6 +1,6 @@
 export type UserRole = 'user' | 'admin';
 
-export type ProjectStatus = 'To Do' | 'In Progress' | 'Review' | 'Done';
+export type ProjectStatus = 'lead' | 'in_progress' | 'review' | 'completed' | 'archived';
 
 export type InvoiceStatus = 'draft' | 'sent' | 'paid' | 'overdue';
 
