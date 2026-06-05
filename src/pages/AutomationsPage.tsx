@@ -2,9 +2,11 @@ import { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
 import { Button } from '@/components/ui/button';
-import { Plus, Zap } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Plus, Zap, Search } from 'lucide-react';
 
 export default function AutomationsPage() {
+  const [searchQuery, setSearchQuery] = useState('');
   const [automations, setAutomations] = useState([
     { id: '1', name: 'Payment Reminder', trigger: 'Invoice overdue by 3 days', action: 'Send email reminder', active: true },
     { id: '2', name: 'Proposal Follow-up', trigger: 'Proposal sent', action: 'Create follow-up task after 3 days', active: true },
@@ -33,8 +35,21 @@ export default function AutomationsPage() {
         </Button>
       </div>
 
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+        <Input
+          placeholder="Search automations..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="pl-10"
+        />
+      </div>
+
       <div className="grid gap-4">
-        {automations.map((automation) => (
+        {automations.filter(a => {
+          const q = searchQuery.toLowerCase();
+          return !q || a.name.toLowerCase().includes(q) || a.trigger.toLowerCase().includes(q) || a.action.toLowerCase().includes(q);
+        }).map((automation) => (
           <Card key={automation.id}>
             <CardContent className="flex items-center justify-between p-6">
               <div className="flex items-center gap-4 flex-1 min-w-0">

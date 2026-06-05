@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
-import { Plus, FileText, Send, Edit, Trash2, DollarSign, Calendar, CheckCircle2, Clock, AlertCircle, CreditCard, Mail } from 'lucide-react';
+import { Plus, FileText, Send, Edit, Trash2, DollarSign, Calendar, CheckCircle2, Clock, AlertCircle, CreditCard, Mail, Search } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/db/supabase';
 import type { Invoice, InvoiceStatus, PaymentStatus, Client, Project } from '@/types/types';
@@ -37,6 +37,7 @@ export default function InvoicesPage() {
     notes: '',
   });
   const [submitting, setSubmitting] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     loadData();
@@ -326,6 +327,16 @@ export default function InvoicesPage() {
         </Button>
       </div>
 
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+        <Input
+          placeholder="Search invoices..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="pl-10"
+        />
+      </div>
+
       {loading ? (
         <div className="grid gap-4 md:gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
           {[1, 2, 3].map((i) => (
@@ -354,7 +365,10 @@ export default function InvoicesPage() {
         </Card>
       ) : (
         <div className="grid gap-4 md:gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-          {invoices.map((invoice) => (
+          {invoices.filter(i => {
+            const q = searchQuery.toLowerCase();
+            return !q || i.invoice_number.toLowerCase().includes(q) || (i as any).client?.name?.toLowerCase().includes(q) || (i as any).project?.name?.toLowerCase().includes(q);
+          }).map((invoice) => (
             <Card key={invoice.id} className="card-hover h-full flex flex-col">
               <CardContent className="p-6 flex-1 flex flex-col">
                 <div className="flex items-start justify-between mb-4">

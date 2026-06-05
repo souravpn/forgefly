@@ -2,8 +2,7 @@ import { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Slider } from '@/components/ui/slider';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { DollarSign, TrendingUp, TrendingDown, Plus } from 'lucide-react';
+import { DollarSign, TrendingUp, TrendingDown } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, TooltipProps } from 'recharts';
 import type { CashflowData } from '@/types/types';
 
@@ -252,15 +251,9 @@ export default function FinancesPage() {
       {/* Invoices */}
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="text-balance">Recent Invoices</CardTitle>
-              <CardDescription>Track your billing and payments</CardDescription>
-            </div>
-            <Button onClick={() => {}}>
-              <Plus className="w-4 h-4 mr-2" />
-              New Invoice
-            </Button>
+          <div>
+            <CardTitle className="text-balance">Recent Invoices</CardTitle>
+            <CardDescription>Track your billing and payments</CardDescription>
           </div>
         </CardHeader>
         <CardContent>

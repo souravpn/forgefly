@@ -8,7 +8,7 @@ import { Switch } from '@/components/ui/switch';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Package as PackageIcon, Edit, Trash2, DollarSign, Calendar } from 'lucide-react';
+import { Plus, Package as PackageIcon, Edit, Trash2, DollarSign, Calendar, Search } from 'lucide-react';
 import { toast } from 'sonner';
 import type { Package } from '@/types/types';
 import { getPackages, createPackage, updatePackage, deletePackage, subscribeToPackages } from '@/services/packageService';
@@ -29,6 +29,7 @@ export default function PackagesPage() {
     is_active: true,
   });
   const [submitting, setSubmitting] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     loadPackages();
@@ -161,6 +162,16 @@ export default function PackagesPage() {
         </Button>
       </div>
 
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+        <Input
+          placeholder="Search packages..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="pl-10"
+        />
+      </div>
+
       {loading ? (
         <div className="grid gap-4 md:gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
           {[1, 2, 3].map((i) => (
@@ -189,7 +200,10 @@ export default function PackagesPage() {
         </Card>
       ) : (
         <div className="grid gap-4 md:gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-          {packages.map((pkg) => (
+          {packages.filter(pkg => {
+            const q = searchQuery.toLowerCase();
+            return !q || pkg.name.toLowerCase().includes(q) || pkg.description?.toLowerCase().includes(q);
+          }).map((pkg) => (
             <Card key={pkg.id} className="card-hover h-full flex flex-col">
               <CardHeader>
                 <div className="flex items-start justify-between">
