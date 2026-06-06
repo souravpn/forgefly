@@ -19,6 +19,7 @@ import {
   Sparkles,
   Zap,
   CreditCard,
+  Crown,
 } from "lucide-react";
 import {
   LineChart,
@@ -40,8 +41,16 @@ import type {
   CashflowData,
   Payment,
 } from "@/types/types";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
 
 // Custom Tooltip Component matching shadcn style
 function CustomTooltip({
@@ -80,6 +89,7 @@ function CustomTooltip({
 export default function DashboardPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [projects, setProjects] = useState<Project[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
@@ -93,6 +103,14 @@ export default function DashboardPage() {
   const [cashflowData, setCashflowData] = useState<CashflowData[]>([]);
   const [whatIfMultiplier, setWhatIfMultiplier] = useState([1]);
   const [completedTasks, setCompletedTasks] = useState<Set<string>>(new Set());
+  const [showUpgradeSuccess, setShowUpgradeSuccess] = useState(false);
+
+  useEffect(() => {
+    if (searchParams.get('upgrade') === 'success') {
+      setShowUpgradeSuccess(true);
+      setSearchParams({}, { replace: true });
+    }
+  }, []);
 
   useEffect(() => {
     if (user) {
@@ -256,6 +274,36 @@ export default function DashboardPage() {
   };
 
   return (
+    <>
+    <Dialog open={showUpgradeSuccess} onOpenChange={setShowUpgradeSuccess}>
+      <DialogContent className="sm:max-w-md text-center">
+        <DialogHeader>
+          <div className="flex justify-center mb-4">
+            <div className="w-16 h-16 rounded-full bg-yellow-500/10 flex items-center justify-center">
+              <Crown className="w-8 h-8 text-yellow-500" />
+            </div>
+          </div>
+          <DialogTitle className="text-2xl font-bold">
+            Welcome to Agency!
+          </DialogTitle>
+          <DialogDescription className="text-base mt-2">
+            You've unlocked the full power of Forgefly. Your agency plan is now active — unlimited clients, advanced AI, and priority support are all yours.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="my-4 p-4 rounded-lg bg-yellow-500/5 border border-yellow-500/20 text-sm text-muted-foreground">
+          <p>A confirmation email is on its way to your inbox. 🎉</p>
+        </div>
+        <DialogFooter className="justify-center">
+          <Button
+            className="w-full bg-gradient-to-r from-emerald-500 to-yellow-500 text-white font-semibold hover:opacity-90"
+            onClick={() => setShowUpgradeSuccess(false)}
+          >
+            <Sparkles className="w-4 h-4 mr-2" />
+            Let's Go!
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
     <div className="space-y-6 md:space-y-8">
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
@@ -649,5 +697,6 @@ export default function DashboardPage() {
         </Card>
       </div>
     </div>
+    </>
   );
 }

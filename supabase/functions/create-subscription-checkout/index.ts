@@ -86,7 +86,7 @@ serve(async (req) => {
             recurring: {
               interval: billingCycle === 'monthly' ? 'month' : 'year',
             },
-            unit_amount: billingCycle === 'monthly' ? 2900 : 29000, // in cents
+            unit_amount: 100, // $1 test price (change to 2900/29000 for production)
           },
           quantity: 1,
         },

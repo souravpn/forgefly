@@ -306,6 +306,80 @@ export function getClientMessageTemplate(
   `;
 }
 
+export function getAgencyUpgradeEmailTemplate(username: string, billingCycle: string): string {
+  return `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Welcome to Forgefly Agency!</title>
+  <style>${emailStyles}</style>
+</head>
+<body>
+  <div class="email-container">
+    <div class="email-header">
+      <img src="https://miaoda-conversation-file.s3cdn.medo.dev/user-bj1cwp7n1qm8/conv-bj1thg4coydc/20260510/file-bj7c19f23ym8.png" alt="Forgefly Logo" class="logo" />
+      <h1 class="brand-name">Forgefly</h1>
+      <p class="tagline">You've upgraded to Agency 🎉</p>
+    </div>
+
+    <div class="email-body">
+      <h2 class="greeting">Congratulations, ${username}!</h2>
+
+      <p class="content">
+        You're now on the <strong style="color: #F59E0B;">Forgefly Agency Plan</strong>. Your business just leveled up.
+      </p>
+
+      <div class="info-box">
+        <div class="list-item">
+          <p class="info-label">✨ Unlimited Clients & Projects</p>
+          <p style="color: #D1D5DB; font-size: 14px; margin: 4px 0 0;">Scale without limits</p>
+        </div>
+        <div class="list-item">
+          <p class="info-label">🤖 Advanced AI Copilot</p>
+          <p style="color: #D1D5DB; font-size: 14px; margin: 4px 0 0;">Full business intelligence at your fingertips</p>
+        </div>
+        <div class="list-item">
+          <p class="info-label">⚡ Priority Support</p>
+          <p style="color: #D1D5DB; font-size: 14px; margin: 4px 0 0;">Get help when you need it most</p>
+        </div>
+        <div class="list-item">
+          <p class="info-label">📊 Advanced Analytics</p>
+          <p style="color: #D1D5DB; font-size: 14px; margin: 4px 0 0;">Deep insights into your business performance</p>
+        </div>
+      </div>
+
+      <p class="content">
+        Your <strong>${billingCycle}</strong> subscription is now active. You'll be billed automatically and can manage your plan anytime from your dashboard.
+      </p>
+
+      <center>
+        <a href="https://www.forgefly.io/dashboard" class="button">
+          Go to Dashboard →
+        </a>
+      </center>
+
+      <p class="content" style="margin-top: 32px;">
+        Welcome to the agency tier! We can't wait to see what you build.<br/>
+        <strong style="color: #FFFFFF;">The Forgefly Team</strong>
+      </p>
+    </div>
+
+    <div class="footer">
+      <p class="footer-text">
+        <strong>Forgefly</strong> - AI Business OS for Solopreneurs
+      </p>
+      <p class="footer-text" style="font-size: 12px; color: #6B7280; margin-top: 16px;">
+        You're receiving this email because you upgraded your Forgefly plan.
+      </p>
+    </div>
+  </div>
+</body>
+</html>
+  `;
+}
+
 export function getInvoiceEmailTemplate(
   clientName: string,
   invoiceNumber: string,
