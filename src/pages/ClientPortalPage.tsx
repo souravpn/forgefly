@@ -121,7 +121,7 @@ export default function ClientPortalPage() {
 
       const proposal = proposals.find(p => p.id === proposalId);
       setProposals(prev => prev.map(p =>
-        p.id === proposalId ? { ...p, status: action === 'approve' ? 'approved' : 'rejected' } : p
+        p.id === proposalId ? { ...p, status: action === 'approve' ? 'accepted' : 'rejected' } : p
       ));
       setProposalDecision({ title: proposal?.title ?? 'Proposal', action });
     } catch (err: any) {
@@ -152,7 +152,7 @@ export default function ClientPortalPage() {
 
   const getStatusColor = (status: string) => {
     switch (status?.toLowerCase()) {
-      case 'completed': case 'paid': case 'approved': return 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20';
+      case 'completed': case 'paid': case 'accepted': return 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20';
       case 'in_progress': case 'sent': return 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20';
       case 'overdue': case 'rejected': return 'bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20';
       default: return 'bg-muted text-muted-foreground border-border';
@@ -161,7 +161,7 @@ export default function ClientPortalPage() {
 
   const getStatusIcon = (status: string) => {
     switch (status?.toLowerCase()) {
-      case 'completed': case 'paid': case 'approved': return <CheckCircle2 className="w-3 h-3" />;
+      case 'completed': case 'paid': case 'accepted': return <CheckCircle2 className="w-3 h-3" />;
       case 'in_progress': case 'sent': return <Clock className="w-3 h-3" />;
       default: return <AlertCircle className="w-3 h-3" />;
     }
@@ -418,7 +418,7 @@ export default function ClientPortalPage() {
                       </div>
                     )}
 
-                    {proposal.status === 'approved' && (
+                    {proposal.status === 'accepted' && (
                       <div className="flex items-center gap-2 pt-3 border-t border-border text-sm text-emerald-600 dark:text-emerald-400">
                         <PartyPopper className="w-4 h-4" />
                         You approved this proposal

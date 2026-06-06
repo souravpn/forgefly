@@ -6,7 +6,7 @@ export type InvoiceStatus = 'draft' | 'sent' | 'paid' | 'overdue';
 
 export type PaymentStatus = 'unpaid' | 'processing' | 'paid' | 'failed';
 
-export type ProposalStatus = 'draft' | 'sent' | 'approved' | 'rejected';
+export type ProposalStatus = 'draft' | 'sent' | 'accepted' | 'rejected';
 
 export interface Profile {
   id: string;

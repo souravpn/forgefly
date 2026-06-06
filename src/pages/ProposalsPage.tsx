@@ -241,7 +241,7 @@ export default function ProposalsPage() {
     const config = {
       draft: { icon: Clock, label: 'Draft', className: 'bg-muted text-muted-foreground' },
       sent: { icon: Send, label: 'Sent', className: 'bg-blue-500/10 text-blue-500 border-blue-500/20' },
-      approved: { icon: CheckCircle2, label: 'Approved', className: 'bg-success/10 text-success border-success/20' },
+      accepted: { icon: CheckCircle2, label: 'Approved', className: 'bg-success/10 text-success border-success/20' },
       rejected: { icon: XCircle, label: 'Rejected', className: 'bg-destructive/10 text-destructive border-destructive/20' },
     };
 
@@ -388,7 +388,7 @@ export default function ProposalsPage() {
                           variant="outline"
                           size="sm"
                           className="flex-1"
-                          onClick={() => handleStatusChange(proposal, 'approved')}
+                          onClick={() => handleStatusChange(proposal, 'accepted')}
                         >
                           <CheckCircle2 className="w-4 h-4 mr-2" />
                           Approve
@@ -405,7 +405,7 @@ export default function ProposalsPage() {
                       </div>
                     </>
                   )}
-                  {(proposal.status === 'approved' || proposal.status === 'rejected') && (
+                  {(proposal.status === 'accepted' || proposal.status === 'rejected') && (
                     <Button
                       variant="outline"
                       size="sm"

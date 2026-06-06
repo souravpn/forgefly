@@ -72,7 +72,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    const newStatus = action === "approve" ? "approved" : "rejected";
+    const newStatus = action === "approve" ? "accepted" : "rejected";
 
     // Update proposal status
     const { error: updateError } = await supabase
