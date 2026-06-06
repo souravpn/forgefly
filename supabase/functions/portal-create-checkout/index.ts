@@ -50,7 +50,7 @@ Deno.serve(async (req) => {
     // Verify invoice belongs to this client
     const { data: invoice, error: invoiceError } = await supabase
       .from("invoices")
-      .select("id, invoice_number, amount, currency, description, payment_status")
+      .select("id, invoice_number, amount, description, payment_status")
       .eq("id", invoiceId)
       .eq("client_id", tokenData.client_id)
       .single();
@@ -79,7 +79,7 @@ Deno.serve(async (req) => {
       line_items: [
         {
           price_data: {
-            currency: invoice.currency || "usd",
+            currency: "usd",
             product_data: {
               name: `Invoice ${invoice.invoice_number}`,
               description: invoice.description || `Payment for invoice ${invoice.invoice_number}`,
