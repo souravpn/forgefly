@@ -4,10 +4,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Dialog, DialogContent } from '@/components/ui/dialog';
 import {
   Briefcase, FileText, Receipt, CheckCircle2, Clock, AlertCircle,
   Sparkles, Mail, Phone, ThumbsUp, MessageSquare, DollarSign, Calendar,
-  ArrowRight, PartyPopper,
+  ArrowRight, PartyPopper, XCircle,
 } from 'lucide-react';
 // @ts-ignore
 import { supabase } from '@/db/supabase';
@@ -39,6 +40,10 @@ export default function ClientPortalPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [proposalDecision, setProposalDecision] = useState<{
+    title: string;
+    action: 'approve' | 'request_changes';
+  } | null>(null);
 
   useEffect(() => {
     if (token) validateTokenAndLoadData();
@@ -114,14 +119,11 @@ export default function ClientPortalPage() {
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
 
+      const proposal = proposals.find(p => p.id === proposalId);
       setProposals(prev => prev.map(p =>
         p.id === proposalId ? { ...p, status: action === 'approve' ? 'approved' : 'rejected' } : p
       ));
-      if (action === 'approve') {
-        toast.success('Proposal approved! The team has been notified.');
-      } else {
-        toast.info('Changes requested. The team will follow up with you.');
-      }
+      setProposalDecision({ title: proposal?.title ?? 'Proposal', action });
     } catch (err: any) {
       toast.error(err.message || 'Failed to update proposal');
     } finally {
@@ -528,6 +530,54 @@ export default function ClientPortalPage() {
           <p className="mt-1">Powered by <span className="font-semibold text-emerald-600 dark:text-emerald-400">Forgefly</span></p>
         </div>
       </div>
+
+      {/* ── Thank You Dialog ───────────────────────────────────────────────── */}
+      <Dialog open={!!proposalDecision} onOpenChange={() => setProposalDecision(null)}>
+        <DialogContent className="max-w-sm text-center px-8 py-10">
+          {proposalDecision?.action === 'approve' ? (
+            <>
+              <div className="flex justify-center mb-4">
+                <div className="w-20 h-20 rounded-full bg-emerald-500/10 flex items-center justify-center">
+                  <PartyPopper className="w-10 h-10 text-emerald-500" />
+                </div>
+              </div>
+              <h2 className="text-2xl font-bold mb-2">Thank you!</h2>
+              <p className="text-muted-foreground mb-1 font-medium">{proposalDecision.title}</p>
+              <p className="text-sm text-muted-foreground mb-6">
+                Your approval has been received. We're excited to get started — the team has been notified and will be in touch soon.
+              </p>
+              <Button
+                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white"
+                onClick={() => setProposalDecision(null)}
+              >
+                <CheckCircle2 className="w-4 h-4 mr-2" />
+                Back to Portal
+              </Button>
+            </>
+          ) : (
+            <>
+              <div className="flex justify-center mb-4">
+                <div className="w-20 h-20 rounded-full bg-muted flex items-center justify-center">
+                  <MessageSquare className="w-10 h-10 text-muted-foreground" />
+                </div>
+              </div>
+              <h2 className="text-2xl font-bold mb-2">Feedback received</h2>
+              <p className="text-muted-foreground mb-1 font-medium">{proposalDecision?.title}</p>
+              <p className="text-sm text-muted-foreground mb-6">
+                We've noted your request for changes. The team will review your feedback and follow up with a revised proposal shortly.
+              </p>
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() => setProposalDecision(null)}
+              >
+                <XCircle className="w-4 h-4 mr-2" />
+                Back to Portal
+              </Button>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

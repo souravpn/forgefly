@@ -170,12 +170,17 @@ export default function ProposalsPage() {
       return;
     }
 
+    const isResend = selectedProposal.status !== 'draft';
     setSendingEmail(true);
     try {
-      // Generate proposal link (in production, this would be a secure shareable link)
-      const proposalLink = `${window.location.origin}/proposals/${selectedProposal.id}`;
-      
-      const { data, error } = await supabase.functions.invoke('send-email', {
+      // Generate a fresh portal link (30-day, no-login URL for the client)
+      const { data: portalData } = await supabase.functions.invoke('generate-portal-link', {
+        body: { clientId: selectedProposal.client_id, expiresInDays: 30 },
+      });
+
+      const proposalLink = portalData?.portalUrl ?? `${window.location.origin}/portal`;
+
+      const { error } = await supabase.functions.invoke('send-email', {
         body: {
           type: 'proposal',
           to: selectedProposal.client.email,
@@ -196,7 +201,7 @@ export default function ProposalsPage() {
       }
 
       await sendProposal(selectedProposal.id);
-      toast.success('Proposal sent successfully! 📧');
+      toast.success(isResend ? 'Proposal resent successfully!' : 'Proposal sent successfully!');
       setIsSendDialogOpen(false);
       loadProposals();
     } catch (error) {
@@ -368,26 +373,37 @@ export default function ProposalsPage() {
                     </>
                   )}
                   {proposal.status === 'sent' && (
-                    <div className="flex gap-2">
+                    <>
                       <Button
-                        variant="outline"
+                        variant="default"
                         size="sm"
-                        className="flex-1"
-                        onClick={() => handleStatusChange(proposal, 'approved')}
+                        className="w-full glow-accent"
+                        onClick={() => openSendDialog(proposal)}
                       >
-                        <CheckCircle2 className="w-4 h-4 mr-2" />
-                        Approve
+                        <Mail className="w-4 h-4 mr-2" />
+                        Resend Proposal
                       </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="flex-1"
-                        onClick={() => handleStatusChange(proposal, 'rejected')}
-                      >
-                        <XCircle className="w-4 h-4 mr-2" />
-                        Reject
-                      </Button>
-                    </div>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="flex-1"
+                          onClick={() => handleStatusChange(proposal, 'approved')}
+                        >
+                          <CheckCircle2 className="w-4 h-4 mr-2" />
+                          Approve
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="flex-1"
+                          onClick={() => handleStatusChange(proposal, 'rejected')}
+                        >
+                          <XCircle className="w-4 h-4 mr-2" />
+                          Decline
+                        </Button>
+                      </div>
+                    </>
                   )}
                   {(proposal.status === 'approved' || proposal.status === 'rejected') && (
                     <Button
@@ -574,28 +590,49 @@ export default function ProposalsPage() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Send Email Confirmation Dialog */}
+      {/* Send / Resend Email Confirmation Dialog */}
       <AlertDialog open={isSendDialogOpen} onOpenChange={setIsSendDialogOpen}>
         <AlertDialogContent className="max-w-[calc(100%-2rem)] md:max-w-lg">
           <AlertDialogHeader>
-            <AlertDialogTitle>Send Proposal via Email</AlertDialogTitle>
+            <AlertDialogTitle>
+              {selectedProposal?.status !== 'draft' ? 'Resend Proposal' : 'Send Proposal via Email'}
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              This will send the proposal to {selectedProposal?.client?.name} at{' '}
-              <strong className="text-accent">{selectedProposal?.client?.email}</strong>
+              {selectedProposal?.status !== 'draft'
+                ? `A new email with a fresh portal link will be sent to ${selectedProposal?.client?.name}.`
+                : `This will send the proposal to ${selectedProposal?.client?.name} at `}
+              {selectedProposal?.status === 'draft' && (
+                <strong className="text-accent">{selectedProposal?.client?.email}</strong>
+              )}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="py-4">
             <div className="bg-muted/50 rounded-lg p-4 space-y-2">
-              <p className="text-sm font-medium">Proposal: {selectedProposal?.title}</p>
-              <p className="text-xs text-muted-foreground">
-                A beautifully branded email will be sent with a link to view the full proposal.
+              <div className="flex justify-between items-center">
+                <span className="text-sm font-medium">Proposal:</span>
+                <span className="text-sm text-accent truncate ml-2">{selectedProposal?.title}</span>
+              </div>
+              {selectedProposal?.pricing && (
+                <div className="flex justify-between items-center">
+                  <span className="text-sm font-medium">Value:</span>
+                  <span className="text-sm font-bold text-accent">${Number(selectedProposal.pricing).toLocaleString()}</span>
+                </div>
+              )}
+              <div className="flex justify-between items-center">
+                <span className="text-sm font-medium">To:</span>
+                <span className="text-sm text-muted-foreground">{selectedProposal?.client?.email}</span>
+              </div>
+              <p className="text-xs text-muted-foreground pt-2">
+                {selectedProposal?.status !== 'draft'
+                  ? 'Client will receive a new email with a fresh 30-day portal link to review and respond — no account needed.'
+                  : 'Client will receive a branded email with a secure portal link to review and approve — no account needed.'}
               </p>
             </div>
           </div>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={sendingEmail}>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={handleSendEmail} disabled={sendingEmail} className="glow-accent">
-              {sendingEmail ? 'Sending...' : 'Send Email'}
+              {sendingEmail ? 'Sending...' : selectedProposal?.status !== 'draft' ? 'Resend' : 'Send Email'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
