@@ -166,32 +166,25 @@ export default function InvoicesPage() {
       return;
     }
 
+    const isResend = selectedInvoice.status !== 'draft';
     setSendingEmail(true);
     try {
-      // Create Stripe payment link for the invoice
-      const { data: paymentData, error: paymentError } = await supabase.functions.invoke('create-invoice-checkout', {
-        body: {
-          amount: selectedInvoice.amount,
-          description: `Invoice ${selectedInvoice.invoice_number}`,
-          invoiceId: selectedInvoice.id,
-        },
+      // Generate a fresh portal link (30-day, no-login URL for the client)
+      const { data: portalData } = await supabase.functions.invoke('generate-portal-link', {
+        body: { clientId: selectedInvoice.client_id, expiresInDays: 30 },
       });
 
-      let paymentLink = `${window.location.origin}/invoices/${selectedInvoice.id}/pay`;
-      if (paymentData?.data?.url) {
-        paymentLink = paymentData.data.url;
-      }
+      const paymentLink = portalData?.portalUrl ?? `${window.location.origin}/portal`;
 
-      // Format due date
-      const dueDate = selectedInvoice.due_date 
-        ? new Date(selectedInvoice.due_date).toLocaleDateString('en-US', { 
-            year: 'numeric', 
-            month: 'long', 
-            day: 'numeric' 
+      const dueDate = selectedInvoice.due_date
+        ? new Date(selectedInvoice.due_date).toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
           })
         : 'Upon receipt';
 
-      const { data, error } = await supabase.functions.invoke('send-email', {
+      const { error } = await supabase.functions.invoke('send-email', {
         body: {
           type: 'invoice',
           to: selectedInvoice.client.email,
@@ -213,7 +206,7 @@ export default function InvoicesPage() {
       }
 
       await sendInvoice(selectedInvoice.id);
-      toast.success('Invoice sent successfully! 💳');
+      toast.success(isResend ? 'Invoice resent successfully!' : 'Invoice sent successfully!');
       setIsSendDialogOpen(false);
       loadInvoices();
     } catch (error) {
@@ -441,20 +434,31 @@ export default function InvoicesPage() {
                         variant="default"
                         size="sm"
                         className="w-full glow-accent"
-                        onClick={() => handlePayWithStripe(invoice)}
+                        onClick={() => openSendDialog(invoice)}
                       >
-                        <CreditCard className="w-4 h-4 mr-2" />
-                        Pay with Stripe
+                        <Mail className="w-4 h-4 mr-2" />
+                        Resend Invoice
                       </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="w-full"
-                        onClick={() => handleMarkAsPaid(invoice)}
-                      >
-                        <CheckCircle2 className="w-4 h-4 mr-2" />
-                        Mark as Paid
-                      </Button>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="flex-1"
+                          onClick={() => handlePayWithStripe(invoice)}
+                        >
+                          <CreditCard className="w-4 h-4 mr-2" />
+                          Pay with Stripe
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="flex-1"
+                          onClick={() => handleMarkAsPaid(invoice)}
+                        >
+                          <CheckCircle2 className="w-4 h-4 mr-2" />
+                          Mark Paid
+                        </Button>
+                      </div>
                     </>
                   )}
                   {invoice.status === 'paid' && (
@@ -616,14 +620,20 @@ export default function InvoicesPage() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Send Email Confirmation Dialog */}
+      {/* Send / Resend Email Confirmation Dialog */}
       <AlertDialog open={isSendDialogOpen} onOpenChange={setIsSendDialogOpen}>
         <AlertDialogContent className="max-w-[calc(100%-2rem)] md:max-w-lg">
           <AlertDialogHeader>
-            <AlertDialogTitle>Send Invoice via Email</AlertDialogTitle>
+            <AlertDialogTitle>
+              {selectedInvoice?.status !== 'draft' ? 'Resend Invoice' : 'Send Invoice via Email'}
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              This will send the invoice to {selectedInvoice?.client?.name} at{' '}
-              <strong className="text-accent">{selectedInvoice?.client?.email}</strong>
+              {selectedInvoice?.status !== 'draft'
+                ? `A new email with a fresh payment link will be sent to ${selectedInvoice?.client?.name}.`
+                : `This will send the invoice to ${selectedInvoice?.client?.name} at`}{' '}
+              {selectedInvoice?.status === 'draft' && (
+                <strong className="text-accent">{selectedInvoice?.client?.email}</strong>
+              )}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="py-4">
@@ -636,15 +646,21 @@ export default function InvoicesPage() {
                 <span className="text-sm font-medium">Amount:</span>
                 <span className="text-sm font-bold text-accent">${selectedInvoice?.amount.toLocaleString()}</span>
               </div>
+              <div className="flex justify-between items-center">
+                <span className="text-sm font-medium">To:</span>
+                <span className="text-sm text-muted-foreground">{selectedInvoice?.client?.email}</span>
+              </div>
               <p className="text-xs text-muted-foreground pt-2">
-                A beautifully branded email will be sent with invoice details and a secure payment link.
+                {selectedInvoice?.status !== 'draft'
+                  ? 'Client will receive a new email with a 30-day secure portal link to view and pay this invoice — no account needed.'
+                  : 'Client will receive a branded email with a secure portal link to view and pay — no account needed.'}
               </p>
             </div>
           </div>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={sendingEmail}>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={handleSendEmail} disabled={sendingEmail} className="glow-accent">
-              {sendingEmail ? 'Sending...' : 'Send Email'}
+              {sendingEmail ? 'Sending...' : selectedInvoice?.status !== 'draft' ? 'Resend' : 'Send Email'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
