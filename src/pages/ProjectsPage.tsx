@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Plus, Edit, Trash2, Calendar, DollarSign, User, Briefcase, Search } from 'lucide-react';
 import { toast } from 'sonner';
-import { DndContext, DragEndEvent, DragOverlay, DragStartEvent, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
+import { DndContext, DragEndEvent, DragOverlay, DragStartEvent, PointerSensor, useSensor, useSensors, useDroppable } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
@@ -99,6 +99,15 @@ function ProjectCard({ project, onEdit, onDelete }: { project: Project; onEdit: 
           </div>
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+function DroppableColumn({ id, children }: { id: string; children: React.ReactNode }) {
+  const { setNodeRef, isOver } = useDroppable({ id });
+  return (
+    <div ref={setNodeRef} className={`flex-1 space-y-3 min-h-[200px] rounded-md transition-colors ${isOver ? 'bg-accent/10' : ''}`}>
+      {children}
     </div>
   );
 }
@@ -257,14 +266,27 @@ export default function ProjectsPage() {
     if (!over) return;
 
     const projectId = active.id as string;
-    const newStatus = over.id as ProjectStatus;
+    const overId = over.id as string;
+
+    // over.id is either a column status ID or another card's project ID
+    const columnIds = COLUMNS.map(c => c.id as string);
+    let newStatus: ProjectStatus;
+    if (columnIds.includes(overId)) {
+      newStatus = overId as ProjectStatus;
+    } else {
+      const targetProject = projects.find(p => p.id === overId);
+      if (!targetProject) return;
+      newStatus = targetProject.status;
+    }
 
     const project = projects.find(p => p.id === projectId);
     if (!project || project.status === newStatus) return;
 
+    // Optimistic update
+    setProjects(prev => prev.map(p => p.id === projectId ? { ...p, status: newStatus } : p));
+
     try {
       await updateProjectStatus(projectId, newStatus);
-      toast.success('Project status updated!');
     } catch (error) {
       console.error('Error updating project status:', error);
       toast.error('Failed to update project status');
@@ -329,24 +351,26 @@ export default function ProjectsPage() {
                       </span>
                     </CardTitle>
                   </CardHeader>
-                  <CardContent className="flex-1 space-y-3 min-h-[200px]">
-                    <SortableContext items={columnProjects.map(p => p.id)} strategy={verticalListSortingStrategy}>
-                      {columnProjects.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center py-8 text-center">
-                          <Briefcase className="w-8 h-8 text-muted-foreground/50 mb-2" />
-                          <p className="text-sm text-muted-foreground">No projects</p>
-                        </div>
-                      ) : (
-                        columnProjects.map((project) => (
-                          <ProjectCard
-                            key={project.id}
-                            project={project}
-                            onEdit={openEditModal}
-                            onDelete={openDeleteDialog}
-                          />
-                        ))
-                      )}
-                    </SortableContext>
+                  <CardContent className="flex-1 p-3">
+                    <DroppableColumn id={column.id}>
+                      <SortableContext items={columnProjects.map(p => p.id)} strategy={verticalListSortingStrategy}>
+                        {columnProjects.length === 0 ? (
+                          <div className="flex flex-col items-center justify-center py-8 text-center">
+                            <Briefcase className="w-8 h-8 text-muted-foreground/50 mb-2" />
+                            <p className="text-sm text-muted-foreground">No projects</p>
+                          </div>
+                        ) : (
+                          columnProjects.map((project) => (
+                            <ProjectCard
+                              key={project.id}
+                              project={project}
+                              onEdit={openEditModal}
+                              onDelete={openDeleteDialog}
+                            />
+                          ))
+                        )}
+                      </SortableContext>
+                    </DroppableColumn>
                   </CardContent>
                 </Card>
               );
