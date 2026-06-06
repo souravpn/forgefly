@@ -1,50 +1,89 @@
 import { useState, useEffect } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Badge } from '@/components/ui/badge';
-import { Calendar as CalendarIcon, Plus, Clock, MapPin, Link as LinkIcon, Users, Briefcase, CheckCircle2 } from 'lucide-react';
+import {
+  Calendar as CalendarIcon, Plus, Users, ChevronLeft, ChevronRight, Trash2,
+} from 'lucide-react';
 import { toast } from 'sonner';
 import type { CalendarEvent, Client, Project } from '@/types/types';
-import { getCalendarEvents, createCalendarEvent, subscribeToCalendarEvents } from '@/services/calendarService';
+import {
+  getCalendarEvents, createCalendarEvent, updateCalendarEvent,
+  deleteCalendarEvent, subscribeToCalendarEvents,
+} from '@/services/calendarService';
 import { getClients } from '@/services/clientService';
 import { getProjects } from '@/services/projectService';
+// @ts-ignore
 import { supabase } from '@/db/supabase';
+
+const EVENT_COLORS: Record<string, { bg: string; text: string; dot: string }> = {
+  meeting:  { bg: 'bg-blue-500/20',    text: 'text-blue-400',    dot: 'bg-blue-500' },
+  task:     { bg: 'bg-emerald-500/20', text: 'text-emerald-400', dot: 'bg-emerald-500' },
+  deadline: { bg: 'bg-amber-500/20',   text: 'text-amber-400',   dot: 'bg-amber-500' },
+  custom:   { bg: 'bg-purple-500/20',  text: 'text-purple-400',  dot: 'bg-purple-500' },
+};
+
+const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+type FormData = {
+  title: string;
+  description: string;
+  event_type: 'meeting' | 'task' | 'custom';
+  start_time: string;
+  end_time: string;
+  all_day: boolean;
+  client_id: string;
+  project_id: string;
+  location: string;
+  meeting_link: string;
+};
+
+const EMPTY_FORM: FormData = {
+  title: '',
+  description: '',
+  event_type: 'meeting',
+  start_time: '',
+  end_time: '',
+  all_day: false,
+  client_id: '',
+  project_id: '',
+  location: '',
+  meeting_link: '',
+};
+
+function toDateTimeLocal(date: Date): string {
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${p(date.getMonth() + 1)}-${p(date.getDate())}T${p(date.getHours())}:${p(date.getMinutes())}`;
+}
+
+function isProjectDeadline(event: CalendarEvent) {
+  return event.id.startsWith('project-');
+}
 
 export default function CalendarPage() {
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  const [formData, setFormData] = useState({
-    title: '',
-    description: '',
-    event_type: 'meeting' as const,
-    start_time: '',
-    end_time: '',
-    all_day: false,
-    client_id: '',
-    project_id: '',
-    location: '',
-    meeting_link: '',
+  const [currentMonth, setCurrentMonth] = useState(() => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), 1);
   });
+
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingEvent, setEditingEvent] = useState<CalendarEvent | null>(null);
+  const [formData, setFormData] = useState<FormData>(EMPTY_FORM);
   const [submitting, setSubmitting] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     loadData();
-
-    const channel = subscribeToCalendarEvents(() => {
-      loadEvents();
-    });
-
-    return () => {
-      channel.unsubscribe();
-    };
+    const channel = subscribeToCalendarEvents(() => loadEvents());
+    return () => { channel.unsubscribe(); };
   }, []);
 
   async function loadData() {
@@ -58,7 +97,7 @@ export default function CalendarPage() {
   async function loadEvents() {
     try {
       const data = await getCalendarEvents();
-      
+
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
@@ -68,7 +107,7 @@ export default function CalendarPage() {
         .eq('user_id', user.id)
         .not('deadline', 'is', null);
 
-      const projectDeadlines: CalendarEvent[] = (projectsData || []).map(project => ({
+      const projectDeadlines: CalendarEvent[] = (projectsData || []).map((project: any) => ({
         id: `project-${project.id}`,
         user_id: user.id,
         title: `${project.name} Deadline`,
@@ -88,11 +127,11 @@ export default function CalendarPage() {
         project: project,
       }));
 
-      const allEvents = [...data, ...projectDeadlines].sort((a, b) => 
-        new Date(a.start_time).getTime() - new Date(b.start_time).getTime()
+      setEvents(
+        [...data, ...projectDeadlines].sort(
+          (a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime()
+        )
       );
-
-      setEvents(allEvents);
     } catch (error) {
       console.error('Error loading events:', error);
       toast.error('Failed to load calendar events');
@@ -100,45 +139,49 @@ export default function CalendarPage() {
   }
 
   async function loadClients() {
-    try {
-      const data = await getClients();
-      setClients(data);
-    } catch (error) {
-      console.error('Error loading clients:', error);
-    }
+    try { setClients(await getClients()); } catch {}
   }
 
   async function loadProjects() {
-    try {
-      const data = await getProjects();
-      setProjects(data);
-    } catch (error) {
-      console.error('Error loading projects:', error);
-    }
+    try { setProjects(await getProjects()); } catch {}
   }
 
-  function openCreateModal() {
+  function openCreateModal(date?: Date) {
+    setEditingEvent(null);
+    let startTime = '';
+    if (date) {
+      const d = new Date(date);
+      d.setHours(9, 0, 0, 0);
+      startTime = toDateTimeLocal(d);
+    }
+    setFormData({ ...EMPTY_FORM, start_time: startTime });
+    setIsModalOpen(true);
+  }
+
+  function openEditModal(event: CalendarEvent, e: React.MouseEvent) {
+    e.stopPropagation();
+    if (isProjectDeadline(event)) return;
+    setEditingEvent(event);
     setFormData({
-      title: '',
-      description: '',
-      event_type: 'meeting',
-      start_time: '',
-      end_time: '',
-      all_day: false,
-      client_id: '',
-      project_id: '',
-      location: '',
-      meeting_link: '',
+      title: event.title,
+      description: event.description || '',
+      event_type: event.event_type === 'deadline' ? 'custom' : event.event_type as 'meeting' | 'task' | 'custom',
+      start_time: toDateTimeLocal(new Date(event.start_time)),
+      end_time: event.end_time ? toDateTimeLocal(new Date(event.end_time)) : '',
+      all_day: event.all_day,
+      client_id: event.client_id || '',
+      project_id: event.project_id || '',
+      location: event.location || '',
+      meeting_link: event.meeting_link || '',
     });
-    setIsCreateModalOpen(true);
+    setIsModalOpen(true);
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSubmitting(true);
-
     try {
-      await createCalendarEvent({
+      const payload = {
         title: formData.title,
         description: formData.description || null,
         event_type: formData.event_type,
@@ -150,155 +193,270 @@ export default function CalendarPage() {
         location: formData.location || null,
         meeting_link: formData.meeting_link || null,
         color: null,
-      });
-
-      toast.success('Event created successfully!');
-      setIsCreateModalOpen(false);
+      };
+      if (editingEvent) {
+        await updateCalendarEvent(editingEvent.id, payload);
+        toast.success('Event updated!');
+      } else {
+        await createCalendarEvent(payload);
+        toast.success('Event created!');
+      }
+      setIsModalOpen(false);
       loadEvents();
     } catch (error) {
-      console.error('Error creating event:', error);
-      toast.error('Failed to create event');
+      console.error(error);
+      toast.error(editingEvent ? 'Failed to update event' : 'Failed to create event');
     } finally {
       setSubmitting(false);
     }
   }
 
-  function getEventTypeColor(type: string) {
-    const colors = {
-      meeting: 'bg-blue-500/10 text-blue-500 border-blue-500/20',
-      task: 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20',
-      deadline: 'bg-amber-500/10 text-amber-500 border-amber-500/20',
-      custom: 'bg-purple-500/10 text-purple-500 border-purple-500/20',
-    };
-    return colors[type as keyof typeof colors] || colors.custom;
+  async function handleDelete() {
+    if (!editingEvent) return;
+    setDeleting(true);
+    try {
+      await deleteCalendarEvent(editingEvent.id);
+      toast.success('Event deleted');
+      setIsModalOpen(false);
+      loadEvents();
+    } catch {
+      toast.error('Failed to delete event');
+    } finally {
+      setDeleting(false);
+    }
   }
 
-  function getEventIcon(type: string) {
-    const icons = {
-      meeting: Users,
-      task: CheckCircle2,
-      deadline: Clock,
-      custom: CalendarIcon,
-    };
-    const Icon = icons[type as keyof typeof icons] || CalendarIcon;
-    return <Icon className="w-4 h-4" />;
+  // ── Calendar grid helpers ──────────────────────────────────────────────────
+
+  function getCalendarDays(): (Date | null)[] {
+    const year = currentMonth.getFullYear();
+    const month = currentMonth.getMonth();
+    const firstDow = new Date(year, month, 1).getDay();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const days: (Date | null)[] = Array(firstDow).fill(null);
+    for (let d = 1; d <= daysInMonth; d++) days.push(new Date(year, month, d));
+    while (days.length % 7 !== 0) days.push(null);
+    return days;
   }
+
+  function getEventsForDay(day: Date) {
+    return events.filter(ev => {
+      const d = new Date(ev.start_time);
+      return d.getFullYear() === day.getFullYear() &&
+             d.getMonth() === day.getMonth() &&
+             d.getDate() === day.getDate();
+    });
+  }
+
+  function isToday(day: Date) {
+    const now = new Date();
+    return day.getFullYear() === now.getFullYear() &&
+           day.getMonth() === now.getMonth() &&
+           day.getDate() === now.getDate();
+  }
+
+  const calendarDays = getCalendarDays();
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const upcomingEvents = events.filter(ev => new Date(ev.start_time) >= today);
+  const monthLabel = currentMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
 
   return (
-    <div className="space-y-6 md:space-y-8">
+    <div className="space-y-6">
+      {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
           <h1 className="text-3xl md:text-4xl font-bold text-balance mb-2">Calendar</h1>
           <p className="text-sm md:text-base text-muted-foreground">Manage your schedule and deadlines</p>
         </div>
-        <Button size="lg" className="glow-accent w-full md:w-auto" onClick={openCreateModal}>
+        <Button size="lg" className="glow-accent w-full md:w-auto" onClick={() => openCreateModal()}>
           <Plus className="w-5 h-5 mr-2" />
           Add Event
         </Button>
       </div>
 
       {loading ? (
-        <Card>
-          <CardContent className="p-8">
-            <div className="animate-pulse space-y-4">
-              {[1, 2, 3].map((i) => (
-                <div key={i} className="h-20 bg-muted rounded" />
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      ) : events.length === 0 ? (
-        <Card className="border-dashed">
-          <CardContent className="flex flex-col items-center justify-center py-16 text-center">
-            <div className="w-16 h-16 rounded-full bg-accent/10 flex items-center justify-center mb-4">
-              <CalendarIcon className="w-8 h-8 text-accent" />
-            </div>
-            <h3 className="text-xl font-semibold mb-2">No events scheduled</h3>
-            <p className="text-muted-foreground mb-6 max-w-sm text-pretty">
-              Start adding meetings, tasks, and deadlines to keep track of your schedule.
-            </p>
-            <Button onClick={openCreateModal} className="glow-accent">
-              <Plus className="w-4 h-4 mr-2" />
-              Add Your First Event
-            </Button>
-          </CardContent>
-        </Card>
+        <div className="animate-pulse space-y-4">
+          <div className="h-96 bg-muted rounded-lg" />
+        </div>
       ) : (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-balance">Upcoming Events</CardTitle>
-            <CardDescription>Your schedule and project deadlines</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {events.map((event) => (
-                <div key={event.id} className="flex items-start gap-4 p-4 rounded-lg bg-muted/50 hover:bg-muted transition-colors">
-                  <div className="w-12 h-12 rounded-lg bg-accent/10 flex items-center justify-center shrink-0">
-                    <CalendarIcon className="w-6 h-6 text-accent" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-start justify-between gap-2 mb-1">
-                      <h3 className="font-semibold text-balance">{event.title}</h3>
-                      <Badge variant="outline" className={getEventTypeColor(event.event_type)}>
-                        {getEventIcon(event.event_type)}
-                        <span className="ml-1 capitalize">{event.event_type}</span>
-                      </Badge>
-                    </div>
-                    <p className="text-sm text-muted-foreground mb-2">
-                      {new Date(event.start_time).toLocaleDateString('en-US', { 
-                        weekday: 'short', 
-                        year: 'numeric', 
-                        month: 'short', 
-                        day: 'numeric' 
-                      })}
-                      {!event.all_day && ` • ${new Date(event.start_time).toLocaleTimeString('en-US', { 
-                        hour: 'numeric', 
-                        minute: '2-digit' 
-                      })}`}
-                    </p>
-                    {event.description && (
-                      <p className="text-sm text-muted-foreground mb-2 text-pretty">{event.description}</p>
-                    )}
-                    <div className="flex flex-wrap gap-2">
-                      {event.client && (
-                        <Badge variant="secondary" className="text-xs">
-                          <Users className="w-3 h-3 mr-1" />
-                          {event.client.name}
-                        </Badge>
-                      )}
-                      {event.project && (
-                        <Badge variant="secondary" className="text-xs">
-                          <Briefcase className="w-3 h-3 mr-1" />
-                          {event.project.name}
-                        </Badge>
-                      )}
-                      {event.location && (
-                        <Badge variant="secondary" className="text-xs">
-                          <MapPin className="w-3 h-3 mr-1" />
-                          {event.location}
-                        </Badge>
-                      )}
-                      {event.meeting_link && (
-                        <Badge variant="secondary" className="text-xs">
-                          <LinkIcon className="w-3 h-3 mr-1" />
-                          Meeting Link
-                        </Badge>
-                      )}
-                    </div>
-                  </div>
+        <div className="grid grid-cols-1 xl:grid-cols-[3fr_1fr] gap-6">
+
+          {/* ── Calendar Grid ──────────────────────────────────────────────── */}
+          <Card>
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-lg">{monthLabel}</CardTitle>
+                <div className="flex items-center gap-1">
+                  <Button
+                    variant="ghost" size="icon"
+                    onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1))}
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </Button>
+                  <Button
+                    variant="ghost" size="sm" className="text-xs h-8 px-2"
+                    onClick={() => setCurrentMonth(new Date(new Date().getFullYear(), new Date().getMonth(), 1))}
+                  >
+                    Today
+                  </Button>
+                  <Button
+                    variant="ghost" size="icon"
+                    onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1))}
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </Button>
                 </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+              </div>
+            </CardHeader>
+            <CardContent className="px-3 pb-3">
+              {/* Day-of-week headers */}
+              <div className="grid grid-cols-7 mb-1">
+                {DOW.map(d => (
+                  <div key={d} className="text-center text-[11px] font-medium text-muted-foreground py-1.5">
+                    {d}
+                  </div>
+                ))}
+              </div>
+
+              {/* Day cells */}
+              <div className="grid grid-cols-7 gap-[2px]">
+                {calendarDays.map((day, i) => {
+                  if (!day) return <div key={`e-${i}`} className="min-h-[76px]" />;
+
+                  const dayEvents = getEventsForDay(day);
+                  const today_ = isToday(day);
+
+                  return (
+                    <div
+                      key={day.toISOString()}
+                      onClick={() => openCreateModal(new Date(day))}
+                      className={[
+                        'min-h-[76px] rounded-md p-1 cursor-pointer transition-colors group select-none',
+                        today_ ? 'bg-accent/10 ring-1 ring-accent/40' : 'hover:bg-muted/60',
+                      ].join(' ')}
+                    >
+                      {/* Date number */}
+                      <div className={[
+                        'text-[11px] font-semibold w-5 h-5 flex items-center justify-center rounded-full ml-auto mb-0.5',
+                        today_
+                          ? 'bg-accent text-accent-foreground'
+                          : 'text-muted-foreground group-hover:text-foreground',
+                      ].join(' ')}>
+                        {day.getDate()}
+                      </div>
+
+                      {/* Event pills */}
+                      <div className="space-y-[2px]">
+                        {dayEvents.slice(0, 2).map(ev => {
+                          const c = EVENT_COLORS[ev.event_type] ?? EVENT_COLORS.custom;
+                          const isDeadline = isProjectDeadline(ev);
+                          return (
+                            <div
+                              key={ev.id}
+                              onClick={isDeadline ? undefined : (e) => openEditModal(ev, e)}
+                              title={ev.title}
+                              className={[
+                                'text-[10px] leading-snug px-1 py-[1px] rounded truncate',
+                                c.bg, c.text,
+                                isDeadline ? 'cursor-default' : 'cursor-pointer hover:brightness-125',
+                              ].join(' ')}
+                            >
+                              {ev.title}
+                            </div>
+                          );
+                        })}
+                        {dayEvents.length > 2 && (
+                          <div className="text-[10px] text-muted-foreground px-1">
+                            +{dayEvents.length - 2} more
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Legend */}
+              <div className="flex flex-wrap gap-3 mt-4 pt-3 border-t border-border/50">
+                {Object.entries(EVENT_COLORS).map(([type, c]) => (
+                  <div key={type} className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                    <span className={`w-2 h-2 rounded-full ${c.dot}`} />
+                    <span className="capitalize">{type}</span>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* ── Upcoming List ──────────────────────────────────────────────── */}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">Upcoming</CardTitle>
+            </CardHeader>
+            <CardContent className="px-3 pb-3 pt-0">
+              {upcomingEvents.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-10 text-center">
+                  <CalendarIcon className="w-8 h-8 text-muted-foreground/30 mb-2" />
+                  <p className="text-sm text-muted-foreground">No upcoming events</p>
+                  <Button variant="ghost" size="sm" className="mt-3 text-xs" onClick={() => openCreateModal()}>
+                    <Plus className="w-3 h-3 mr-1" />
+                    Add one
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-2 max-h-[520px] overflow-y-auto pr-0.5">
+                  {upcomingEvents.map(event => {
+                    const c = EVENT_COLORS[event.event_type] ?? EVENT_COLORS.custom;
+                    const isDeadline = isProjectDeadline(event);
+                    const eventDate = new Date(event.start_time);
+                    return (
+                      <div
+                        key={event.id}
+                        onClick={isDeadline ? undefined : (e) => openEditModal(event, e)}
+                        className={[
+                          'p-2.5 rounded-lg border border-border/40 bg-muted/20 transition-colors',
+                          isDeadline ? '' : 'cursor-pointer hover:bg-muted/60',
+                        ].join(' ')}
+                      >
+                        <div className="flex items-start gap-2">
+                          <span className={`w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 ${c.dot}`} />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-medium leading-snug truncate">{event.title}</p>
+                            <p className="text-[10px] text-muted-foreground mt-0.5">
+                              {eventDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                              {!event.all_day && (
+                                <> &middot; {eventDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}</>
+                              )}
+                            </p>
+                            {event.client && (
+                              <p className="text-[10px] text-muted-foreground truncate mt-0.5">
+                                <Users className="w-2.5 h-2.5 inline mr-0.5 opacity-60" />
+                                {event.client.name}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
       )}
 
-      {/* Create Event Modal */}
-      <Dialog open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen}>
+      {/* ── Create / Edit Modal ────────────────────────────────────────────── */}
+      <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
         <DialogContent className="max-w-[calc(100%-2rem)] md:max-w-lg max-h-[90dvh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Create New Event</DialogTitle>
-            <DialogDescription>Add a meeting, task, or custom event to your calendar</DialogDescription>
+            <DialogTitle>{editingEvent ? 'Edit Event' : 'Create New Event'}</DialogTitle>
+            <DialogDescription>
+              {editingEvent
+                ? 'Update the details for this event'
+                : 'Add a meeting, task, or custom event to your calendar'}
+            </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSubmit}>
             <div className="space-y-4 py-4">
@@ -317,11 +475,9 @@ export default function CalendarPage() {
                 <Label htmlFor="event_type">Event Type *</Label>
                 <Select
                   value={formData.event_type}
-                  onValueChange={(value: any) => setFormData({ ...formData, event_type: value })}
+                  onValueChange={(v) => setFormData({ ...formData, event_type: v as FormData['event_type'] })}
                 >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="meeting">Meeting</SelectItem>
                     <SelectItem value="task">Task</SelectItem>
@@ -352,7 +508,6 @@ export default function CalendarPage() {
                     required
                   />
                 </div>
-
                 <div className="space-y-2">
                   <Label htmlFor="end_time">End Date & Time</Label>
                   <Input
@@ -369,38 +524,25 @@ export default function CalendarPage() {
                   <Label htmlFor="client_id">Client (Optional)</Label>
                   <Select
                     value={formData.client_id || 'none'}
-                    onValueChange={(value) => setFormData({ ...formData, client_id: value === 'none' ? '' : value })}
+                    onValueChange={(v) => setFormData({ ...formData, client_id: v === 'none' ? '' : v })}
                   >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select client" />
-                    </SelectTrigger>
+                    <SelectTrigger><SelectValue placeholder="Select client" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">None</SelectItem>
-                      {clients.map((client) => (
-                        <SelectItem key={client.id} value={client.id}>
-                          {client.name}
-                        </SelectItem>
-                      ))}
+                      {clients.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
-
                 <div className="space-y-2">
                   <Label htmlFor="project_id">Project (Optional)</Label>
                   <Select
                     value={formData.project_id || 'none'}
-                    onValueChange={(value) => setFormData({ ...formData, project_id: value === 'none' ? '' : value })}
+                    onValueChange={(v) => setFormData({ ...formData, project_id: v === 'none' ? '' : v })}
                   >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select project" />
-                    </SelectTrigger>
+                    <SelectTrigger><SelectValue placeholder="Select project" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">None</SelectItem>
-                      {projects.map((project) => (
-                        <SelectItem key={project.id} value={project.id}>
-                          {project.name}
-                        </SelectItem>
-                      ))}
+                      {projects.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
@@ -427,17 +569,26 @@ export default function CalendarPage() {
                 />
               </div>
             </div>
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setIsCreateModalOpen(false)}
-                disabled={submitting}
-              >
+
+            <DialogFooter className="flex-col sm:flex-row gap-2">
+              {editingEvent && (
+                <Button
+                  type="button" variant="destructive" size="sm"
+                  onClick={handleDelete}
+                  disabled={deleting || submitting}
+                  className="sm:mr-auto"
+                >
+                  <Trash2 className="w-4 h-4 mr-1.5" />
+                  {deleting ? 'Deleting…' : 'Delete'}
+                </Button>
+              )}
+              <Button type="button" variant="outline" onClick={() => setIsModalOpen(false)} disabled={submitting || deleting}>
                 Cancel
               </Button>
-              <Button type="submit" disabled={submitting} className="glow-accent">
-                {submitting ? 'Creating...' : 'Create Event'}
+              <Button type="submit" disabled={submitting || deleting} className="glow-accent">
+                {submitting
+                  ? (editingEvent ? 'Saving…' : 'Creating…')
+                  : (editingEvent ? 'Save Changes' : 'Create Event')}
               </Button>
             </DialogFooter>
           </form>
