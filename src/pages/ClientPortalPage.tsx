@@ -51,7 +51,18 @@ export default function ClientPortalPage() {
 
   useEffect(() => {
     const payment = searchParams.get('payment');
-    if (payment === 'success') toast.success('Payment successful! Thank you.');
+    const sessionId = searchParams.get('session_id');
+    if (payment === 'success') {
+      toast.success('Payment successful! Thank you.');
+      if (sessionId) {
+        supabase.functions.invoke('verify-stripe-payment', {
+          body: { sessionId },
+        }).then(() => {
+          // Reload invoices to reflect paid status
+          if (token) validateTokenAndLoadData();
+        });
+      }
+    }
     if (payment === 'cancelled') toast.info('Payment cancelled.');
   }, [searchParams]);
 

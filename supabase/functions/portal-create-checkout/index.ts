@@ -109,15 +109,15 @@ Deno.serve(async (req) => {
         },
       ],
       mode: "payment",
-      success_url: `${portalUrl}?payment=success`,
+      success_url: `${portalUrl}?payment=success&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${portalUrl}?payment=cancelled`,
     };
 
     if (connectedAccountId) {
-      sessionParams.transfer_data = { destination: connectedAccountId };
-      if (applicationFeeAmount > 0) {
-        sessionParams.application_fee_amount = applicationFeeAmount;
-      }
+      sessionParams.payment_intent_data = {
+        transfer_data: { destination: connectedAccountId },
+        ...(applicationFeeAmount > 0 && { application_fee_amount: applicationFeeAmount }),
+      };
     }
 
     const session = await stripe.checkout.sessions.create(sessionParams);

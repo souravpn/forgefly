@@ -444,19 +444,19 @@ export default function InvoicesPage() {
                           variant="outline"
                           size="sm"
                           className="flex-1"
-                          onClick={() => handlePayWithStripe(invoice)}
+                          onClick={() => openEditModal(invoice)}
                         >
-                          <CreditCard className="w-4 h-4 mr-2" />
-                          Pay with Stripe
+                          <Edit className="w-4 h-4 mr-2" />
+                          Revise
                         </Button>
                         <Button
                           variant="outline"
                           size="sm"
-                          className="flex-1"
-                          onClick={() => handleMarkAsPaid(invoice)}
+                          className="flex-1 border-destructive/50 text-destructive hover:bg-destructive hover:text-destructive-foreground"
+                          onClick={() => openDeleteDialog(invoice)}
                         >
-                          <CheckCircle2 className="w-4 h-4 mr-2" />
-                          Mark Paid
+                          <Trash2 className="w-4 h-4 mr-2" />
+                          Delete
                         </Button>
                       </div>
                     </>
