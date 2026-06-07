@@ -15,21 +15,44 @@ import { supabase } from "@/db/supabase";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import type { BusinessProfile } from "@/types/types";
-import { ExternalLink, Eye } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { ExternalLink, Eye, CheckCircle2, AlertCircle, Clock, CreditCard, Loader2 } from "lucide-react";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { Badge } from "@/components/ui/badge";
+
+type ConnectStatus = {
+  connected: boolean;
+  charges_enabled: boolean;
+  payouts_enabled: boolean;
+  details_submitted: boolean;
+  status: 'not_connected' | 'pending' | 'under_review' | 'active';
+  account_id?: string;
+};
 
 export default function SettingsPage() {
   const { user, profile } = useAuth();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [businessProfile, setBusinessProfile] =
     useState<BusinessProfile | null>(null);
   const [loading, setLoading] = useState(false);
+  const [connectStatus, setConnectStatus] = useState<ConnectStatus | null>(null);
+  const [connectLoading, setConnectLoading] = useState(false);
+  const [connectStatusLoading, setConnectStatusLoading] = useState(false);
 
   useEffect(() => {
     if (user) {
       loadBusinessProfile();
+      loadConnectStatus();
     }
   }, [user]);
+
+  useEffect(() => {
+    const connect = searchParams.get('connect');
+    if ((connect === 'success' || connect === 'refresh') && user) {
+      loadConnectStatus();
+      setSearchParams({ tab: 'payments' }, { replace: true });
+    }
+  }, []);
 
   const loadBusinessProfile = async () => {
     if (!user) return;
@@ -42,6 +65,38 @@ export default function SettingsPage() {
 
     if (data) {
       setBusinessProfile(data);
+    }
+  };
+
+  const loadConnectStatus = async () => {
+    if (!user) return;
+    setConnectStatusLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('get-connect-status');
+      if (!error && data) {
+        setConnectStatus(data);
+      }
+    } finally {
+      setConnectStatusLoading(false);
+    }
+  };
+
+  const handleConnectStripe = async () => {
+    if (!user) return;
+    setConnectLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('create-connect-account', {
+        body: { returnUrl: window.location.href },
+      });
+      if (error || !data?.url) {
+        toast.error('Failed to start Stripe Connect setup');
+        return;
+      }
+      window.location.href = data.url;
+    } catch {
+      toast.error('Something went wrong');
+    } finally {
+      setConnectLoading(false);
     }
   };
 
@@ -82,10 +137,11 @@ export default function SettingsPage() {
         </Button>
       </div>
 
-      <Tabs defaultValue="business">
+      <Tabs defaultValue={searchParams.get('tab') || 'business'}>
         <TabsList>
           <TabsTrigger value="business">Business Profile</TabsTrigger>
           <TabsTrigger value="account">Account</TabsTrigger>
+          <TabsTrigger value="payments">Payments</TabsTrigger>
           <TabsTrigger value="client-portal">Client Portal</TabsTrigger>
         </TabsList>
 
@@ -206,6 +262,118 @@ export default function SettingsPage() {
               </div>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="payments" className="mt-6">
+          <div className="space-y-6">
+            <Card>
+              <CardHeader>
+                <div className="flex items-center gap-2">
+                  <CreditCard className="w-5 h-5 text-accent" />
+                  <CardTitle className="text-balance">Stripe Connect</CardTitle>
+                </div>
+                <CardDescription>
+                  Connect your Stripe account so your clients can pay you directly. Payments go straight to your Stripe account.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {connectStatusLoading ? (
+                  <div className="flex items-center gap-2 text-muted-foreground py-4">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span className="text-sm">Checking connection status...</span>
+                  </div>
+                ) : connectStatus?.status === 'active' ? (
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-3 p-4 rounded-lg bg-success/10 border border-success/20">
+                      <CheckCircle2 className="w-5 h-5 text-success shrink-0" />
+                      <div className="flex-1">
+                        <p className="font-medium text-success">Connected & Active</p>
+                        <p className="text-sm text-muted-foreground mt-0.5">
+                          Payments from your clients go directly to your Stripe account.
+                        </p>
+                      </div>
+                      <Badge variant="outline" className="bg-success/10 text-success border-success/20">Active</Badge>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="p-3 rounded-lg bg-muted text-sm">
+                        <p className="text-muted-foreground text-xs mb-1">Charges</p>
+                        <p className="font-medium text-success">Enabled</p>
+                      </div>
+                      <div className="p-3 rounded-lg bg-muted text-sm">
+                        <p className="text-muted-foreground text-xs mb-1">Payouts</p>
+                        <p className="font-medium text-success">Enabled</p>
+                      </div>
+                    </div>
+                    <Button
+                      variant="outline"
+                      className="w-full"
+                      onClick={() => window.open(`https://dashboard.stripe.com`, '_blank')}
+                    >
+                      <ExternalLink className="w-4 h-4 mr-2" />
+                      Manage on Stripe Dashboard
+                    </Button>
+                  </div>
+                ) : connectStatus?.status === 'under_review' ? (
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-3 p-4 rounded-lg bg-yellow-500/10 border border-yellow-500/20">
+                      <Clock className="w-5 h-5 text-yellow-500 shrink-0" />
+                      <div className="flex-1">
+                        <p className="font-medium text-yellow-500">Under Review</p>
+                        <p className="text-sm text-muted-foreground mt-0.5">
+                          Stripe is reviewing your account. This usually takes 1–2 business days.
+                        </p>
+                      </div>
+                    </div>
+                    <Button variant="outline" className="w-full" onClick={loadConnectStatus}>
+                      Refresh Status
+                    </Button>
+                  </div>
+                ) : connectStatus?.status === 'pending' ? (
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-3 p-4 rounded-lg bg-yellow-500/10 border border-yellow-500/20">
+                      <AlertCircle className="w-5 h-5 text-yellow-500 shrink-0" />
+                      <div className="flex-1">
+                        <p className="font-medium text-yellow-500">Setup Incomplete</p>
+                        <p className="text-sm text-muted-foreground mt-0.5">
+                          You started connecting Stripe but didn't finish. Continue setup to accept payments.
+                        </p>
+                      </div>
+                    </div>
+                    <Button
+                      className="w-full glow-accent"
+                      onClick={handleConnectStripe}
+                      disabled={connectLoading}
+                    >
+                      {connectLoading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <CreditCard className="w-4 h-4 mr-2" />}
+                      Continue Stripe Setup
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="p-6 rounded-lg bg-gradient-to-br from-accent/10 to-primary/10 border border-accent/20">
+                      <h3 className="font-semibold mb-2">Get paid by your clients</h3>
+                      <p className="text-sm text-muted-foreground text-pretty mb-4">
+                        Connect your Stripe account to enable client payments. Stripe handles the payment processing — your money goes directly to your bank account.
+                      </p>
+                      <ul className="space-y-2 text-sm text-muted-foreground mb-4">
+                        <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-success shrink-0" /> Clients pay via credit card, Apple Pay, and more</li>
+                        <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-success shrink-0" /> Payouts directly to your bank account</li>
+                        <li className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-success shrink-0" /> Stripe's standard fees apply (2.9% + 30¢)</li>
+                      </ul>
+                    </div>
+                    <Button
+                      className="w-full glow-accent"
+                      onClick={handleConnectStripe}
+                      disabled={connectLoading}
+                    >
+                      {connectLoading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <CreditCard className="w-4 h-4 mr-2" />}
+                      Connect Stripe Account
+                    </Button>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
 
         <TabsContent value="client-portal" className="mt-6">

@@ -13,6 +13,8 @@ export interface Profile {
   username: string;
   email: string | null;
   role: UserRole;
+  stripe_account_id: string | null;
+  stripe_account_status: 'not_connected' | 'pending' | 'under_review' | 'active';
   created_at: string;
   updated_at: string;
 }

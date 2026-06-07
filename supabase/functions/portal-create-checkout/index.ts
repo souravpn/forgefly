@@ -50,7 +50,7 @@ Deno.serve(async (req) => {
     // Verify invoice belongs to this client
     const { data: invoice, error: invoiceError } = await supabase
       .from("invoices")
-      .select("id, invoice_number, amount, description, payment_status")
+      .select("id, invoice_number, amount, description, payment_status, user_id")
       .eq("id", invoiceId)
       .eq("client_id", tokenData.client_id)
       .single();
@@ -75,7 +75,26 @@ Deno.serve(async (req) => {
     const siteUrl = Deno.env.get("SITE_URL") || "https://www.forgefly.io";
     const portalUrl = `${siteUrl}/portal/${token}`;
 
-    const session = await stripe.checkout.sessions.create({
+    // Look up freelancer's connected Stripe account
+    const { data: freelancerProfile } = await supabase
+      .from("profiles")
+      .select("stripe_account_id, stripe_account_status")
+      .eq("id", invoice.user_id)
+      .single();
+
+    const connectedAccountId =
+      freelancerProfile?.stripe_account_status === "active"
+        ? freelancerProfile.stripe_account_id
+        : null;
+
+    // Platform fee: set PLATFORM_FEE_PERCENT env var (e.g. "2" for 2%). Defaults to 0.
+    const feePercent = Number(Deno.env.get("PLATFORM_FEE_PERCENT") ?? "0");
+    const unitAmount = Math.round(Number(invoice.amount) * 100);
+    const applicationFeeAmount = connectedAccountId
+      ? Math.round(unitAmount * (feePercent / 100))
+      : 0;
+
+    const sessionParams: Stripe.Checkout.SessionCreateParams = {
       line_items: [
         {
           price_data: {
@@ -84,7 +103,7 @@ Deno.serve(async (req) => {
               name: `Invoice ${invoice.invoice_number}`,
               description: invoice.description || `Payment for invoice ${invoice.invoice_number}`,
             },
-            unit_amount: Math.round(Number(invoice.amount) * 100),
+            unit_amount: unitAmount,
           },
           quantity: 1,
         },
@@ -92,7 +111,16 @@ Deno.serve(async (req) => {
       mode: "payment",
       success_url: `${portalUrl}?payment=success`,
       cancel_url: `${portalUrl}?payment=cancelled`,
-    });
+    };
+
+    if (connectedAccountId) {
+      sessionParams.transfer_data = { destination: connectedAccountId };
+      if (applicationFeeAmount > 0) {
+        sessionParams.application_fee_amount = applicationFeeAmount;
+      }
+    }
+
+    const session = await stripe.checkout.sessions.create(sessionParams);
 
     // Update invoice with session ID
     await supabase
