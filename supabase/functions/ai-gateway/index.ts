@@ -11,7 +11,7 @@ const corsHeaders = {
 };
 
 // Model IDs
-const HAIKU = 'claude-haiku-4-5';
+const HAIKU = 'claude-haiku-4-5-20251001';
 const SONNET = 'claude-sonnet-4-6';
 
 // Cost per 1M tokens (USD) — for ai_usage_log

@@ -15,6 +15,8 @@ import ProposalsPage from './pages/ProposalsPage';
 import InvoicesPage from './pages/InvoicesPage';
 import AutomationsPage from './pages/AutomationsPage';
 import SettingsPage from './pages/SettingsPage';
+import PipelinePage from './pages/PipelinePage';
+import BrandKitPage from './pages/BrandKitPage';
 import ClientPortalPage from './pages/ClientPortalPage';
 import PaymentSuccessPage from './pages/PaymentSuccessPage';
 import PaymentCancelPage from './pages/PaymentCancelPage';
@@ -29,6 +31,7 @@ export interface RouteConfig {
 }
 
 export const routes: RouteConfig[] = [
+  // ─── Public routes (no layout) ────────────────────────────────────────────
   {
     name: 'Landing',
     path: '/',
@@ -60,6 +63,14 @@ export const routes: RouteConfig[] = [
     public: true,
   },
   {
+    name: 'Client Portal',
+    path: '/portal/:token',
+    element: <ClientPortalPage />,
+    public: true,
+  },
+
+  // ─── Protected routes (inside AppShell via MainLayout) ────────────────────
+  {
     name: 'Onboarding',
     path: '/onboarding',
     element: <OnboardingPage />,
@@ -70,60 +81,64 @@ export const routes: RouteConfig[] = [
     element: <DashboardPage />,
   },
   {
+    name: 'Services',
+    path: '/dashboard/services',
+    element: <PackagesPage />,
+  },
+  {
+    name: 'Pipeline',
+    path: '/dashboard/pipeline',
+    element: <PipelinePage />,
+  },
+  {
+    name: 'Invoices',
+    path: '/dashboard/invoices',
+    element: <InvoicesPage />,
+  },
+  {
     name: 'Clients',
-    path: '/clients',
+    path: '/dashboard/clients',
     element: <ClientsPage />,
   },
   {
     name: 'Client Detail',
-    path: '/clients/:clientId',
+    path: '/dashboard/clients/:clientId',
     element: <ClientsPage />,
   },
   {
-    name: 'Projects',
-    path: '/projects',
-    element: <ProjectsPage />,
-  },
-  {
-    name: 'Packages',
-    path: '/packages',
-    element: <PackagesPage />,
-  },
-  {
-    name: 'Finances',
-    path: '/finances',
-    element: <FinancesPage />,
-  },
-  {
-    name: 'Calendar',
-    path: '/calendar',
-    element: <CalendarPage />,
-  },
-  {
     name: 'Proposals',
-    path: '/proposals',
+    path: '/dashboard/proposals',
     element: <ProposalsPage />,
   },
   {
-    name: 'Invoices',
-    path: '/invoices',
-    element: <InvoicesPage />,
+    name: 'Brand Kit',
+    path: '/dashboard/brand',
+    element: <BrandKitPage />,
+  },
+  {
+    name: 'Calendar',
+    path: '/dashboard/calendar',
+    element: <CalendarPage />,
   },
   {
     name: 'Automations',
-    path: '/automations',
+    path: '/dashboard/automations',
     element: <AutomationsPage />,
   },
   {
     name: 'Settings',
-    path: '/settings',
+    path: '/dashboard/settings',
     element: <SettingsPage />,
   },
   {
-    name: 'Client Portal',
-    path: '/portal/:token',
-    element: <ClientPortalPage />,
-    public: true,
+    name: 'Projects',
+    path: '/dashboard/projects',
+    element: <ProjectsPage />,
+  },
+  {
+    name: 'Finances',
+    path: '/dashboard/finances',
+    element: <FinancesPage />,
   },
   {
     name: 'Payment Success',

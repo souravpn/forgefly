@@ -131,7 +131,7 @@ export function AICopilot() {
         break;
 
       case 'show_forecast':
-        navigate('/finances');
+        navigate('/dashboard/finances');
         toast.success('Showing financial forecast...');
         break;
 

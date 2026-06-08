@@ -181,6 +181,17 @@ All colors MUST be HSL.
     }
   }
 
+  @keyframes shimmer {
+    0%, 100% {
+      background-position: 100% 50%;
+      text-shadow: 0 0 8px rgba(168,85,247,0.5);
+    }
+    50% {
+      background-position: 0% 50%;
+      text-shadow: 0 0 14px rgba(192,132,252,0.9), 0 0 4px rgba(255,255,255,0.3);
+    }
+  }
+
   @keyframes pulse-glow {
     0%, 100% {
       box-shadow: 0 0 0 0 hsl(var(--accent) / 0.4);

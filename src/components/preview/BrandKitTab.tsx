@@ -13,6 +13,7 @@ interface BrandKitTabProps {
   tagline?: string;
   email?: string;
   location?: string;
+  initials?: string;
 }
 
 function ColorSwatch({ label, color }: { label: string; color?: string }) {
@@ -32,7 +33,7 @@ function ColorSwatch({ label, color }: { label: string; color?: string }) {
   );
 }
 
-export default function BrandKitTab({ brand, businessName, tagline, email, location }: BrandKitTabProps) {
+export default function BrandKitTab({ brand, businessName, tagline, email, location, initials }: BrandKitTabProps) {
   const primary = brand.primaryColor ?? '#1D9E75';
 
   return (
@@ -94,7 +95,7 @@ export default function BrandKitTab({ brand, businessName, tagline, email, locat
                 <span
                   key={kw}
                   className="text-[12px] px-3 py-1 rounded-full font-medium"
-                  style={{ background: `${primary}20`, color: primary, border: `0.5px solid ${primary}40` }}
+                  style={{ background: 'var(--preview-accent)', color: 'var(--preview-primary)', border: `0.5px solid ${primary}40` }}
                 >
                   {kw}
                 </span>
@@ -120,10 +121,21 @@ export default function BrandKitTab({ brand, businessName, tagline, email, locat
           >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2.5">
-                <div
-                  className="w-2 h-2 rounded-full"
-                  style={{ background: primary }}
-                />
+                <div style={{
+                  width: 36,
+                  height: 36,
+                  borderRadius: 10,
+                  background: brand.accentColor || 'var(--preview-accent)',
+                  color: brand.primaryColor || 'var(--preview-primary)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontWeight: 500,
+                  fontSize: 13,
+                  flexShrink: 0,
+                }}>
+                  {initials}
+                </div>
                 <div>
                   <p className="text-[13px] font-[500] text-white">{businessName}</p>
                   {tagline && <p className="text-[11px] text-gray-400">{tagline}</p>}

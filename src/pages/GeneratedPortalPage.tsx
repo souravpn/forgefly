@@ -2,6 +2,7 @@ import { Check as CheckIcon, ChevronDown, ChevronUp, Copy, Sparkles } from 'luci
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import BrandKitTab from '@/components/preview/BrandKitTab';
+import ClientPortalTab from '@/components/preview/ClientPortalTab';
 import ContactsTab from '@/components/preview/ContactsTab';
 import InvoicesTab from '@/components/preview/InvoicesTab';
 import MetricCards from '@/components/preview/MetricCards';
@@ -75,7 +76,7 @@ interface ExtractedProposal {
   nextSteps?: string[];
 }
 
-interface ExtractedData {
+export interface ExtractedData {
   identity?: ExtractedIdentity;
   services?: ExtractedService[];
   contacts?: ExtractedContact[];
@@ -88,7 +89,7 @@ interface ExtractedData {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-const TABS = ['Overview', 'Services', 'Pipeline', 'Invoices', 'Contacts', 'Proposals', 'Brand Kit'] as const;
+const TABS = ['Overview', 'Services', 'Pipeline', 'Invoices', 'Contacts', 'Proposals', 'Brand Kit', 'Client Portal'] as const;
 type TabName = typeof TABS[number];
 
 function statusClass(status: string) {
@@ -218,6 +219,15 @@ export default function GeneratedPortalPage() {
     }
   }, [navigate]);
 
+  useEffect(() => {
+    if (!data?.brand) return;
+    const root = document.getElementById('preview-root');
+    if (!root) return;
+    root.style.setProperty('--preview-primary', data.brand.primaryColor || '#1D9E75');
+    root.style.setProperty('--preview-secondary', data.brand.secondaryColor || '#085041');
+    root.style.setProperty('--preview-accent', data.brand.accentColor || '#E1F5EE');
+  }, [data?.brand]);
+
   const handleCopyPrompt = () => {
     navigator.clipboard.writeText(prompt).then(() => {
       setCopied(true);
@@ -245,14 +255,14 @@ export default function GeneratedPortalPage() {
   const businessName = identity.businessName ?? identity.name ?? 'Your Business OS';
 
   return (
-    <div className="min-h-screen bg-[#0A1428] text-white">
+    <div id="preview-root" className="min-h-screen bg-[#0A1428] text-white">
       {/* ── Sticky topbar ──────────────────────────────────────────────────── */}
       <div className="sticky top-0 z-50 bg-[#0A1428]/95 backdrop-blur-lg border-b border-white/[0.08]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
             <div
-              className="w-8 h-8 rounded-lg flex items-center justify-center text-white text-xs font-bold shrink-0"
-              style={{ background: accent }}
+              className="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold shrink-0"
+              style={{ background: 'var(--preview-accent)', color: 'var(--preview-primary)' }}
             >
               {initials}
             </div>
@@ -265,7 +275,10 @@ export default function GeneratedPortalPage() {
           </div>
           <div className="flex items-center gap-2 shrink-0">
             {elapsedSeconds !== null && (
-              <div className="hidden sm:flex items-center gap-1.5 text-xs text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-full px-3 py-1">
+              <div
+                className="hidden sm:flex items-center gap-1.5 text-xs rounded-full px-3 py-1"
+                style={{ background: 'var(--preview-accent)', color: 'var(--preview-primary)', border: '0.5px solid var(--preview-primary)' }}
+              >
                 <Sparkles className="w-3 h-3" />
                 Generated in {elapsedSeconds}s
               </div>
@@ -335,14 +348,14 @@ export default function GeneratedPortalPage() {
                   onClick={() => setActiveTab(tab)}
                   className="relative px-4 py-3 text-[12px] font-medium whitespace-nowrap transition-colors shrink-0"
                   style={{
-                    color: isActive ? accent : 'rgba(156,163,175,1)',
+                    color: isActive ? 'var(--preview-primary)' : 'rgba(156,163,175,1)',
                   }}
                 >
                   {tab}
                   {isActive && (
                     <span
                       className="absolute bottom-0 left-0 right-0 h-0.5 rounded-full"
-                      style={{ background: accent }}
+                      style={{ background: 'var(--preview-primary)' }}
                     />
                   )}
                 </button>
@@ -383,7 +396,11 @@ export default function GeneratedPortalPage() {
             tagline={identity.tagline}
             email={identity.email}
             location={identity.location}
+            initials={initials}
           />
+        )}
+        {activeTab === 'Client Portal' && (
+          <ClientPortalTab data={data} />
         )}
       </div>
     </div>

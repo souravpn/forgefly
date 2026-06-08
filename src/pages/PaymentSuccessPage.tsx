@@ -17,7 +17,7 @@ export default function PaymentSuccessPage() {
 
   useEffect(() => {
     if (!sessionId) {
-      navigate('/invoices');
+      navigate('/dashboard/invoices');
       return;
     }
 
@@ -94,7 +94,7 @@ export default function PaymentSuccessPage() {
               <Button
                 size="lg"
                 className="w-full"
-                onClick={() => navigate('/invoices')}
+                onClick={() => navigate('/dashboard/invoices')}
               >
                 Back to Invoices
               </Button>
@@ -155,7 +155,7 @@ export default function PaymentSuccessPage() {
               variant="outline"
               size="lg"
               className="w-full"
-              onClick={() => navigate('/invoices')}
+              onClick={() => navigate('/dashboard/invoices')}
             >
               View Invoices
             </Button>
