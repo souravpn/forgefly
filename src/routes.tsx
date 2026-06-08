@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import LandingPage from './pages/LandingPage';
-import LandingPageV2 from './pages/LandingPageV2';
 import AuthCallbackPage from './pages/AuthCallbackPage';
+import GeneratedPortalPage from './pages/GeneratedPortalPage';
 import LoginPage from './pages/LoginPage';
 import SignupPage from './pages/SignupPage';
 import OnboardingPage from './pages/OnboardingPage';
@@ -36,12 +36,6 @@ export const routes: RouteConfig[] = [
     public: true,
   },
   {
-    name: 'Landing V2',
-    path: '/v2',
-    element: <LandingPageV2 />,
-    public: true,
-  },
-  {
     name: 'Login',
     path: '/login',
     element: <LoginPage />,
@@ -57,6 +51,12 @@ export const routes: RouteConfig[] = [
     name: 'Auth Callback',
     path: '/auth/callback',
     element: <AuthCallbackPage />,
+    public: true,
+  },
+  {
+    name: 'Generated Portal Preview',
+    path: '/preview',
+    element: <GeneratedPortalPage />,
     public: true,
   },
   {

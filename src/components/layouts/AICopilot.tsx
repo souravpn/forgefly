@@ -148,6 +148,10 @@ export function AICopilot() {
         }
         break;
 
+      case 'open_command_bar':
+        toast.info('Use the command bar to update your business OS', { duration: 4000 });
+        break;
+
       default:
         console.log('Unknown action:', action);
     }
@@ -168,10 +172,11 @@ export function AICopilot() {
     setIsTyping(true);
 
     try {
-      const { data, error } = await supabase.functions.invoke<AIResponse>('ai-copilot', {
+      const { data, error } = await supabase.functions.invoke<AIResponse>('ai-gateway', {
         body: {
+          mode: 'chat',
           message: input,
-          currentPage: location.pathname,
+          current_page: location.pathname,
         },
       });
 
@@ -204,7 +209,7 @@ export function AICopilot() {
       const errorMessage: ChatMessage = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: "I'm having trouble processing that request. Please make sure the OpenAI API key is configured and try again.",
+        content: "I'm having trouble processing that request. Please try again.",
         timestamp: new Date().toISOString(),
       };
       setMessages((prev) => [...prev, errorMessage]);
@@ -351,7 +356,7 @@ export function AICopilot() {
               </Button>
             </div>
             <p className="text-xs text-muted-foreground mt-2">
-              💡 Powered by GPT-4o with full business context
+              💡 Powered by Claude with full business context
             </p>
           </div>
         </Card>
