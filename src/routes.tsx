@@ -20,6 +20,8 @@ import BrandKitPage from './pages/BrandKitPage';
 import ClientPortalPage from './pages/ClientPortalPage';
 import PaymentSuccessPage from './pages/PaymentSuccessPage';
 import PaymentCancelPage from './pages/PaymentCancelPage';
+import PublicPortfolioPage from './pages/PublicPortfolioPage';
+import RequestsPage from './pages/RequestsPage';
 
 export interface RouteConfig {
   name: string;
@@ -66,6 +68,12 @@ export const routes: RouteConfig[] = [
     name: 'Client Portal',
     path: '/portal/:token',
     element: <ClientPortalPage />,
+    public: true,
+  },
+  {
+    name: 'Public Portfolio',
+    path: '/p/:slug',
+    element: <PublicPortfolioPage />,
     public: true,
   },
 
@@ -139,6 +147,11 @@ export const routes: RouteConfig[] = [
     name: 'Finances',
     path: '/dashboard/finances',
     element: <FinancesPage />,
+  },
+  {
+    name: 'Requests',
+    path: '/dashboard/requests',
+    element: <RequestsPage />,
   },
   {
     name: 'Payment Success',

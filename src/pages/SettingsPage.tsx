@@ -143,6 +143,7 @@ export default function SettingsPage() {
           <TabsTrigger value="account">Account</TabsTrigger>
           <TabsTrigger value="payments">Payments</TabsTrigger>
           <TabsTrigger value="client-portal">Client Portal</TabsTrigger>
+          <TabsTrigger value="ai-history">AI History</TabsTrigger>
         </TabsList>
 
         <TabsContent value="business" className="mt-6">
@@ -458,7 +459,169 @@ export default function SettingsPage() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        <TabsContent value="ai-history" className="mt-6">
+          <AIHistoryTab />
+        </TabsContent>
       </Tabs>
+    </div>
+  );
+}
+
+// ── AI History Tab ────────────────────────────────────────────────────────────
+
+interface UsageRow {
+  id: string;
+  model: string;
+  prompt_type: string;
+  input_tokens: number;
+  output_tokens: number;
+  cost_usd: number;
+  created_at: string;
+}
+
+interface PromptSessionRow {
+  id: string;
+  prompt: string;
+  prompt_type: string;
+  created_at: string;
+  extracted_data_snapshot: { diff_summary?: { sections_updated?: string[] } } | null;
+}
+
+function AIHistoryTab() {
+  const [usageLogs, setUsageLogs] = useState<UsageRow[]>([]);
+  const [promptSessions, setPromptSessions] = useState<PromptSessionRow[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function load() {
+      const now = new Date();
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+      const [{ data: logs }, { data: sessions }] = await Promise.all([
+        supabase
+          .from('ai_usage_log')
+          .select('id, model, prompt_type, input_tokens, output_tokens, cost_usd, created_at')
+          .order('created_at', { ascending: false })
+          .limit(30),
+        supabase
+          .from('prompt_sessions')
+          .select('id, prompt, prompt_type, created_at, extracted_data_snapshot')
+          .order('created_at', { ascending: false })
+          .limit(20),
+      ]);
+      setUsageLogs((logs as UsageRow[]) ?? []);
+      setPromptSessions((sessions as PromptSessionRow[]) ?? []);
+      setLoading(false);
+    }
+    load();
+  }, []);
+
+  const now = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const thisMonthLogs = usageLogs.filter(r => new Date(r.created_at) >= monthStart);
+  const monthTokens = thisMonthLogs.reduce((s, r) => s + r.input_tokens + r.output_tokens, 0);
+  const monthCost = thisMonthLogs.reduce((s, r) => s + Number(r.cost_usd), 0);
+
+  const modelLabel = (m: string) => m.includes('haiku') ? 'Haiku' : m.includes('sonnet') ? 'Sonnet' : m.includes('opus') ? 'Opus' : m;
+
+  if (loading) {
+    return <div className="animate-pulse h-64 bg-muted rounded-lg" />;
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* This month summary */}
+      <div className="grid grid-cols-2 gap-4">
+        <Card>
+          <CardContent className="p-4">
+            <p className="text-xs text-muted-foreground mb-1">Tokens this month</p>
+            <p className="text-2xl font-bold">{monthTokens.toLocaleString()}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <p className="text-xs text-muted-foreground mb-1">Cost this month</p>
+            <p className="text-2xl font-bold">${monthCost.toFixed(4)}</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Prompt history */}
+      {promptSessions.length > 0 && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Business OS prompts</CardTitle>
+            <CardDescription>Prompts you used to generate or update your business</CardDescription>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="divide-y divide-border/50">
+              {promptSessions.map(session => {
+                const sections = session.extracted_data_snapshot?.diff_summary?.sections_updated ?? [];
+                return (
+                  <div key={session.id} className="px-4 py-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm truncate">{session.prompt}</p>
+                        {sections.length > 0 && (
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            Updated: {sections.join(', ')}
+                          </p>
+                        )}
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <Badge variant="outline" className="text-[10px] capitalize">{session.prompt_type}</Badge>
+                        <p className="text-[10px] text-muted-foreground mt-1">
+                          {new Date(session.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Usage log table */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">Recent AI calls</CardTitle>
+          <CardDescription>Last 30 calls across all AI features</CardDescription>
+        </CardHeader>
+        <CardContent className="p-0">
+          {usageLogs.length === 0 ? (
+            <p className="text-sm text-muted-foreground px-4 py-6 text-center">No AI usage recorded yet.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-border/50 text-muted-foreground">
+                    <th className="text-left px-4 py-2 font-medium">Date</th>
+                    <th className="text-left px-4 py-2 font-medium">Type</th>
+                    <th className="text-left px-4 py-2 font-medium">Model</th>
+                    <th className="text-right px-4 py-2 font-medium">Tokens</th>
+                    <th className="text-right px-4 py-2 font-medium">Cost</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/30">
+                  {usageLogs.map(row => (
+                    <tr key={row.id} className="hover:bg-muted/30">
+                      <td className="px-4 py-2 text-muted-foreground">
+                        {new Date(row.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                      </td>
+                      <td className="px-4 py-2 capitalize">{row.prompt_type.replace('_', ' ')}</td>
+                      <td className="px-4 py-2">{modelLabel(row.model)}</td>
+                      <td className="px-4 py-2 text-right">{(row.input_tokens + row.output_tokens).toLocaleString()}</td>
+                      <td className="px-4 py-2 text-right">${Number(row.cost_usd).toFixed(4)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

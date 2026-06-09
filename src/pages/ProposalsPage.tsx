@@ -8,15 +8,26 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
-import { Plus, FileText, Send, Edit, Trash2, Eye, CheckCircle2, Clock, XCircle, FileCheck, Mail, Search } from 'lucide-react';
+import { Plus, FileText, Send, Edit, Trash2, Eye, CheckCircle2, Clock, XCircle, FileCheck, Mail, Search, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/db/supabase';
 import type { Proposal, ProposalStatus, Client, Project } from '@/types/types';
 import { getProposals, createProposal, updateProposal, sendProposal, updateProposalStatus, deleteProposal, subscribeToProposals } from '@/services/proposalService';
 import { getClients } from '@/services/clientService';
 import { getProjects } from '@/services/projectService';
+import { useBusiness } from '@/contexts/CurrentBusinessContext';
+
+interface ProposalTemplate {
+  intro?: string;
+  approach?: string;
+  whyUs?: string;
+  nextSteps?: string[];
+}
 
 export default function ProposalsPage() {
+  const { business, extractedData, refetch: refetchBusiness } = useBusiness();
+  const template = (extractedData?.proposal as ProposalTemplate | null | undefined) ?? null;
+
   const [proposals, setProposals] = useState<Proposal[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -40,6 +51,10 @@ export default function ProposalsPage() {
   });
   const [submitting, setSubmitting] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+
+  const [templateEditing, setTemplateEditing] = useState(false);
+  const [templateDraft, setTemplateDraft] = useState({ intro: '', approach: '', whyUs: '', nextSteps: '' });
+  const [savingTemplate, setSavingTemplate] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -85,14 +100,46 @@ export default function ProposalsPage() {
       title: '',
       client_id: '',
       project_id: '',
-      introduction: '',
-      services: '',
+      introduction: template?.intro ?? '',
+      services: template?.approach ?? '',
       deliverables: '',
       pricing: '',
       timeline: '',
       terms: '',
     });
     setIsCreateModalOpen(true);
+  }
+
+  function openTemplateEdit() {
+    setTemplateDraft({
+      intro: template?.intro ?? '',
+      approach: template?.approach ?? '',
+      whyUs: template?.whyUs ?? '',
+      nextSteps: (template?.nextSteps ?? []).join('\n'),
+    });
+    setTemplateEditing(true);
+  }
+
+  function cancelTemplateEdit() {
+    setTemplateEditing(false);
+  }
+
+  async function saveTemplate() {
+    if (!business) return;
+    setSavingTemplate(true);
+    const updated: ProposalTemplate = {
+      intro: templateDraft.intro,
+      approach: templateDraft.approach,
+      whyUs: templateDraft.whyUs,
+      nextSteps: templateDraft.nextSteps.split('\n').map(s => s.trim()).filter(Boolean),
+    };
+    await supabase.from('businesses').update({
+      extracted_data: { ...extractedData, proposal: updated },
+    }).eq('id', business.id);
+    await refetchBusiness();
+    setSavingTemplate(false);
+    setTemplateEditing(false);
+    toast.success('Template saved');
   }
 
   function openEditModal(proposal: Proposal) {
@@ -270,6 +317,107 @@ export default function ProposalsPage() {
         </Button>
       </div>
 
+      {template && (
+        <Card className="border-accent/30 bg-accent/5">
+          <CardContent className="p-4 md:p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-accent" />
+                <span className="font-semibold text-sm">Proposal Template</span>
+                <Badge variant="outline" className="text-xs border-accent/30 text-accent">AI-generated</Badge>
+              </div>
+              {!templateEditing ? (
+                <Button variant="ghost" size="sm" onClick={openTemplateEdit}>
+                  <Edit className="w-3 h-3 mr-1" />
+                  Edit
+                </Button>
+              ) : (
+                <div className="flex gap-2">
+                  <Button variant="ghost" size="sm" onClick={cancelTemplateEdit} disabled={savingTemplate}>
+                    Cancel
+                  </Button>
+                  <Button size="sm" onClick={saveTemplate} disabled={savingTemplate} className="glow-accent">
+                    {savingTemplate ? 'Saving…' : 'Save'}
+                  </Button>
+                </div>
+              )}
+            </div>
+
+            {!templateEditing ? (
+              <div className="space-y-3 text-sm">
+                {template.intro && (
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">Introduction</p>
+                    <p className="text-foreground/80 leading-relaxed">{template.intro}</p>
+                  </div>
+                )}
+                {template.approach && (
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">Our Approach</p>
+                    <p className="text-foreground/80 leading-relaxed">{template.approach}</p>
+                  </div>
+                )}
+                {template.whyUs && (
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">Why Us</p>
+                    <p className="text-foreground/80 leading-relaxed">{template.whyUs}</p>
+                  </div>
+                )}
+                {template.nextSteps && template.nextSteps.length > 0 && (
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">Next Steps</p>
+                    <ol className="list-decimal list-inside space-y-1">
+                      {template.nextSteps.map((step) => (
+                        <li key={step} className="text-foreground/80">{step}</li>
+                      ))}
+                    </ol>
+                  </div>
+                )}
+                <p className="text-xs text-muted-foreground pt-2 border-t border-border/50">
+                  Introduction and Services fields are pre-filled from this template when you create a new proposal.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div className="space-y-1">
+                  <Label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Introduction</Label>
+                  <Textarea
+                    value={templateDraft.intro}
+                    onChange={(e) => setTemplateDraft({ ...templateDraft, intro: e.target.value })}
+                    rows={3}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Our Approach</Label>
+                  <Textarea
+                    value={templateDraft.approach}
+                    onChange={(e) => setTemplateDraft({ ...templateDraft, approach: e.target.value })}
+                    rows={3}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Why Us</Label>
+                  <Textarea
+                    value={templateDraft.whyUs}
+                    onChange={(e) => setTemplateDraft({ ...templateDraft, whyUs: e.target.value })}
+                    rows={2}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Next Steps (one per line)</Label>
+                  <Textarea
+                    value={templateDraft.nextSteps}
+                    onChange={(e) => setTemplateDraft({ ...templateDraft, nextSteps: e.target.value })}
+                    rows={3}
+                    placeholder="Schedule onboarding call&#10;Share project brief&#10;Send contract for signature"
+                  />
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
         <Input
@@ -434,7 +582,11 @@ export default function ProposalsPage() {
           <DialogHeader>
             <DialogTitle>{isEditModalOpen ? 'Edit Proposal' : 'Create New Proposal'}</DialogTitle>
             <DialogDescription>
-              {isEditModalOpen ? 'Update proposal information' : 'Create a professional proposal for your client'}
+              {isEditModalOpen
+                ? 'Update proposal information'
+                : template
+                  ? 'Fields pre-filled from your Proposal Template — edit freely before saving.'
+                  : 'Create a professional proposal for your client'}
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSubmit}>

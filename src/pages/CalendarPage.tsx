@@ -9,16 +9,17 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Badge } from '@/components/ui/badge';
 import {
   Calendar as CalendarIcon, Plus, Users, ChevronLeft, ChevronRight, Trash2,
-  Briefcase, Clock,
+  Briefcase, Clock, FileText,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import type { CalendarEvent, Client, Project } from '@/types/types';
+import type { CalendarEvent, Client, Project, Invoice } from '@/types/types';
 import {
   getCalendarEvents, createCalendarEvent, updateCalendarEvent,
   deleteCalendarEvent, subscribeToCalendarEvents,
 } from '@/services/calendarService';
 import { getClients } from '@/services/clientService';
 import { getProjects } from '@/services/projectService';
+import { getInvoices } from '@/services/invoiceService';
 // @ts-ignore
 import { supabase } from '@/db/supabase';
 
@@ -70,6 +71,14 @@ function toDateTimeLocal(date: Date): string {
 
 function isSyntheticDeadline(event: CalendarEvent) {
   return event.id.startsWith('project-');
+}
+
+function isSyntheticInvoice(event: CalendarEvent) {
+  return event.id.startsWith('invoice-');
+}
+
+function isSynthetic(event: CalendarEvent) {
+  return isSyntheticDeadline(event) || isSyntheticInvoice(event);
 }
 
 function getWeekStart(from: Date): Date {
@@ -138,7 +147,7 @@ export default function CalendarPage() {
 
   async function loadData() {
     try {
-      await Promise.all([loadEvents(), loadClients(), loadProjects()]);
+      await Promise.all([loadClients(), loadProjects(), loadEvents()]);
     } finally {
       setLoading(false);
     }
@@ -146,7 +155,7 @@ export default function CalendarPage() {
 
   async function loadEvents() {
     try {
-      const data = await getCalendarEvents();
+      const [data, invoiceData] = await Promise.all([getCalendarEvents(), getInvoices()]);
 
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
@@ -177,8 +186,33 @@ export default function CalendarPage() {
         project: project,
       }));
 
+      const now = new Date().toISOString();
+      const invoiceDueDates: CalendarEvent[] = invoiceData
+        .filter(inv => inv.due_date && inv.payment_status !== 'paid')
+        .map(inv => ({
+          id: `invoice-${inv.id}`,
+          user_id: user.id,
+          title: `Invoice Due: ${inv.client?.name ?? 'Unknown'} — $${inv.amount}`,
+          description: `Invoice ${inv.invoice_number} due`,
+          event_type: 'deadline' as const,
+          start_time: inv.due_date!,
+          end_time: null,
+          all_day: true,
+          client_id: inv.client_id,
+          project_id: inv.project_id,
+          location: null,
+          meeting_link: null,
+          color: inv.due_date! < now ? '#ef4444' : '#f59e0b',
+          created_at: inv.created_at,
+          updated_at: inv.updated_at,
+          client: inv.client,
+          project: inv.project,
+          // Stash invoice ref for the info modal
+          _invoice: inv,
+        } as CalendarEvent & { _invoice: Invoice }));
+
       setEvents(
-        [...data, ...projectDeadlines].sort(
+        [...data, ...projectDeadlines, ...invoiceDueDates].sort(
           (a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime()
         )
       );
@@ -214,8 +248,8 @@ export default function CalendarPage() {
     e.stopPropagation();
     setEditingEvent(event);
 
-    // For synthetic project deadlines, we show a read-only view — no form prefill needed
-    if (!isSyntheticDeadline(event)) {
+    // For synthetic project/invoice events, we show a read-only view — no form prefill needed
+    if (!isSynthetic(event)) {
       setFormData({
         title: event.title,
         description: event.description || '',
@@ -473,7 +507,7 @@ export default function CalendarPage() {
 
   // ── Render ────────────────────────────────────────────────────────────────────
 
-  const isReadOnlyModal = editingEvent ? isSyntheticDeadline(editingEvent) : false;
+  const isReadOnlyModal = editingEvent ? isSynthetic(editingEvent) : false;
 
   return (
     <div className="space-y-6">
@@ -615,7 +649,66 @@ export default function CalendarPage() {
       <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
         <DialogContent className="max-w-[calc(100%-2rem)] md:max-w-lg max-h-[90dvh] overflow-y-auto">
 
-          {isReadOnlyModal && editingEvent ? (
+          {isReadOnlyModal && editingEvent && isSyntheticInvoice(editingEvent) ? (
+            /* ── Read-only: invoice due date info ── */
+            (() => {
+              const inv = (editingEvent as CalendarEvent & { _invoice?: Invoice })._invoice;
+              const isOverdue = editingEvent.start_time < new Date().toISOString();
+              return (
+                <>
+                  <DialogHeader>
+                    <DialogTitle className="flex items-center gap-2">
+                      <span className={`w-2 h-2 rounded-full shrink-0 ${isOverdue ? 'bg-red-500' : 'bg-amber-500'}`} />
+                      {editingEvent.title}
+                    </DialogTitle>
+                    <DialogDescription>Invoice due date (auto-generated from Invoices)</DialogDescription>
+                  </DialogHeader>
+                  <div className="py-4 space-y-3">
+                    <div className="flex items-center gap-2 text-sm">
+                      <Clock className="w-4 h-4 text-muted-foreground" />
+                      <span>
+                        {new Date(editingEvent.start_time).toLocaleDateString('en-US', {
+                          weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+                        })}
+                      </span>
+                    </div>
+                    {editingEvent.client && (
+                      <div className="flex items-center gap-2 text-sm">
+                        <Users className="w-4 h-4 text-muted-foreground" />
+                        <span>{editingEvent.client.name}</span>
+                      </div>
+                    )}
+                    {inv && (
+                      <div className="flex items-center gap-2 text-sm">
+                        <FileText className="w-4 h-4 text-muted-foreground" />
+                        <span>{inv.invoice_number} — ${inv.amount}</span>
+                      </div>
+                    )}
+                    <Badge
+                      variant="outline"
+                      className={isOverdue
+                        ? 'bg-red-500/10 text-red-400 border-red-500/20 text-xs'
+                        : 'bg-amber-500/10 text-amber-400 border-amber-500/20 text-xs'}
+                    >
+                      {isOverdue ? 'Overdue' : 'Upcoming'}
+                    </Badge>
+                    <p className="text-xs text-muted-foreground pt-1">
+                      To update this invoice, go to the Invoices tab.
+                    </p>
+                  </div>
+                  <DialogFooter className="gap-2">
+                    <Button variant="outline" onClick={() => setIsModalOpen(false)}>Close</Button>
+                    <Button
+                      className="glow-accent"
+                      onClick={() => { setIsModalOpen(false); window.location.href = '/dashboard/invoices'; }}
+                    >
+                      Go to Invoices
+                    </Button>
+                  </DialogFooter>
+                </>
+              );
+            })()
+          ) : isReadOnlyModal && editingEvent ? (
             /* ── Read-only: project deadline info ── */
             <>
               <DialogHeader>

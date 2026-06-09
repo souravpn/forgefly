@@ -380,6 +380,67 @@ export function getAgencyUpgradeEmailTemplate(username: string, billingCycle: st
   `;
 }
 
+export interface EmailTemplate {
+  subject: string
+  html: string
+}
+
+export function getNewRequestEmailTemplate(data: {
+  freelancerName: string
+  clientName: string
+  clientCompany: string
+  serviceName: string
+  dashboardUrl: string
+}): EmailTemplate {
+  const { freelancerName, clientName, clientCompany, serviceName, dashboardUrl } = data
+  const companyStr = clientCompany ? ` from ${clientCompany}` : ''
+  return {
+    subject: `New proposal request from ${clientName}`,
+    html: `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>New Proposal Request</title>
+  <style>${emailStyles}</style>
+</head>
+<body>
+  <div class="email-container">
+    <div class="email-header">
+      <h1 class="brand-name">Forgefly</h1>
+      <p class="tagline">New Proposal Request</p>
+    </div>
+    <div class="email-body">
+      <h2 class="greeting">Hey ${freelancerName}! 👋</h2>
+      <p class="content">
+        <strong style="color: #FFFFFF;">${clientName}</strong>${companyStr} just submitted a proposal request for
+        <strong style="color: #10B981;">${serviceName || 'your services'}</strong>.
+      </p>
+      <div class="info-box">
+        <p class="info-label">Client</p>
+        <p class="info-value">${clientName}${companyStr}</p>
+        <div class="divider"></div>
+        <p class="info-label">Interested In</p>
+        <p class="info-value">${serviceName || 'General Inquiry'}</p>
+      </div>
+      <p class="content">
+        Head to your Requests inbox to review the details and draft a proposal with AI.
+      </p>
+      <center>
+        <a href="${dashboardUrl}" class="button">View Request →</a>
+      </center>
+    </div>
+    <div class="footer">
+      <p class="footer-text"><strong>Forgefly</strong> — AI Business OS for Solopreneurs</p>
+    </div>
+  </div>
+</body>
+</html>
+    `,
+  }
+}
+
 export function getInvoiceEmailTemplate(
   clientName: string,
   invoiceNumber: string,

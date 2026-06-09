@@ -351,6 +351,21 @@ async function handleExtract(
 
   await logUsage(supabase, userId, business_id ?? null, model, prompt_type, totalInputTokens, totalOutputTokens);
 
+  // Log prompt session for history tab (non-fatal)
+  if (userId && business_id) {
+    try {
+      await supabase.from('prompt_sessions').insert({
+        user_id: userId,
+        business_id,
+        prompt,
+        prompt_type,
+        extracted_data_snapshot: { diff_summary: { sections_updated: Object.keys(extractedData) } },
+      });
+    } catch (err) {
+      console.warn('prompt_sessions insert failed (non-fatal):', err);
+    }
+  }
+
   return new Response(
     JSON.stringify({
       extracted_data: finalData,
