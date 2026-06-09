@@ -1,6 +1,7 @@
 import { Check as CheckIcon, ChevronDown, ChevronUp, Copy, Sparkles } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '@/contexts/AuthContext';
 import BrandKitTab from '@/components/preview/BrandKitTab';
 import ClientPortalTab from '@/components/preview/ClientPortalTab';
 import ContactsTab from '@/components/preview/ContactsTab';
@@ -188,6 +189,7 @@ function OverviewTab({ data, accent }: { data: ExtractedData; accent: string }) 
 
 export default function GeneratedPortalPage() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [data, setData] = useState<ExtractedData | null>(null);
   const [prompt, setPrompt] = useState('');
   const [elapsedSeconds, setElapsedSeconds] = useState<number | null>(null);
@@ -236,7 +238,8 @@ export default function GeneratedPortalPage() {
   };
 
   const handleSave = () => {
-    navigate('/login?intent=save_portal');
+    // If already logged in, the pending_portal will be auto-saved by useCurrentBusiness on dashboard load
+    navigate(user ? '/dashboard' : '/login?intent=save_portal');
   };
 
   if (!data) return null;

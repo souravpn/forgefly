@@ -43,10 +43,70 @@ export function useCurrentBusiness(): UseCurrentBusinessResult {
 
     if (err) {
       setError(err.message)
-    } else {
-      setBusiness(data)
-      setError(null)
+      setIsLoading(false)
+      return
     }
+
+    // If no business found, check if there's a pending portal from a pre-login generation
+    if (!data) {
+      const raw = sessionStorage.getItem('pending_portal')
+      if (raw) {
+        try {
+          const { extracted_data, prompt } = JSON.parse(raw)
+          const identity = (extracted_data as Record<string, any>)?.identity ?? {}
+          const businessName = identity.businessName ?? identity.name ?? 'My Business'
+
+          // Use select-then-insert/update to avoid partial-index upsert issues
+          const { data: existing } = await supabase
+            .from('businesses')
+            .select('id')
+            .eq('user_id', user.id)
+            .eq('status', 'active')
+            .maybeSingle()
+
+          let bizId: string | null = null
+          if (existing?.id) {
+            await supabase.from('businesses').update({ name: businessName, extracted_data }).eq('id', existing.id)
+            bizId = existing.id
+          } else {
+            const { data: inserted } = await supabase
+              .from('businesses')
+              .insert({ user_id: user.id, name: businessName, extracted_data, status: 'active' })
+              .select('id')
+              .single()
+            bizId = inserted?.id ?? null
+          }
+
+          if (bizId && prompt) {
+            await supabase.from('prompt_sessions').insert({
+              user_id: user.id,
+              business_id: bizId,
+              prompt,
+              prompt_type: 'seed',
+              extracted_data_snapshot: extracted_data,
+            }).then(() => {}) // non-fatal
+          }
+
+          sessionStorage.removeItem('pending_portal')
+          // Refetch to get the full row
+          const { data: saved } = await supabase
+            .from('businesses')
+            .select('*')
+            .eq('user_id', user.id)
+            .eq('status', 'active')
+            .maybeSingle()
+          setBusiness(saved)
+          setError(null)
+          setIsLoading(false)
+          return
+        } catch (e) {
+          console.error('Failed to auto-save pending portal:', e)
+        }
+      }
+    }
+
+    setBusiness(data)
+    setError(null)
     setIsLoading(false)
   }, [user])
 

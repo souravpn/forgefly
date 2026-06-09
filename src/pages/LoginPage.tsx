@@ -278,7 +278,7 @@ export default function LoginPage() {
             <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}>
               <Button
                 type="submit"
-                disabled={loading || !!oauthLoading}
+                disabled={loading || !!oauthLoading || !email.trim() || !password}
                 className="w-full h-11 rounded-xl text-sm font-bold"
                 style={{
                   background: loading

@@ -410,7 +410,16 @@ export default function SignupPage() {
             <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}>
               <Button
                 type="submit"
-                disabled={loading || !!oauthLoading}
+                disabled={
+                  loading ||
+                  !!oauthLoading ||
+                  !agreedToTerms ||
+                  !email.trim() ||
+                  password.length < 8 ||
+                  !/[A-Z]/.test(password) ||
+                  !/[0-9!@#$%^&*]/.test(password) ||
+                  password !== confirmPassword
+                }
                 className="w-full h-11 rounded-xl text-sm font-bold"
                 style={{
                   background: loading
