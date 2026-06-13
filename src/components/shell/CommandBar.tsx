@@ -269,15 +269,15 @@ export function CommandBar({ onClose, business, extractedData, refetch }: Comman
 
   return (
     <>
-      <div className="border-t bg-muted/20 px-4 py-2.5">
+      <div className="border-t border-border/60 bg-background px-4 pt-3 pb-3">
         <div className="flex items-end gap-2">
-          <Sparkles className={cn('h-4 w-4 shrink-0 mb-2.5 text-primary', isLoading && 'animate-pulse')} />
+          <Sparkles className={cn('h-4 w-4 shrink-0 mb-[11px] text-primary', isLoading && 'animate-pulse')} />
           <Textarea
             autoFocus
             value={value}
             onChange={e => setValue(e.target.value)}
-            placeholder='Describe a change to your business OS… e.g. "I now offer brand photography from $800"'
-            className="min-h-[52px] max-h-32 resize-none text-sm bg-background"
+            placeholder='Describe a change to your OS… e.g. "I now offer brand photography from $800"'
+            className="min-h-[44px] max-h-28 resize-none text-sm bg-muted/40 border-border/50 focus-visible:ring-primary/40"
             disabled={isLoading}
             onKeyDown={e => {
               if (e.key === 'Enter' && !e.shiftKey) {
@@ -291,21 +291,21 @@ export function CommandBar({ onClose, business, extractedData, refetch }: Comman
             <Button
               variant="ghost"
               size="icon"
-              className="h-8 w-8 shrink-0"
+              className="h-7 w-7 shrink-0 text-muted-foreground"
               onClick={onClose}
               aria-label="Close command bar"
               disabled={isLoading}
             >
-              <X className="h-4 w-4" />
+              <X className="h-3.5 w-3.5" />
             </Button>
             <Button
               size="icon"
-              className="h-8 w-8 shrink-0"
+              className="h-7 w-7 shrink-0"
               onClick={handleSubmit}
               disabled={!value.trim() || isLoading}
               aria-label="Submit"
             >
-              <Send className="h-3.5 w-3.5" />
+              <Send className="h-3 w-3" />
             </Button>
           </div>
         </div>

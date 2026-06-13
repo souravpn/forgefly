@@ -10,10 +10,12 @@ import { routes } from './routes';
 
 import { AuthProvider } from '@/contexts/AuthContext';
 import { RouteGuard } from '@/components/common/RouteGuard';
+import { ThemeProvider } from '@/contexts/ThemeContext';
 
 const App: React.FC = () => {
   return (
     <ErrorBoundary>
+      <ThemeProvider>
       <Router>
         <AuthProvider>
           <RouteGuard>
@@ -51,6 +53,7 @@ const App: React.FC = () => {
           </RouteGuard>
         </AuthProvider>
       </Router>
+      </ThemeProvider>
     </ErrorBoundary>
   );
 };

@@ -1,6 +1,12 @@
 <!DOCTYPE html>
-<html lang="en" class="dark">
+<html lang="en">
   <head>
+    <script>
+      (function () {
+        var t = localStorage.getItem('theme') || 'dark';
+        if (t === 'dark') document.documentElement.classList.add('dark');
+      })();
+    </script>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/png" href="https://miaoda-conversation-file.s3cdn.medo.dev/user-bj1cwp7n1qm8/conv-bj1thg4coydc/20260511/file-bk64ijh8wbuo.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -11,6 +17,9 @@
     <meta name="apple-mobile-web-app-title" content="Forgefly" />
     <link rel="manifest" href="/manifest.json" />
     <link rel="apple-touch-icon" href="https://miaoda-conversation-file.s3cdn.medo.dev/user-bj1cwp7n1qm8/conv-bj1thg4coydc/20260511/file-bk64ijh8wbuo.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400;1,700&display=swap" rel="stylesheet" />
     <title>Forgefly - AI-First Business OS</title>
   </head>
   <body>

@@ -21,7 +21,20 @@ import {
   Star,
   Check,
   Crown,
+  AlertTriangle,
 } from "lucide-react";
+
+function validatePrompt(prompt: string): string | null {
+  const trimmed = prompt.trim();
+  if (trimmed.length < 30) {
+    return "Tell us a bit more — what do you do and who do you work with?";
+  }
+  const hasService = /\b(offer|service|speciali[sz]|package|consult|design|develop|write|photo|coach|audit|sprint|retainer)\b/i.test(trimmed);
+  if (!hasService) {
+    return "Mention at least one service you offer to get the best results.";
+  }
+  return null;
+}
 import { useAuth } from "@/contexts/AuthContext";
 import useEmblaCarousel from "embla-carousel-react";
 import Autoplay from "embla-carousel-autoplay";
@@ -34,12 +47,30 @@ const SEED_EXAMPLES = [
 ];
 
 const GEN_STEPS = [
-  { label: 'Parsing business identity',    subtitle: 'Analysing your prompt and extracting your business identity' },
-  { label: 'Extracting services and pricing', subtitle: 'Identifying your services, rates, and package structure' },
-  { label: 'Building sales pipeline',      subtitle: 'Setting up your deal stages and prospect workflow' },
-  { label: 'Drafting proposal template',   subtitle: 'Creating a tailored proposal intro and scope of work' },
-  { label: 'Generating brand kit',         subtitle: 'Picking colours, tone, and keywords that match your niche' },
-  { label: 'Assembling your portal',       subtitle: 'Pulling everything together into your business OS' },
+  {
+    label: "Parsing business identity",
+    subtitle: "Analysing your prompt and extracting your business identity",
+  },
+  {
+    label: "Extracting services and pricing",
+    subtitle: "Identifying your services, rates, and package structure",
+  },
+  {
+    label: "Building sales pipeline",
+    subtitle: "Setting up your deal stages and prospect workflow",
+  },
+  {
+    label: "Drafting proposal template",
+    subtitle: "Creating a tailored proposal intro and scope of work",
+  },
+  {
+    label: "Generating brand kit",
+    subtitle: "Picking colours, tone, and keywords that match your niche",
+  },
+  {
+    label: "Assembling your portal",
+    subtitle: "Pulling everything together into your business OS",
+  },
 ];
 
 const SEED_CHIPS = [
@@ -52,7 +83,7 @@ const SEED_CHIPS = [
 export default function LandingPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const [seedPrompt, setSeedPrompt] = useState('');
+  const [seedPrompt, setSeedPrompt] = useState("");
   const [activeChip, setActiveChip] = useState(0);
   const [generating, setGenerating] = useState(false);
   const [genStep, setGenStep] = useState(0);
@@ -87,7 +118,7 @@ export default function LandingPage() {
           exampleIndex = (exampleIndex + 1) % SEED_EXAMPLES.length;
           setActiveChip(exampleIndex);
           charIndex = 0;
-          setSeedPrompt('');
+          setSeedPrompt("");
           typingRef.current = setTimeout(typeNext, 400);
         }, 3000);
       }
@@ -288,25 +319,35 @@ export default function LandingPage() {
       const res = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-gateway`,
         {
-          method: 'POST',
+          method: "POST",
           headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
           },
-          body: JSON.stringify({ mode: 'extract', prompt }),
+          body: JSON.stringify({ mode: "extract", prompt }),
         },
       );
       if (!res.ok) throw new Error(await res.text());
       const data = await res.json();
       const elapsedSeconds = Math.round((Date.now() - startedAt) / 1000);
-      sessionStorage.setItem('pending_portal', JSON.stringify({ extracted_data: data.extracted_data, prompt, elapsed_seconds: elapsedSeconds }));
+      sessionStorage.setItem(
+        "pending_portal",
+        JSON.stringify({
+          extracted_data: data.extracted_data,
+          prompt,
+          elapsed_seconds: elapsedSeconds,
+          timestamp: Date.now(),
+          confidence_map: data.confidence_map ?? null,
+          completeness_score: data.completeness_score ?? 0,
+        }),
+      );
       if (stepRef.current) clearInterval(stepRef.current);
-      navigate('/preview');
+      navigate("/preview");
     } catch (err) {
-      console.error('Generate error:', err);
+      console.error("Generate error:", err);
       if (stepRef.current) clearInterval(stepRef.current);
       setGenerating(false);
-      navigate('/login');
+      navigate("/login");
     }
   };
 
@@ -322,7 +363,9 @@ export default function LandingPage() {
           </div>
 
           {/* Title */}
-          <h2 className="text-2xl font-bold text-white mb-2">Building your business OS…</h2>
+          <h2 className="text-2xl font-bold text-white mb-2">
+            Building your business OS…
+          </h2>
           <p className="text-gray-400 text-sm mb-10 min-h-[20px] transition-all duration-500">
             {current.subtitle}
           </p>
@@ -334,14 +377,26 @@ export default function LandingPage() {
               const active = i === genStep;
               return (
                 <div key={step.label} className="flex items-center gap-3">
-                  <span className={`w-5 shrink-0 text-center text-sm font-bold transition-colors duration-300 ${
-                    done ? 'text-emerald-400' : active ? 'text-gray-400' : 'text-gray-700'
-                  }`}>
-                    {done ? '✓' : '·'}
+                  <span
+                    className={`w-5 shrink-0 text-center text-sm font-bold transition-colors duration-300 ${
+                      done
+                        ? "text-emerald-400"
+                        : active
+                          ? "text-gray-400"
+                          : "text-gray-700"
+                    }`}
+                  >
+                    {done ? "✓" : "·"}
                   </span>
-                  <span className={`text-base font-medium transition-colors duration-300 ${
-                    done ? 'text-emerald-400' : active ? 'text-white' : 'text-gray-600'
-                  }`}>
+                  <span
+                    className={`text-base font-medium transition-colors duration-300 ${
+                      done
+                        ? "text-emerald-400"
+                        : active
+                          ? "text-white"
+                          : "text-gray-600"
+                    }`}
+                  >
                     {step.label}
                   </span>
                 </div>
@@ -354,10 +409,10 @@ export default function LandingPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-[#0A1428] via-[#0F1B35] to-[#0A1428]">
+    <div className="min-h-screen bg-black">
       {/* Navigation */}
-      <nav className="fixed top-0 left-0 right-0 z-50 border-b border-white/10 bg-[#0A1428]/80 backdrop-blur-lg">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <nav className="fixed top-0 left-0 right-0 z-50 border-b border-white/10 bg-black/80 backdrop-blur-lg">
+        <div className="w-full md:max-w-[60vw] mx-auto px-4 md:px-6">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center gap-3">
               <img
@@ -374,20 +429,24 @@ export default function LandingPage() {
               <Button
                 variant="ghost"
                 className="text-gray-300 hover:text-white hover:bg-white/5 text-sm"
-                onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+                onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
               >
-                About
+                Home
               </Button>
               {[
-                { label: 'How', id: 'how-it-works' },
-                { label: 'Reviews', id: 'reviews' },
-                { label: 'Pricing', id: 'pricing' },
+                { label: "How", id: "how-it-works" },
+                { label: "Reviews", id: "reviews" },
+                { label: "Pricing", id: "pricing" },
               ].map(({ label, id }) => (
                 <Button
                   key={id}
                   variant="ghost"
                   className="text-gray-300 hover:text-white hover:bg-white/5 text-sm"
-                  onClick={() => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' })}
+                  onClick={() =>
+                    document
+                      .getElementById(id)
+                      ?.scrollIntoView({ behavior: "smooth" })
+                  }
                 >
                   {label}
                 </Button>
@@ -414,15 +473,11 @@ export default function LandingPage() {
 
       {/* Hero Section */}
       <section className="pt-32 pb-20 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-7xl mx-auto text-center">
+        <div className="w-full md:max-w-[60vw] mx-auto text-center">
           <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-emerald-500/10  border border-emerald-500/20 text-emerald-400 text-sm mb-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
             <TestTubeDiagonal className="w-4 h-4" />
-            <span>• In Beta</span>
+            <span>• Coming Soon</span>
           </div>
-
-          <h1 className="text-5xl md:text-7xl font-bold text-white mb-6 animate-in fade-in slide-in-from-bottom-4 duration-700 delay-100">
-            Forge Your Freedom
-          </h1>
 
           <p className="text-2xl md:text-3xl text-emerald-400 mb-4 animate-in fade-in slide-in-from-bottom-4 duration-700 delay-200">
             AI Business OS for Solopreneurs
@@ -450,9 +505,19 @@ export default function LandingPage() {
                 rows={5}
               />
 
+              {/* Validation hint */}
+              {validatePrompt(seedPrompt) && seedPrompt.trim().length > 0 && (
+                <div className="flex items-center gap-2 px-6 pb-2">
+                  <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                  <p className="text-xs text-amber-400">{validatePrompt(seedPrompt)}</p>
+                </div>
+              )}
+
               {/* Bottom bar */}
               <div className="flex items-center justify-between px-6 py-4 border-t border-white/10">
-                <span className="text-sm text-gray-500">No account needed to generate</span>
+                <span className="text-sm text-gray-500">
+                  No account needed to generate
+                </span>
                 <Button
                   size="lg"
                   className="bg-white text-gray-900 hover:bg-gray-100 font-semibold px-6 disabled:opacity-60"
@@ -488,8 +553,8 @@ export default function LandingPage() {
                   }}
                   className={`px-4 py-2 rounded-full text-sm border transition-colors ${
                     activeChip === i
-                      ? 'border-emerald-500/60 text-emerald-400 bg-emerald-500/10'
-                      : 'border-white/20 text-gray-400 hover:border-white/40 hover:text-gray-200'
+                      ? "border-emerald-500/60 text-emerald-400 bg-emerald-500/10"
+                      : "border-white/20 text-gray-400 hover:border-white/40 hover:text-gray-200"
                   }`}
                 >
                   {chip}
@@ -502,7 +567,7 @@ export default function LandingPage() {
 
       {/* How It Works Section */}
       <section id="how-it-works" className="py-20 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-7xl mx-auto">
+        <div className="w-full md:max-w-[60vw] mx-auto">
           <div className="text-center mb-16">
             <h2 className="text-4xl md:text-5xl font-bold text-white mb-4">
               How It Works
@@ -544,7 +609,7 @@ export default function LandingPage() {
         id="features"
         className="py-20 px-4 sm:px-6 lg:px-8 bg-gradient-to-b from-transparent via-emerald-500/5 to-transparent"
       >
-        <div className="max-w-7xl mx-auto">
+        <div className="w-full md:max-w-[60vw] mx-auto">
           <div className="text-center mb-16">
             <h2 className="text-4xl md:text-5xl font-bold text-white mb-4">
               Everything You Need to Scale
@@ -581,7 +646,7 @@ export default function LandingPage() {
 
       {/* Benefits Section */}
       <section className="py-20 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-7xl mx-auto">
+        <div className="w-full md:max-w-[60vw] mx-auto">
           {/* Centered Section Header */}
           <div className="text-center mb-16">
             <h2 className="text-4xl md:text-5xl font-bold text-white mb-4 text-balance">
@@ -650,8 +715,11 @@ export default function LandingPage() {
       </section>
 
       {/* Testimonials Section */}
-      <section id="reviews" className="py-20 px-4 sm:px-6 lg:px-8 bg-gradient-to-b from-transparent via-amber-500/5 to-transparent">
-        <div className="max-w-7xl mx-auto">
+      <section
+        id="reviews"
+        className="py-20 px-4 sm:px-6 lg:px-8 bg-gradient-to-b from-transparent via-amber-500/5 to-transparent"
+      >
+        <div className="w-full md:max-w-[60vw] mx-auto">
           <div className="text-center mb-16">
             <h2 className="text-4xl md:text-5xl font-bold text-white mb-4">
               Real Freelancers, Real Freedom
@@ -752,7 +820,7 @@ export default function LandingPage() {
 
       {/* Pricing Section */}
       <section id="pricing" className="py-20 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-5xl mx-auto">
+        <div className="w-full md:max-w-[60vw] mx-auto">
           <div className="text-center mb-14">
             <h2 className="text-4xl md:text-5xl font-bold text-white mb-4">
               Simple, Honest Pricing
@@ -767,24 +835,31 @@ export default function LandingPage() {
             <Card className="bg-white/5 border-white/10 backdrop-blur-sm flex flex-col">
               <CardContent className="p-8 flex flex-col flex-1">
                 <div className="mb-6">
-                  <p className="text-sm font-medium text-gray-400 uppercase tracking-wider mb-2">Freelancer</p>
+                  <p className="text-sm font-medium text-gray-400 uppercase tracking-wider mb-2">
+                    Freelancer
+                  </p>
                   <div className="flex items-end gap-1 mb-1">
                     <span className="text-5xl font-bold text-white">$0</span>
                     <span className="text-gray-400 mb-2">/month</span>
                   </div>
-                  <p className="text-gray-400 text-sm">Everything you need to get started</p>
+                  <p className="text-gray-400 text-sm">
+                    Everything you need to get started
+                  </p>
                 </div>
 
                 <ul className="space-y-3 flex-1 mb-8">
                   {[
-                    'Up to 5 active clients',
-                    'Basic project tracking',
-                    'AI proposal generation',
-                    'Invoice management',
-                    'Financial dashboard',
-                    'Email support',
+                    "Up to 5 active clients",
+                    "Basic project tracking",
+                    "AI proposal generation",
+                    "Invoice management",
+                    "Financial dashboard",
+                    "Email support",
                   ].map((f) => (
-                    <li key={f} className="flex items-center gap-3 text-gray-300 text-sm">
+                    <li
+                      key={f}
+                      className="flex items-center gap-3 text-gray-300 text-sm"
+                    >
                       <Check className="w-4 h-4 text-emerald-400 shrink-0" />
                       {f}
                     </li>
@@ -795,7 +870,7 @@ export default function LandingPage() {
                   size="lg"
                   variant="outline"
                   className="w-full border-white/20 text-white hover:bg-white/10"
-                  onClick={() => navigate('/login')}
+                  onClick={() => navigate("/login")}
                 >
                   Start Free
                 </Button>
@@ -811,28 +886,35 @@ export default function LandingPage() {
               </div>
               <CardContent className="p-8 flex flex-col flex-1">
                 <div className="mb-6">
-                  <p className="text-sm font-medium text-emerald-400 uppercase tracking-wider mb-2">Agency</p>
+                  <p className="text-sm font-medium text-emerald-400 uppercase tracking-wider mb-2">
+                    Agency
+                  </p>
                   <div className="flex items-end gap-1 mb-1">
                     <span className="text-5xl font-bold text-white">$29</span>
                     <span className="text-gray-400 mb-2">/month</span>
                   </div>
-                  <p className="text-gray-400 text-sm">or $290/year — save $58</p>
+                  <p className="text-gray-400 text-sm">
+                    or $290/year — save $58
+                  </p>
                 </div>
 
                 <ul className="space-y-3 flex-1 mb-8">
                   {[
-                    'Unlimited clients',
-                    'Advanced project tracking',
-                    'AI proposal generation',
-                    'Invoice management',
-                    'Financial dashboard',
-                    'Team member management',
-                    'Advanced proposal templates',
-                    'Priority support',
-                    'Custom branding',
-                    'API access',
+                    "Unlimited clients",
+                    "Advanced project tracking",
+                    "AI proposal generation",
+                    "Invoice management",
+                    "Financial dashboard",
+                    "Team member management",
+                    "Advanced proposal templates",
+                    "Priority support",
+                    "Custom branding",
+                    "API access",
                   ].map((f) => (
-                    <li key={f} className="flex items-center gap-3 text-gray-300 text-sm">
+                    <li
+                      key={f}
+                      className="flex items-center gap-3 text-gray-300 text-sm"
+                    >
                       <Check className="w-4 h-4 text-emerald-400 shrink-0" />
                       {f}
                     </li>
@@ -842,7 +924,7 @@ export default function LandingPage() {
                 <Button
                   size="lg"
                   className="w-full bg-emerald-500 hover:bg-emerald-600 text-white"
-                  onClick={() => navigate('/login')}
+                  onClick={() => navigate("/login")}
                 >
                   Get Started
                   <ArrowRight className="w-4 h-4 ml-2" />
@@ -888,7 +970,7 @@ export default function LandingPage() {
 
       {/* Footer */}
       <footer className="border-t border-white/10 py-8 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-7xl mx-auto">
+        <div className="w-full md:max-w-[60vw] mx-auto">
           <div className="flex flex-col md:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               <img

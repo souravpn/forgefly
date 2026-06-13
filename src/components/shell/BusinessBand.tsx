@@ -16,8 +16,8 @@ export function BusinessBand() {
   const tagline = identity?.tagline ?? 'Your business OS'
 
   return (
-    <div className="border-b shrink-0">
-      <div className="h-12 flex items-center justify-between px-4">
+    <div className="shrink-0">
+      <div className="w-full md:max-w-[60vw] mx-auto px-4 md:px-6 h-14 flex items-center justify-between">
         <div className="flex items-center gap-2.5 min-w-0">
           <div className="h-7 w-7 rounded-md bg-primary/10 flex items-center justify-center shrink-0 select-none">
             <span className="text-xs font-bold text-primary">{initials}</span>
@@ -39,12 +39,14 @@ export function BusinessBand() {
         </Button>
       </div>
       {commandOpen && (
-        <CommandBar
-          onClose={() => setCommandOpen(false)}
-          business={business}
-          extractedData={extractedData}
-          refetch={refetch}
-        />
+        <div className="w-full md:max-w-[60vw] mx-auto">
+          <CommandBar
+            onClose={() => setCommandOpen(false)}
+            business={business}
+            extractedData={extractedData}
+            refetch={refetch}
+          />
+        </div>
       )}
     </div>
   )

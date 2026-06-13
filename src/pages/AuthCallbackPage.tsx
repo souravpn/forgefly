@@ -8,7 +8,7 @@ async function savePendingPortal(userId: string): Promise<boolean> {
   const raw = sessionStorage.getItem('pending_portal');
   if (!raw) return false;
   try {
-    const { extracted_data, prompt } = JSON.parse(raw);
+    const { extracted_data, prompt, confidence_map, completeness_score } = JSON.parse(raw);
     const identity = extracted_data?.identity ?? {};
     const businessName = identity.businessName ?? identity.name ?? 'My Business';
 
@@ -16,7 +16,14 @@ async function savePendingPortal(userId: string): Promise<boolean> {
     const { data: business, error: bizError } = await supabase
       .from('businesses')
       .upsert(
-        { user_id: userId, name: businessName, extracted_data, status: 'active' },
+        {
+          user_id: userId,
+          name: businessName,
+          extracted_data,
+          status: 'active',
+          confidence_map: confidence_map ?? null,
+          completeness_score: completeness_score ?? 0,
+        },
         { onConflict: 'user_id', ignoreDuplicates: false },
       )
       .select('id')

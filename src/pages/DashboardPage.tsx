@@ -22,7 +22,64 @@ import {
   Crown,
   ChartBar,
   ArrowRight,
+  X,
 } from "lucide-react";
+
+type ConfidenceLevel = 'high' | 'medium' | 'low';
+interface ConfidenceMap {
+  identity: ConfidenceLevel;
+  services: ConfidenceLevel;
+  pricing: ConfidenceLevel;
+  location: ConfidenceLevel;
+  niche: ConfidenceLevel;
+  brand: ConfidenceLevel;
+}
+interface NudgeItem {
+  priority: number;
+  title: string;
+  desc: string;
+  action: string;
+  route?: string;
+  isCommandBar?: boolean;
+  color: 'warning' | 'info';
+}
+
+function getNudgeItems(map: ConfidenceMap): NudgeItem[] {
+  const items: NudgeItem[] = [];
+  if (map.pricing === 'low') items.push({
+    priority: 1,
+    title: 'Add pricing to your services',
+    desc: "Your services were extracted but no prices were found. Clients can't request a proposal without knowing your rates.",
+    action: 'Add prices',
+    route: '/dashboard/services',
+    color: 'warning',
+  });
+  if (map.location === 'low') items.push({
+    priority: 2,
+    title: 'Tell us your location',
+    desc: 'We estimated "Remote" — your public portfolio will be more trustworthy with a real city or region.',
+    action: 'Add location',
+    route: '/dashboard/settings',
+    color: 'warning',
+  });
+  if (map.brand === 'low') items.push({
+    priority: 3,
+    title: 'Refine your brand colors',
+    desc: 'We generated a color palette — but if you have brand colors in mind, update them in Brand Kit.',
+    action: 'Open Brand Kit',
+    route: '/dashboard/brand',
+    color: 'info',
+  });
+  if (map.niche === 'low') items.push({
+    priority: 4,
+    title: 'Describe your ideal client',
+    desc: 'Knowing your niche helps Forgefly generate better proposals and nudges.',
+    action: 'Refine in command bar',
+    isCommandBar: true,
+    color: 'info',
+  });
+  return items.slice(0, 3);
+}
 import {
   LineChart,
   Line,
@@ -54,6 +111,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { useBusiness } from "@/contexts/CurrentBusinessContext";
+import type { Business } from "@/hooks/useCurrentBusiness";
 
 function CustomTooltip({
   active,
@@ -116,6 +174,9 @@ export default function DashboardPage() {
   const [whatIfMultiplier, setWhatIfMultiplier] = useState([1]);
   const [completedTasks, setCompletedTasks] = useState<Set<string>>(new Set());
   const [showUpgradeSuccess, setShowUpgradeSuccess] = useState(false);
+  const [showNudge, setShowNudge] = useState(false);
+  const [nudgeItems, setNudgeItems] = useState<NudgeItem[]>([]);
+  const [mobileNudgeExpanded, setMobileNudgeExpanded] = useState(false);
 
   useEffect(() => {
     if (searchParams.get('upgrade') === 'success') {
@@ -123,6 +184,16 @@ export default function DashboardPage() {
       setSearchParams({}, { replace: true });
     }
   }, []);
+
+  useEffect(() => {
+    if (bizLoading || !business) return;
+    const score = business.completeness_score ?? 0;
+    const map = business.confidence_map as ConfidenceMap | null;
+    if (score < 90 && map && localStorage.getItem('nudge_dismissed_' + business.id) !== 'true') {
+      setNudgeItems(getNudgeItems(map));
+      setShowNudge(true);
+    }
+  }, [business, bizLoading]);
 
   useEffect(() => {
     if (user) {
@@ -213,6 +284,11 @@ export default function DashboardPage() {
     await supabase.from("tasks").update({ completed: true }).eq("id", taskId);
     toast.success("Task completed!");
     setTimeout(() => { loadDashboardData(); }, 600);
+  };
+
+  const dismissNudge = () => {
+    if (business) localStorage.setItem('nudge_dismissed_' + business.id, 'true');
+    setShowNudge(false);
   };
 
   // Derived business OS data
@@ -315,6 +391,107 @@ export default function DashboardPage() {
               </Button>
             </CardContent>
           </Card>
+        )}
+
+        {/* ── Completion nudge banner ──────────────────────────────────── */}
+        {showNudge && nudgeItems.length > 0 && business && (
+          <>
+            {/* Desktop */}
+            <Card className="hidden md:block border-amber-500/20 bg-amber-500/5">
+              <CardContent className="p-0">
+                <div className="flex items-center justify-between px-4 py-3 border-b border-amber-500/10">
+                  <div>
+                    <p className="text-sm font-semibold">
+                      Your portal is {business.completeness_score ?? 0}% complete
+                    </p>
+                    <div className="flex items-center gap-2 mt-1.5">
+                      <div className="h-1.5 bg-muted rounded-full w-48">
+                        <div
+                          className="h-full rounded-full bg-amber-500 transition-all"
+                          style={{ width: `${business.completeness_score ?? 0}%` }}
+                        />
+                      </div>
+                      <span className="text-xs text-muted-foreground">
+                        {nudgeItems.length} thing{nudgeItems.length !== 1 ? 's' : ''} that would make it stronger
+                      </span>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={dismissNudge}
+                    className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                    aria-label="Dismiss"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+                <div className="divide-y divide-border/40">
+                  {nudgeItems.map((item, i) => (
+                    <div key={i} className="flex items-center justify-between px-4 py-3 gap-4">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium">{item.title}</p>
+                        <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">{item.desc}</p>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="shrink-0 text-xs"
+                        onClick={() => {
+                          if (item.route) navigate(item.route);
+                          else if (item.isCommandBar) window.scrollTo({ top: 0, behavior: 'smooth' });
+                        }}
+                      >
+                        {item.action}
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+                <div className="px-4 pb-3 text-xs text-muted-foreground">
+                  Or use the command bar above to describe any changes
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Mobile — collapsed / expanded inline */}
+            <div className="md:hidden">
+              <button
+                type="button"
+                onClick={() => setMobileNudgeExpanded(v => !v)}
+                className="w-full text-left px-4 py-3 rounded-lg border border-amber-500/20 bg-amber-500/5 text-sm font-medium flex items-center justify-between"
+              >
+                <span>Complete your profile ({business.completeness_score ?? 0}%)</span>
+                <span className="text-muted-foreground text-xs">{mobileNudgeExpanded ? '▲' : '▼'}</span>
+              </button>
+              {mobileNudgeExpanded && (
+                <div className="mt-2 space-y-2">
+                  {nudgeItems.map((item, i) => (
+                    <div key={i} className="flex items-start justify-between gap-3 px-4 py-3 rounded-lg bg-muted/50 border border-border/50">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium">{item.title}</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">{item.desc}</p>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="shrink-0 text-xs"
+                        onClick={() => {
+                          if (item.route) navigate(item.route);
+                          else if (item.isCommandBar) window.scrollTo({ top: 0, behavior: 'smooth' });
+                        }}
+                      >
+                        {item.action}
+                      </Button>
+                    </div>
+                  ))}
+                  <div className="flex justify-end px-1">
+                    <button type="button" onClick={dismissNudge} className="text-xs text-muted-foreground underline">
+                      Dismiss
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </>
         )}
 
         {/* ── Metric cards ─────────────────────────────────────────────── */}

@@ -7,6 +7,23 @@ interface Metrics {
   avgProjectValue?: string;
 }
 
+function renderMetricValue(value: string | number | undefined) {
+  const str = value !== undefined && value !== null ? String(value) : null;
+  if (!str) return <span>—</span>;
+  if (str.startsWith('[estimated] ')) {
+    const actual = str.replace('[estimated] ', '');
+    return (
+      <span>
+        {actual}
+        <span style={{ fontSize: 11, color: 'rgba(107,114,128,1)', marginLeft: 5, fontStyle: 'italic', fontWeight: 400 }}>
+          est.
+        </span>
+      </span>
+    );
+  }
+  return <span>{str}</span>;
+}
+
 interface MetricCardsProps {
   metrics: Metrics;
 }
@@ -30,7 +47,7 @@ export default function MetricCards({ metrics }: MetricCardsProps) {
               <Icon className="w-3.5 h-3.5 text-gray-600" />
             </div>
             <p className="text-[22px] font-[500] text-white leading-none">
-              {value !== undefined && value !== null ? String(value) : '—'}
+              {renderMetricValue(value)}
             </p>
           </div>
         );

@@ -105,7 +105,7 @@ export default function LoginPage() {
   return (
     <div
       className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden"
-      style={{ background: "#020810" }}
+      style={{ background: "#000000" }}
     >
       {/* Ambient glow */}
       <div
@@ -155,7 +155,7 @@ export default function LoginPage() {
         <div
           className="rounded-2xl p-7 space-y-5"
           style={{
-            background: "rgba(4,12,30,0.8)",
+            background: "rgba(255,255,255,0.06)",
             backdropFilter: "blur(24px)",
             WebkitBackdropFilter: "blur(24px)",
             border: "1px solid rgba(0,240,200,0.15)",

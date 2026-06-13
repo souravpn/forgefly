@@ -9,7 +9,8 @@ export function DesktopTabNav() {
   const { navigateTo, activeNavId } = useAppNavigation()
 
   return (
-    <div className="hidden md:flex items-center border-b h-10 px-2 shrink-0 overflow-x-auto">
+    <div className="hidden md:block border-b shrink-0">
+      <div className="w-full md:max-w-[60vw] mx-auto px-2 h-10 flex items-center overflow-x-auto">
       {NAV_ITEMS.map(item => (
         <Button
           key={item.id}
@@ -29,6 +30,7 @@ export function DesktopTabNav() {
       ))}
       <div className="ml-auto shrink-0">
         <DesktopMoreDropdown />
+      </div>
       </div>
     </div>
   )

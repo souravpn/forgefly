@@ -22,6 +22,17 @@ const TOKEN_COST: Record<string, { input: number; output: number }> = {
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
+type ConfidenceLevel = 'high' | 'medium' | 'low';
+
+interface ConfidenceMap {
+  identity: ConfidenceLevel;
+  services: ConfidenceLevel;
+  pricing: ConfidenceLevel;
+  location: ConfidenceLevel;
+  niche: ConfidenceLevel;
+  brand: ConfidenceLevel;
+}
+
 interface ClassifierOutput {
   prompt_type: 'seed' | 'additive' | 'revision' | 'scoped';
   complexity: 'simple' | 'medium' | 'rich';
@@ -29,6 +40,7 @@ interface ClassifierOutput {
   sections_needed: string[];
   has_pricing: boolean;
   language: string;
+  confidence_map?: ConfidenceMap;
 }
 
 interface AnthropicRequest {
@@ -64,6 +76,18 @@ async function callAnthropic(req: AnthropicRequest): Promise<AnthropicResponse> 
   }
 
   return response.json();
+}
+
+function computeCompleteness(map: ConfidenceMap): number {
+  const weights: Record<string, number> = {
+    identity: 20, services: 25, pricing: 25, location: 10, niche: 10, brand: 10,
+  };
+  const scores: Record<ConfidenceLevel, number> = { high: 1, medium: 0.5, low: 0 };
+  let total = 0;
+  for (const [key, weight] of Object.entries(weights)) {
+    total += weight * scores[map[key as keyof ConfidenceMap]];
+  }
+  return Math.round(total);
 }
 
 function calcCost(model: string, inputTokens: number, outputTokens: number): number {
@@ -115,7 +139,15 @@ Output schema (return exactly this shape):
   "token_estimate": number,
   "sections_needed": ["identity","services","pipeline","invoices","contacts","metrics","brand","proposal"],
   "has_pricing": boolean,
-  "language": string
+  "language": string,
+  "confidence_map": {
+    "identity": "high" | "medium" | "low",
+    "services": "high" | "medium" | "low",
+    "pricing": "high" | "medium" | "low",
+    "location": "high" | "medium" | "low",
+    "niche": "high" | "medium" | "low",
+    "brand": "high" | "medium" | "low"
+  }
 }
 
 Rules:
@@ -127,7 +159,8 @@ Rules:
 - medium: moderate detail, 2–3 service types
 - rich: detailed, many services, complex pricing
 - sections_needed: only include sections the prompt actually touches
-- token_estimate: estimated output tokens needed (100–2500)`;
+- token_estimate: estimated output tokens needed (100–2500)
+- confidence_map: rate how explicitly each field is mentioned (high=explicit, medium=implied, low=absent)`;
 
 async function runClassifier(prompt: string): Promise<ClassifierOutput> {
   const result = await callAnthropic({
@@ -170,7 +203,14 @@ Rules:
 - For missing info, use sensible defaults or short placeholders
 - accentColor: pick a professional hex color that fits the niche
 - initials: first 2 letters of business name or owner initials
-- pipeline.stages: always ["Prospect","Qualified","Proposal Sent","Negotiating","Closed Won"]`;
+- pipeline.stages: always ["Prospect","Qualified","Proposal Sent","Negotiating","Closed Won"]
+
+For fields where you have low confidence (not explicitly mentioned in the prompt):
+- Still populate them with a reasonable inferred value
+- Prefix the value with "[estimated] " so the UI can detect and style it differently
+- Example: if no location is given, use "[estimated] Remote"
+- Example: if no price is given, use "[estimated] Contact for pricing"
+- Never leave a field null or empty — always provide something usable`;
 
   if (isDiff && currentData) {
     prompt += `\n\nEXISTING PORTAL DATA (do NOT repeat unchanged fields — return ONLY fields that are new or changed):
@@ -280,8 +320,19 @@ async function handleExtract(
       sections_needed: [...STRUCTURAL_SECTIONS, ...CREATIVE_SECTIONS],
       has_pricing: true,
       language: 'en',
+      confidence_map: {
+        identity: 'medium', services: 'medium', pricing: 'medium',
+        location: 'medium', niche: 'medium', brand: 'medium',
+      },
     };
   }
+
+  const defaultConfidenceMap: ConfidenceMap = {
+    identity: 'medium', services: 'medium', pricing: 'medium',
+    location: 'medium', niche: 'medium', brand: 'medium',
+  };
+  const confidenceMap: ConfidenceMap = classification.confidence_map ?? defaultConfidenceMap;
+  const completenessScore = computeCompleteness(confidenceMap);
 
   await logUsage(supabase, userId, business_id ?? null, HAIKU, 'classifier', 150, 80);
 
@@ -373,6 +424,8 @@ async function handleExtract(
       prompt_type,
       sections_updated: Object.keys(extractedData),
       classification,
+      confidence_map: confidenceMap,
+      completeness_score: completenessScore,
       usage: {
         model,
         input_tokens: totalInputTokens,

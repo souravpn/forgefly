@@ -9,6 +9,8 @@ export interface Business {
   name: string
   extracted_data: ExtractedData
   seed_prompt: string | null
+  confidence_map: Record<string, string> | null
+  completeness_score: number | null
   status: 'active' | 'archived'
   created_at: string
   updated_at: string
@@ -52,7 +54,7 @@ export function useCurrentBusiness(): UseCurrentBusinessResult {
       const raw = sessionStorage.getItem('pending_portal')
       if (raw) {
         try {
-          const { extracted_data, prompt } = JSON.parse(raw)
+          const { extracted_data, prompt, confidence_map, completeness_score } = JSON.parse(raw)
           const identity = (extracted_data as Record<string, any>)?.identity ?? {}
           const businessName = identity.businessName ?? identity.name ?? 'My Business'
 
@@ -66,12 +68,24 @@ export function useCurrentBusiness(): UseCurrentBusinessResult {
 
           let bizId: string | null = null
           if (existing?.id) {
-            await supabase.from('businesses').update({ name: businessName, extracted_data }).eq('id', existing.id)
+            await supabase.from('businesses').update({
+              name: businessName,
+              extracted_data,
+              confidence_map: confidence_map ?? null,
+              completeness_score: completeness_score ?? 0,
+            }).eq('id', existing.id)
             bizId = existing.id
           } else {
             const { data: inserted } = await supabase
               .from('businesses')
-              .insert({ user_id: user.id, name: businessName, extracted_data, status: 'active' })
+              .insert({
+                user_id: user.id,
+                name: businessName,
+                extracted_data,
+                status: 'active',
+                confidence_map: confidence_map ?? null,
+                completeness_score: completeness_score ?? 0,
+              })
               .select('id')
               .single()
             bizId = inserted?.id ?? null

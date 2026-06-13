@@ -178,7 +178,7 @@ function EngagementPortal({
         </div>
       </div>
 
-      <div className="container mx-auto px-4 py-8 space-y-4 max-w-3xl">
+      <div className="w-full md:max-w-[60vw] mx-auto px-4 md:px-6 py-8 space-y-4">
 
         {/* ── Overview tab ── */}
         {tab === 'overview' && (

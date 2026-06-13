@@ -112,6 +112,24 @@ function stageOrder(stage: string): number {
   return order[stage] ?? 5;
 }
 
+// ─── Estimated value renderer ────────────────────────────────────────────────
+
+function renderValue(value: string | undefined) {
+  if (!value) return null;
+  if (value.startsWith('[estimated] ')) {
+    const actual = value.replace('[estimated] ', '');
+    return (
+      <span>
+        {actual}
+        <span style={{ fontSize: 10, color: 'rgba(107,114,128,1)', marginLeft: 5, fontStyle: 'italic' }}>
+          estimated
+        </span>
+      </span>
+    );
+  }
+  return <>{value}</>;
+}
+
 // ─── Overview Tab ─────────────────────────────────────────────────────────────
 
 function OverviewTab({ data, accent }: { data: ExtractedData; accent: string }) {
@@ -144,7 +162,7 @@ function OverviewTab({ data, accent }: { data: ExtractedData; accent: string }) 
                     </p>
                   </div>
                   <div className="text-right shrink-0">
-                    <p className="text-[13px] font-[500] text-white">{inv.amount}</p>
+                    <p className="text-[13px] font-[500] text-white">{renderValue(inv.amount)}</p>
                     <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full border ${statusClass(inv.status)}`}>
                       {inv.status}
                     </span>
@@ -172,7 +190,7 @@ function OverviewTab({ data, accent }: { data: ExtractedData; accent: string }) 
                     <p className="text-[11px] text-gray-500 truncate">{lead.service}</p>
                   </div>
                   <div className="text-right shrink-0">
-                    <p className="text-[13px] font-[500]" style={{ color: accent }}>{lead.value}</p>
+                    <p className="text-[13px] font-[500]" style={{ color: accent }}>{renderValue(lead.value)}</p>
                     <p className="text-[10px] text-gray-600">{lead.stage}</p>
                   </div>
                 </div>
@@ -258,10 +276,10 @@ export default function GeneratedPortalPage() {
   const businessName = identity.businessName ?? identity.name ?? 'Your Business OS';
 
   return (
-    <div id="preview-root" className="min-h-screen bg-[#0A1428] text-white">
+    <div id="preview-root" className="min-h-screen bg-black text-white">
       {/* ── Sticky topbar ──────────────────────────────────────────────────── */}
-      <div className="sticky top-0 z-50 bg-[#0A1428]/95 backdrop-blur-lg border-b border-white/[0.08]">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-3">
+      <div className="sticky top-0 z-50 bg-black/95 backdrop-blur-lg border-b border-white/[0.08]">
+        <div className="w-full md:max-w-[60vw] mx-auto px-4 md:px-6 h-14 flex items-center justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
             <div
               className="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold shrink-0"
@@ -292,8 +310,8 @@ export default function GeneratedPortalPage() {
       </div>
 
       {/* ── Preview banner ────────────────────────────────────────────────── */}
-      <div className="bg-[#0d1e3a] border-b border-white/[0.06]">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex items-center gap-3">
+      <div className="bg-white/[0.03] border-b border-white/[0.06]">
+        <div className="w-full md:max-w-[60vw] mx-auto px-4 md:px-6 py-4 flex items-center gap-3">
           <Sparkles className="w-5 h-5 text-gray-400 shrink-0" />
           <div>
             <p className="text-[14px] font-[500] text-white">This is a preview of your AI-generated Business OS</p>
@@ -307,7 +325,7 @@ export default function GeneratedPortalPage() {
       {/* ── Prompt echo bar ────────────────────────────────────────────────── */}
       {prompt && (
         <div className="border-b border-white/[0.06] bg-white/[0.015]">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 py-2">
+          <div className="w-full md:max-w-[60vw] mx-auto px-4 md:px-6 py-2">
             <button
               type="button"
               onClick={() => setPromptExpanded((v) => !v)}
@@ -339,8 +357,8 @@ export default function GeneratedPortalPage() {
       )}
 
       {/* ── Tab navigation ────────────────────────────────────────────────── */}
-      <div className="sticky top-14 z-40 bg-[#0A1428]/95 backdrop-blur border-b border-white/[0.06]">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6">
+      <div className="sticky top-14 z-40 bg-black/95 backdrop-blur border-b border-white/[0.06]">
+        <div className="w-full md:max-w-[60vw] mx-auto px-4 md:px-6">
           <div className="flex gap-0 overflow-x-auto scrollbar-hide">
             {TABS.map((tab) => {
               const isActive = activeTab === tab;
@@ -369,7 +387,7 @@ export default function GeneratedPortalPage() {
       </div>
 
       {/* ── Tab content ───────────────────────────────────────────────────── */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-5 pb-16">
+      <div className="w-full md:max-w-[60vw] mx-auto px-4 md:px-6 py-5 pb-16">
         {activeTab === 'Overview' && (
           <OverviewTab data={data} accent={accent} />
         )}
@@ -400,6 +418,7 @@ export default function GeneratedPortalPage() {
             email={identity.email}
             location={identity.location}
             initials={initials}
+            niche={identity.niche}
           />
         )}
         {activeTab === 'Client Portal' && (

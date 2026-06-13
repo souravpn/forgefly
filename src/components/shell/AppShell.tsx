@@ -17,7 +17,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <BusinessBand />
         <DesktopTabNav />
         <main className="flex-1 overflow-y-auto pb-16 md:pb-0">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 md:py-6">
+          <div className="w-full md:max-w-[60vw] mx-auto px-4 md:px-6 py-4 md:py-6">
             {children}
           </div>
         </main>

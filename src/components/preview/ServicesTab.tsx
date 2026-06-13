@@ -8,6 +8,22 @@ interface Service {
   deliverables?: string[];
 }
 
+function renderValue(value: string | undefined) {
+  if (!value) return null;
+  if (value.startsWith('[estimated] ')) {
+    const actual = value.replace('[estimated] ', '');
+    return (
+      <span>
+        {actual}
+        <span style={{ fontSize: 10, color: 'rgba(107,114,128,1)', marginLeft: 5, fontStyle: 'italic' }}>
+          estimated
+        </span>
+      </span>
+    );
+  }
+  return <>{value}</>;
+}
+
 interface ServicesTabProps {
   services: Service[];
   accentColor: string;
@@ -46,7 +62,7 @@ export default function ServicesTab({ services, accentColor }: ServicesTabProps)
                 </span>
               )}
             </div>
-            <p className="text-base font-[500] text-white mb-2">{svc.price}</p>
+            <p className="text-base font-[500] text-white mb-2">{renderValue(svc.price)}</p>
             {svc.description && (
               <p className="text-[12px] text-gray-400 leading-[1.6] mb-3 line-clamp-2">{svc.description}</p>
             )}

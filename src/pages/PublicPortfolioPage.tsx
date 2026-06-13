@@ -76,11 +76,23 @@ export default function PublicPortfolioPage() {
   useEffect(() => {
     if (!slug) return
     ;(async () => {
-      // Join businesses → profiles via user_id to match by username
+      // Step 1: resolve username → user_id via profiles
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('user_id')
+        .eq('username', slug)
+        .maybeSingle()
+
+      if (profileError || !profile) {
+        setNotFound(true)
+        return
+      }
+
+      // Step 2: fetch the active business for that user
       const { data, error } = await supabase
         .from('businesses')
-        .select('id, name, extracted_data, profiles!inner(username)')
-        .eq('profiles.username', slug)
+        .select('id, name, extracted_data')
+        .eq('user_id', profile.user_id)
         .eq('status', 'active')
         .maybeSingle()
 
@@ -184,7 +196,7 @@ export default function PublicPortfolioPage() {
       </header>
 
       {/* Services grid */}
-      <main className="max-w-4xl mx-auto px-6 py-12">
+      <main className="w-full md:max-w-[60vw] mx-auto px-4 md:px-6 py-12">
         {services.length > 0 ? (
           <>
             <h2 className="text-xl font-semibold mb-6">Services</h2>

@@ -1,7 +1,8 @@
-import { Bell, LogOut, Settings, ExternalLink } from 'lucide-react'
+import { Bell, LogOut, Settings, ExternalLink, Sun, Moon } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useAppNavigation } from '@/hooks/useAppNavigation'
 import { useNudges } from '@/hooks/useNudges'
+import { useTheme } from '@/contexts/ThemeContext'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import {
@@ -22,6 +23,7 @@ export function ForgeflyBand() {
   const { user, profile, signOut } = useAuth()
   const { navigateTo } = useAppNavigation()
   const { nudges, unreadCount, markRead, markAllRead } = useNudges()
+  const { isDark, toggleTheme } = useTheme()
 
   const displayName = profile?.username || user?.user_metadata?.name || user?.email || ''
   const avatarUrl: string | undefined =
@@ -34,11 +36,24 @@ export function ForgeflyBand() {
   }
 
   return (
-    <div className="h-8 flex items-center justify-between px-4 bg-muted/40 border-b shrink-0">
-      <span className="text-sm font-semibold tracking-tight text-foreground/80 select-none">
-        Forgefly
+    <div className="bg-muted/40 border-b shrink-0">
+      <div className="w-full md:max-w-[60vw] mx-auto px-4 md:px-6 h-10 flex items-center justify-between">
+      <span className="text-base font-semibold tracking-tight select-none">
+        <span className="text-foreground/80">Forge</span><span className="text-emerald-500 dark:text-emerald-400">fly</span>
       </span>
       <div className="flex items-center gap-0.5">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-6 w-6"
+          onClick={toggleTheme}
+          aria-label="Toggle theme"
+        >
+          {isDark
+            ? <Sun className="h-3.5 w-3.5" />
+            : <Moon className="h-3.5 w-3.5" />
+          }
+        </Button>
         <Popover>
           <PopoverTrigger asChild>
             <Button
@@ -129,6 +144,7 @@ export function ForgeflyBand() {
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+      </div>
       </div>
     </div>
   )
