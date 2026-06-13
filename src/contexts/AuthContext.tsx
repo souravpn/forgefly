@@ -148,9 +148,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signUpWithUsername = async (username: string, password: string) => {
     try {
       const email = `${username}@miaoda.com`;
+      const pendingToken = localStorage.getItem('pending_portal_token');
+      const callbackUrl = new URL(`${window.location.origin}/auth/callback`);
+      if (pendingToken) callbackUrl.searchParams.set('pending_token', pendingToken);
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
+        options: { emailRedirectTo: callbackUrl.toString() },
       });
 
       if (error) throw error;
@@ -191,7 +195,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signUpWithEmail = async (email: string, password: string) => {
     try {
-      const { data, error } = await supabase.auth.signUp({ email, password });
+      const pendingToken = localStorage.getItem('pending_portal_token');
+      const callbackUrl = new URL(`${window.location.origin}/auth/callback`);
+      if (pendingToken) callbackUrl.searchParams.set('pending_token', pendingToken);
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: { emailRedirectTo: callbackUrl.toString() },
+      });
       if (error) throw error;
 
       if (data.user) {

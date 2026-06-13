@@ -1,22 +1,17 @@
-import { useState, useEffect } from 'react';
-import { useParams, useSearchParams } from 'react-router-dom';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Skeleton } from '@/components/ui/skeleton';
-import { Dialog, DialogContent } from '@/components/ui/dialog';
-import { Textarea } from '@/components/ui/textarea';
-import {
-  Briefcase, FileText, Receipt, CheckCircle2, Clock, AlertCircle,
-  Sparkles, Mail, Phone, ThumbsUp, MessageSquare, DollarSign, Calendar,
-  ArrowRight, PartyPopper, XCircle, Send,
+import {AlertCircle, ArrowRight, 
+  CheckCircle2, 
+  ChevronRight, Clock, Layers, Loader2,Mail,MessageSquare, 
+  PartyPopper, Receipt,Send, 
 } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { useParams, useSearchParams } from 'react-router-dom';
+import { toast } from 'sonner';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Textarea } from '@/components/ui/textarea';
 // @ts-ignore
 import { supabase } from '@/db/supabase';
-import type { Project, Proposal, Invoice, Client } from '@/types/types';
-import { toast } from 'sonner';
 
-// ─── Engagement portal types ──────────────────────────────────────────────────
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 interface Contact {
   id: string
@@ -25,26 +20,21 @@ interface Contact {
   email: string | null
 }
 
-interface EngagementMessage {
-  id: string
-  author: 'client' | 'freelancer'
-  body: string
-  created_at: string
+interface ProposalScope {
+  title?: string
+  introduction?: string
+  scopeOfWork?: string[]
+  deliverables?: string[]
+  pricing?: string
+  timeline?: string
+  nextSteps?: string[]
 }
 
 interface EngagementScope {
-  proposal?: {
-    title?: string
-    introduction?: string
-    scope?: string[]
-    deliverables?: string[]
-    pricing?: string
-    timeline?: string
-    nextSteps?: string[]
-  }
-  messages?: EngagementMessage[]
+  proposal?: ProposalScope
   project_id?: string
   invoice_id?: string
+  kickoffDate?: string
 }
 
 interface Engagement {
@@ -59,116 +49,553 @@ interface Engagement {
   contacts: Contact | null
 }
 
-const ENGAGEMENT_STATUS_LABELS: Record<string, string> = {
-  proposal_sent: 'Proposal Sent',
-  active: 'Active',
-  completed: 'Completed',
-  cancelled: 'Cancelled',
+interface Business {
+  id: string
+  name: string
+  extracted_data: {
+    brand?: {
+      primaryColor?: string
+    }
+    identity?: {
+      name?: string
+    }
+  }
 }
 
-// ─── Engagement Portal View ────────────────────────────────────────────────────
+interface DBMessage {
+  id: string
+  engagement_id: string
+  sender_id: string
+  sender_role: 'freelancer' | 'client'
+  body: string
+  created_at: string
+}
+
+interface InvoiceRow {
+  id: string
+  invoice_number: string
+  amount: number
+  status: string
+  payment_status: string
+  due_date: string | null
+  description: string | null
+}
+
+interface ProjectRow {
+  id: string
+  name: string
+  description: string | null
+  status: string
+}
+
+interface Task {
+  id: string
+  title: string
+  description: string | null
+  completed: boolean
+  status?: string
+}
+
+type TabId = 'overview' | 'proposal' | 'invoice' | 'project' | 'messages'
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function initials(name: string): string {
+  return name
+    .split(' ')
+    .map(w => w[0])
+    .slice(0, 2)
+    .join('')
+    .toUpperCase();
+}
+
+function lighten(hex: string, amount = 0.15): string {
+  const c = parseInt(hex.replace('#', ''), 16);
+  const r = Math.min(255, ((c >> 16) & 0xff) + Math.round(255 * amount));
+  const g = Math.min(255, ((c >> 8) & 0xff) + Math.round(255 * amount));
+  const b = Math.min(255, (c & 0xff) + Math.round(255 * amount));
+  return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+}
+
+function hexToRgb(hex: string): string {
+  const c = parseInt(hex.replace('#', ''), 16);
+  return `${(c >> 16) & 0xff}, ${(c >> 8) & 0xff}, ${c & 0xff}`;
+}
+
+// ─── Auth Gate ────────────────────────────────────────────────────────────────
+
+function AuthGate({
+  engagement,
+  business,
+  accent,
+  token,
+  onAuthed,
+}: {
+  engagement: Engagement
+  business: Business
+  accent: string
+  token: string
+  onAuthed: () => void
+}) {
+  const [email, setEmail] = useState('');
+  const [sending, setSending] = useState(false);
+  const [sent, setSent] = useState(false);
+
+  const businessName = business.extracted_data?.identity?.name || business.name;
+  const clientName = engagement.contacts?.name || 'Client';
+
+  async function handleMagicLink(e: React.FormEvent) {
+    e.preventDefault();
+    if (!email.trim()) return;
+    setSending(true);
+    const { error } = await supabase.auth.signInWithOtp({
+      email: email.trim(),
+      options: {
+        emailRedirectTo: `${window.location.origin}/portal/${token}`,
+      },
+    });
+    if (error) {
+      toast.error(error.message);
+    } else {
+      setSent(true);
+    }
+    setSending(false);
+  }
+
+  async function handleGoogle() {
+    await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: `${window.location.origin}/portal/${token}`,
+      },
+    });
+  }
+
+  return (
+    <div
+      className="min-h-screen flex items-center justify-center p-4"
+      style={{ background: '#111111' }}
+    >
+      <div
+        className="w-full max-w-sm rounded-2xl p-8 border"
+        style={{
+          background: '#1a1a1a',
+          borderColor: `rgba(${hexToRgb(accent)}, 0.2)`,
+        }}
+      >
+        {/* Business avatar */}
+        <div className="flex flex-col items-center mb-8">
+          <div
+            className="w-16 h-16 rounded-2xl flex items-center justify-center text-xl font-bold text-white mb-3"
+            style={{ background: accent }}
+          >
+            {initials(businessName)}
+          </div>
+          <h1 className="text-white font-semibold text-lg">{businessName}</h1>
+          <p className="text-sm mt-1" style={{ color: '#888' }}>
+            {engagement.service_name}
+          </p>
+        </div>
+
+        <p className="text-center text-white font-medium mb-1">
+          You've been invited to a client portal
+        </p>
+        <p className="text-center text-sm mb-6" style={{ color: '#888' }}>
+          Hi {clientName} — sign in to access your portal
+        </p>
+
+        {sent ? (
+          <div
+            className="rounded-xl p-4 text-center text-sm"
+            style={{
+              background: `rgba(${hexToRgb(accent)}, 0.1)`,
+              color: accent,
+            }}
+          >
+            <CheckCircle2 className="w-5 h-5 mx-auto mb-2" />
+            Check your email for the magic link
+          </div>
+        ) : (
+          <>
+            <button
+              onClick={handleGoogle}
+              className="w-full flex items-center justify-center gap-3 rounded-xl py-3 mb-4 font-medium text-sm transition-opacity hover:opacity-80"
+              style={{ background: '#2a2a2a', color: '#fff', border: '1px solid #333' }}
+            >
+              <svg width="18" height="18" viewBox="0 0 18 18">
+                <path fill="#4285F4" d="M17.64 9.2a10.34 10.34 0 0 0-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.92c1.7-1.57 2.68-3.88 2.68-6.62Z"/>
+                <path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.92-2.26c-.8.54-1.84.86-3.04.86-2.34 0-4.32-1.58-5.02-3.7H.96v2.34A9 9 0 0 0 9 18Z"/>
+                <path fill="#FBBC05" d="M3.98 10.72A5.41 5.41 0 0 1 3.7 9c0-.6.1-1.18.28-1.72V4.94H.96A9 9 0 0 0 0 9c0 1.45.35 2.82.96 4.06l3.02-2.34Z"/>
+                <path fill="#EA4335" d="M9 3.58c1.32 0 2.5.45 3.44 1.34L14.98 2.4A9 9 0 0 0 0 4.94l3.02 2.34C3.68 5.16 6.16 3.58 9 3.58Z"/>
+              </svg>
+              Sign in with Google
+            </button>
+
+            <div className="flex items-center gap-3 mb-4">
+              <div className="flex-1 h-px" style={{ background: '#333' }} />
+              <span className="text-xs" style={{ color: '#666' }}>or</span>
+              <div className="flex-1 h-px" style={{ background: '#333' }} />
+            </div>
+
+            <form onSubmit={handleMagicLink} className="space-y-3">
+              <input
+                type="email"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                placeholder="your@email.com"
+                className="w-full rounded-xl px-4 py-3 text-sm outline-none transition-all"
+                style={{
+                  background: '#242424',
+                  border: `1px solid #333`,
+                  color: '#fff',
+                }}
+                required
+              />
+              <button
+                type="submit"
+                disabled={sending}
+                className="w-full rounded-xl py-3 font-semibold text-sm flex items-center justify-center gap-2 transition-opacity hover:opacity-90"
+                style={{ background: accent, color: '#fff' }}
+              >
+                {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
+                {sending ? 'Sending…' : 'Send magic link'}
+              </button>
+            </form>
+          </>
+        )}
+
+        <p className="text-center text-xs mt-6" style={{ color: '#555' }}>
+          forgefly.io/portal/{token}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// ─── Access Denied ────────────────────────────────────────────────────────────
+
+function AccessDenied({ accent }: { accent: string }) {
+  return (
+    <div className="min-h-screen flex items-center justify-center p-4" style={{ background: '#111' }}>
+      <div className="max-w-sm w-full text-center p-8 rounded-2xl" style={{ background: '#1a1a1a' }}>
+        <AlertCircle className="w-12 h-12 mx-auto mb-4" style={{ color: '#ef4444' }} />
+        <h2 className="text-white text-lg font-semibold mb-2">Portal not linked to your account</h2>
+        <p className="text-sm" style={{ color: '#888' }}>
+          This portal is linked to a different email address. Please sign in with the email your invitation was sent to.
+        </p>
+        <button
+          onClick={() => supabase.auth.signOut()}
+          className="mt-6 text-sm px-4 py-2 rounded-lg transition-opacity hover:opacity-80"
+          style={{ background: accent, color: '#fff' }}
+        >
+          Sign out and try again
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Main Portal ──────────────────────────────────────────────────────────────
 
 function EngagementPortal({
   engagement,
+  business,
   token,
-  onReload,
 }: {
   engagement: Engagement
+  business: Business
   token: string
-  onReload: () => void
 }) {
-  const [tab, setTab] = useState<'overview' | 'proposal' | 'messages'>('overview')
-  const [actionLoading, setActionLoading] = useState<string | null>(null)
-  const [proposalDecision, setProposalDecision] = useState<'approve' | 'request_changes' | null>(null)
-  const [messageText, setMessageText] = useState('')
-  const [sendingMsg, setSendingMsg] = useState(false)
-  const [messages, setMessages] = useState<EngagementMessage[]>(engagement.scope.messages ?? [])
+  const [searchParams] = useSearchParams();
+  const [tab, setTab] = useState<TabId>('overview');
+  const [proposalDecision, setProposalDecision] = useState<'approve' | 'request_changes' | null>(null);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [changesText, setChangesText] = useState('');
+  const [messages, setMessages] = useState<DBMessage[]>([]);
+  const [msgLoading, setMsgLoading] = useState(false);
+  const [msgText, setMsgText] = useState('');
+  const [sendingMsg, setSendingMsg] = useState(false);
+  const [invoice, setInvoice] = useState<InvoiceRow | null>(null);
+  const [invoiceLoading, setInvoiceLoading] = useState(false);
+  const [project, setProject] = useState<ProjectRow | null>(null);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [projectLoading, setProjectLoading] = useState(false);
+  const [currentUser, setCurrentUser] = useState<{ id: string; email?: string } | null>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const contact = engagement.contacts
-  const proposal = engagement.scope.proposal
+  const accent = business.extracted_data?.brand?.primaryColor || '#10b981';
+  const businessName = business.extracted_data?.identity?.name || business.name;
+  const contact = engagement.contacts;
+  const proposal = engagement.scope?.proposal;
 
-  async function handleProposalAction(action: 'approve' | 'request_changes') {
-    setActionLoading(action)
+  // Derive current user
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }: { data: { user: { id: string; email?: string } | null } }) => {
+      if (data.user) setCurrentUser({ id: data.user.id, email: data.user.email });
+    });
+  }, []);
+
+  // Handle payment return
+  useEffect(() => {
+    const payment = searchParams.get('payment');
+    const sessionId = searchParams.get('session_id');
+    if (payment === 'success') {
+      toast.success('Payment successful! Thank you.');
+      if (sessionId) {
+        supabase.functions.invoke('verify-stripe-payment', { body: { sessionId } });
+      }
+    }
+    if (payment === 'cancelled') toast.info('Payment cancelled.');
+  }, [searchParams]);
+
+  // Load invoice on mount or tab switch
+  useEffect(() => {
+    const invoiceId = engagement.scope?.invoice_id;
+    if (!invoiceId) return;
+    setInvoiceLoading(true);
+    supabase
+      .from('invoices')
+      .select('id, invoice_number, amount, status, payment_status, due_date, description')
+      .eq('id', invoiceId)
+      .maybeSingle()
+      .then(({ data }: { data: InvoiceRow | null }) => {
+        setInvoice(data);
+        setInvoiceLoading(false);
+      });
+  }, [engagement.scope?.invoice_id]);
+
+  // Load project + tasks
+  useEffect(() => {
+    const projectId = engagement.scope?.project_id;
+    if (!projectId) return;
+    setProjectLoading(true);
+    Promise.all([
+      supabase.from('projects').select('id, name, description, status').eq('id', projectId).maybeSingle(),
+      supabase.from('tasks').select('id, title, description, completed').eq('project_id', projectId).order('created_at'),
+    ]).then(([{ data: proj }, { data: taskData }]: [{ data: ProjectRow | null }, { data: Task[] | null }]) => {
+      setProject(proj);
+      setTasks(taskData || []);
+      setProjectLoading(false);
+    });
+  }, [engagement.scope?.project_id]);
+
+  // Load messages + realtime
+  useEffect(() => {
+    setMsgLoading(true);
+    supabase
+      .from('messages')
+      .select('*')
+      .eq('engagement_id', engagement.id)
+      .order('created_at', { ascending: true })
+      .then(({ data }: { data: DBMessage[] | null }) => {
+        setMessages(data || []);
+        setMsgLoading(false);
+      });
+
+    const channel = supabase
+      .channel(`messages:${engagement.id}`)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'messages', filter: `engagement_id=eq.${engagement.id}` },
+        (payload: { new: DBMessage }) => {
+          setMessages(prev => [...prev, payload.new]);
+        }
+      )
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [engagement.id]);
+
+  // Scroll to bottom of messages
+  useEffect(() => {
+    if (tab === 'messages') {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [messages, tab]);
+
+  async function handleApproveProposal() {
+    setActionLoading('approve');
     try {
-      // Reuse the existing edge function that takes token + action
-      const { data, error } = await supabase.functions.invoke('portal-approve-proposal', {
-        body: { token, action, engagementId: engagement.id },
-      })
-      if (error) throw error
-      if (data?.error) throw new Error(data.error)
-      setProposalDecision(action)
-    } catch (err: any) {
-      toast.error(err.message || 'Failed to update proposal')
+      const { error } = await supabase
+        .from('engagements')
+        .update({ status: 'active' })
+        .eq('id', engagement.id);
+      if (error) throw error;
+      setProposalDecision('approve');
+    } catch (err: unknown) {
+      toast.error((err as Error).message || 'Failed to approve proposal');
     } finally {
-      setActionLoading(null)
+      setActionLoading(null);
+    }
+  }
+
+  async function handleRequestChanges() {
+    if (!changesText.trim()) return;
+    setActionLoading('request_changes');
+    try {
+      if (currentUser?.id) {
+        await supabase.from('messages').insert({
+          engagement_id: engagement.id,
+          sender_id: currentUser.id,
+          sender_role: 'client',
+          body: `[Proposal feedback] ${changesText.trim()}`,
+        });
+      }
+      setProposalDecision('request_changes');
+      setChangesText('');
+    } catch (err: unknown) {
+      toast.error((err as Error).message || 'Failed to send feedback');
+    } finally {
+      setActionLoading(null);
     }
   }
 
   async function handleSendMessage() {
-    if (!messageText.trim()) return
-    setSendingMsg(true)
-    const newMsg: EngagementMessage = {
-      id: crypto.randomUUID(),
-      author: 'client',
-      body: messageText.trim(),
-      created_at: new Date().toISOString(),
-    }
-    const updated = [...messages, newMsg]
+    if (!msgText.trim() || !currentUser?.id) return;
+    setSendingMsg(true);
+    const body = msgText.trim();
+    setMsgText('');
     try {
-      const { error } = await supabase
-        .from('engagements')
-        .update({ scope: { ...engagement.scope, messages: updated } })
-        .eq('portal_token', token)
-      if (error) throw error
-      setMessages(updated)
-      setMessageText('')
-    } catch {
-      toast.error('Failed to send message. Try again.')
+      const { error } = await supabase.from('messages').insert({
+        engagement_id: engagement.id,
+        sender_id: currentUser.id,
+        sender_role: 'client',
+        body,
+      });
+      if (error) throw error;
+    } catch (err: unknown) {
+      toast.error('Failed to send message');
+      setMsgText(body);
     } finally {
-      setSendingMsg(false)
+      setSendingMsg(false);
     }
   }
 
-  const tabs = [
-    { id: 'overview' as const, label: 'Overview' },
-    { id: 'proposal' as const, label: 'Proposal' },
-    { id: 'messages' as const, label: 'Messages', badge: messages.filter(m => m.author === 'freelancer').length || undefined },
-  ]
+  async function handlePayInvoice() {
+    if (!invoice) return;
+    setActionLoading('pay');
+    try {
+      const { data, error } = await supabase.functions.invoke('create-invoice-checkout', {
+        body: { invoiceId: invoice.id, portalToken: token },
+      });
+      if (error) throw error;
+      if (data?.url) window.location.href = data.url;
+      else throw new Error('No checkout URL returned');
+    } catch (err: unknown) {
+      toast.error((err as Error).message || 'Failed to initiate payment');
+      setActionLoading(null);
+    }
+  }
+
+  const tabs: { id: TabId; label: string; badge?: number }[] = [
+    { id: 'overview', label: 'Overview' },
+    { id: 'proposal', label: 'Proposal' },
+    { id: 'invoice', label: 'Invoice' },
+    { id: 'project', label: 'Project' },
+    {
+      id: 'messages',
+      label: 'Messages',
+      badge: messages.filter(m => m.sender_role === 'freelancer').length || undefined,
+    },
+  ];
+
+  const statusMap: Record<string, string> = {
+    proposal_sent: 'Proposal Sent',
+    active: 'Active',
+    completed: 'Completed',
+    cancelled: 'Cancelled',
+  };
+
+  const timelineItems = [
+    {
+      icon: <CheckCircle2 className="w-4 h-4" />,
+      label: 'Request submitted',
+      detail: new Date(engagement.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+      done: true,
+    },
+    {
+      icon: <ArrowRight className="w-4 h-4" />,
+      label: 'Proposal sent',
+      detail: engagement.status !== 'proposal_sent' && engagement.status !== 'active' && engagement.status !== 'completed' ? 'Pending' : 'Sent',
+      done: engagement.status !== 'proposal_sent' || !!proposal,
+    },
+    {
+      icon: <Receipt className="w-4 h-4" />,
+      label: 'Payment',
+      detail: invoice?.payment_status === 'paid' ? 'Paid' : 'Pending',
+      done: invoice?.payment_status === 'paid',
+    },
+    {
+      icon: <Layers className="w-4 h-4" />,
+      label: 'Kick-off',
+      detail: engagement.scope?.kickoffDate
+        ? new Date(engagement.scope.kickoffDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+        : proposal?.timeline
+        ? `Est. ${proposal.timeline}`
+        : 'TBD',
+      done: engagement.status === 'active' || engagement.status === 'completed',
+    },
+  ];
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-background to-muted/20">
-      {/* Header */}
-      <div className="border-b bg-card/50 backdrop-blur-sm sticky top-0 z-10">
-        <div className="container mx-auto px-4 py-5">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <h1 className="text-2xl font-bold flex items-center gap-2">
-                <Sparkles className="w-6 h-6 text-emerald-500" />
-                Client Portal
-              </h1>
-              <p className="text-sm text-muted-foreground mt-0.5">
-                Welcome{contact ? `, ${contact.name}` : ''} — {engagement.service_name ?? 'Your Engagement'}
-              </p>
-            </div>
-            <Badge variant="outline" className="shrink-0">
-              {ENGAGEMENT_STATUS_LABELS[engagement.status] ?? engagement.status}
-            </Badge>
+    <div className="min-h-screen" style={{ background: '#111111', color: '#e5e5e5' }}>
+
+      {/* Sticky Header */}
+      <header
+        className="sticky top-0 z-30 border-b"
+        style={{ background: '#1a1a1a', borderColor: '#2a2a2a' }}
+      >
+        <div className="max-w-3xl mx-auto px-4 py-3 flex items-center gap-3">
+          {/* Freelancer avatar */}
+          <div
+            className="w-9 h-9 rounded-xl flex items-center justify-center text-sm font-bold text-white shrink-0"
+            style={{ background: accent }}
+          >
+            {initials(businessName)}
           </div>
-          {/* Tabs */}
-          <div className="flex gap-1 mt-4">
+          <div className="flex-1 min-w-0">
+            <div className="font-semibold text-white leading-tight truncate">{businessName}</div>
+            <div className="text-xs truncate" style={{ color: '#888' }}>
+              {engagement.service_name}
+              {contact?.company ? ` · ${contact.company}` : ''}
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="text-xs hidden sm:block" style={{ color: '#555' }}>
+              Powered by Forgefly
+            </span>
+            {contact && (
+              <div
+                className="w-9 h-9 rounded-xl flex items-center justify-center text-sm font-bold"
+                style={{ background: '#2a2a2a', color: '#aaa' }}
+                title={contact.name}
+              >
+                {initials(contact.name)}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Tab bar */}
+        <div className="max-w-3xl mx-auto px-4">
+          <div className="flex gap-1 overflow-x-auto scrollbar-none pb-px">
             {tabs.map(t => (
               <button
                 key={t.id}
                 onClick={() => setTab(t.id)}
-                className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors relative ${
-                  tab === t.id
-                    ? 'bg-primary text-primary-foreground'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-muted'
-                }`}
+                className="relative shrink-0 px-3 py-2.5 text-sm font-medium transition-colors"
+                style={{
+                  color: tab === t.id ? accent : '#888',
+                  borderBottom: tab === t.id ? `2px solid ${accent}` : '2px solid transparent',
+                  background: 'transparent',
+                }}
               >
                 {t.label}
                 {t.badge ? (
-                  <span className="ml-1.5 bg-emerald-500 text-white text-[10px] rounded-full px-1.5 py-0.5">
+                  <span
+                    className="ml-1.5 text-[10px] rounded-full px-1.5 py-0.5 font-semibold"
+                    style={{ background: accent, color: '#fff' }}
+                  >
                     {t.badge}
                   </span>
                 ) : null}
@@ -176,137 +603,257 @@ function EngagementPortal({
             ))}
           </div>
         </div>
-      </div>
+      </header>
 
-      <div className="w-full md:max-w-[60vw] mx-auto px-4 md:px-6 py-8 space-y-4">
+      <div className="max-w-3xl mx-auto px-4 py-6 space-y-4">
 
-        {/* ── Overview tab ── */}
+        {/* ── Overview Tab ── */}
         {tab === 'overview' && (
           <div className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Engagement Summary</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3 text-sm">
-                {engagement.service_name && (
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Service</span>
-                    <span className="font-medium">{engagement.service_name}</span>
+            {/* Action banner */}
+            {engagement.status === 'proposal_sent' && (
+              <button
+                onClick={() => setTab('proposal')}
+                className="w-full flex items-center justify-between p-4 rounded-xl text-left transition-opacity hover:opacity-90"
+                style={{ background: `rgba(${hexToRgb(accent)}, 0.12)`, border: `1px solid rgba(${hexToRgb(accent)}, 0.3)` }}
+              >
+                <div className="flex items-center gap-3">
+                  <div
+                    className="w-8 h-8 rounded-lg flex items-center justify-center"
+                    style={{ background: accent }}
+                  >
+                    <ArrowRight className="w-4 h-4 text-white" />
                   </div>
-                )}
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Status</span>
-                  <span className="font-medium">{ENGAGEMENT_STATUS_LABELS[engagement.status]}</span>
+                  <div>
+                    <div className="font-semibold text-sm" style={{ color: accent }}>
+                      Proposal ready for review
+                    </div>
+                    <div className="text-xs" style={{ color: '#888' }}>
+                      Click to view and approve
+                    </div>
+                  </div>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Started</span>
-                  <span className="font-medium">{new Date(engagement.created_at).toLocaleDateString()}</span>
-                </div>
-                {proposal?.pricing && (
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Investment</span>
-                    <span className="font-semibold text-emerald-600">{proposal.pricing}</span>
-                  </div>
-                )}
-                {proposal?.timeline && (
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Timeline</span>
-                    <span className="font-medium">{proposal.timeline}</span>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {proposal?.scope && proposal.scope.length > 0 && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">Scope of Work</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <ul className="space-y-2">
-                    {proposal.scope.map((item, i) => (
-                      <li key={i} className="flex items-start gap-2 text-sm">
-                        <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
-                        {item}
-                      </li>
-                    ))}
-                  </ul>
-                </CardContent>
-              </Card>
+                <ChevronRight className="w-4 h-4" style={{ color: accent }} />
+              </button>
             )}
+
+            {/* Engagement info */}
+            <div className="rounded-2xl p-5" style={{ background: '#1a1a1a' }}>
+              <div className="flex items-center justify-between mb-4">
+                <div className="text-sm font-semibold text-white">
+                  {engagement.service_name || 'Engagement'}
+                </div>
+                <span
+                  className="text-xs px-2.5 py-1 rounded-full font-medium"
+                  style={{
+                    background: `rgba(${hexToRgb(accent)}, 0.12)`,
+                    color: accent,
+                  }}
+                >
+                  {statusMap[engagement.status] || engagement.status}
+                </span>
+              </div>
+              {proposal?.pricing && (
+                <div className="text-3xl font-bold mb-1" style={{ color: accent }}>
+                  {proposal.pricing.startsWith('$') ? proposal.pricing : `$${proposal.pricing}`}
+                </div>
+              )}
+              {proposal?.timeline && (
+                <div className="text-xs" style={{ color: '#888' }}>
+                  Timeline: {proposal.timeline}
+                </div>
+              )}
+            </div>
+
+            {/* Timeline */}
+            <div className="rounded-2xl p-5 space-y-4" style={{ background: '#1a1a1a' }}>
+              <div className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#666' }}>
+                Timeline
+              </div>
+              {timelineItems.map((item, i) => (
+                <div key={i} className="flex items-start gap-3">
+                  <div
+                    className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
+                    style={{
+                      background: item.done ? `rgba(${hexToRgb(accent)}, 0.15)` : '#242424',
+                      color: item.done ? accent : '#555',
+                    }}
+                  >
+                    {item.icon}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium" style={{ color: item.done ? '#e5e5e5' : '#666' }}>
+                      {item.label}
+                    </div>
+                    <div className="text-xs" style={{ color: '#555' }}>
+                      {item.detail}
+                    </div>
+                  </div>
+                  {item.done && (
+                    <CheckCircle2 className="w-4 h-4 shrink-0 mt-1" style={{ color: accent }} />
+                  )}
+                </div>
+              ))}
+            </div>
           </div>
         )}
 
-        {/* ── Proposal tab ── */}
+        {/* ── Proposal Tab ── */}
         {tab === 'proposal' && (
           <div className="space-y-4">
             {!proposal ? (
-              <p className="text-sm text-muted-foreground text-center py-8">No proposal attached yet.</p>
+              <div className="text-center py-16" style={{ color: '#555' }}>
+                <ArrowRight className="w-8 h-8 mx-auto mb-3 opacity-40" />
+                <p className="text-sm">No proposal attached yet.</p>
+              </div>
             ) : (
               <>
-                {proposal.title && <h2 className="text-xl font-bold">{proposal.title}</h2>}
-                {proposal.introduction && (
-                  <Card>
-                    <CardContent className="pt-5 text-sm leading-relaxed">{proposal.introduction}</CardContent>
-                  </Card>
-                )}
-                {proposal.deliverables && proposal.deliverables.length > 0 && (
-                  <Card>
-                    <CardHeader><CardTitle className="text-base">Deliverables</CardTitle></CardHeader>
-                    <CardContent>
-                      <ul className="space-y-1.5">
-                        {proposal.deliverables.map((d, i) => (
-                          <li key={i} className="text-sm flex items-start gap-2">
-                            <ArrowRight className="w-3.5 h-3.5 shrink-0 mt-0.5 text-muted-foreground" /> {d}
-                          </li>
-                        ))}
-                      </ul>
-                    </CardContent>
-                  </Card>
-                )}
-                {proposal.nextSteps && proposal.nextSteps.length > 0 && (
-                  <Card>
-                    <CardHeader><CardTitle className="text-base">Next Steps</CardTitle></CardHeader>
-                    <CardContent>
-                      <ol className="space-y-1.5 list-decimal list-inside">
-                        {proposal.nextSteps.map((s, i) => (
-                          <li key={i} className="text-sm">{s}</li>
-                        ))}
-                      </ol>
-                    </CardContent>
-                  </Card>
+                {proposal.title && (
+                  <h2 className="text-xl font-bold text-white">{proposal.title}</h2>
                 )}
 
+                {proposal.introduction && (
+                  <div className="rounded-2xl p-5" style={{ background: '#1a1a1a' }}>
+                    <p className="text-sm leading-relaxed" style={{ color: '#ccc' }}>
+                      {proposal.introduction}
+                    </p>
+                  </div>
+                )}
+
+                {proposal.scopeOfWork && proposal.scopeOfWork.length > 0 && (
+                  <div className="rounded-2xl p-5" style={{ background: '#1a1a1a' }}>
+                    <div className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: '#666' }}>
+                      Scope of Work
+                    </div>
+                    <ul className="space-y-2.5">
+                      {proposal.scopeOfWork.map((item, i) => (
+                        <li key={i} className="flex items-start gap-2.5 text-sm" style={{ color: '#ccc' }}>
+                          <div
+                            className="w-5 h-5 rounded-md flex items-center justify-center shrink-0 mt-0.5"
+                            style={{ background: `rgba(${hexToRgb(accent)}, 0.15)`, color: accent }}
+                          >
+                            <CheckCircle2 className="w-3 h-3" />
+                          </div>
+                          {item}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {proposal.deliverables && proposal.deliverables.length > 0 && (
+                  <div className="rounded-2xl p-5" style={{ background: '#1a1a1a' }}>
+                    <div className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: '#666' }}>
+                      Deliverables
+                    </div>
+                    <ul className="space-y-2">
+                      {proposal.deliverables.map((d, i) => (
+                        <li key={i} className="flex items-start gap-2 text-sm" style={{ color: '#ccc' }}>
+                          <ChevronRight className="w-3.5 h-3.5 shrink-0 mt-0.5" style={{ color: '#555' }} />
+                          {d}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {(proposal.pricing || proposal.timeline) && (
+                  <div className="rounded-2xl p-5 grid grid-cols-2 gap-4" style={{ background: '#1a1a1a' }}>
+                    {proposal.pricing && (
+                      <div>
+                        <div className="text-xs" style={{ color: '#666' }}>Investment</div>
+                        <div className="text-xl font-bold mt-1" style={{ color: accent }}>
+                          {proposal.pricing.startsWith('$') ? proposal.pricing : `$${proposal.pricing}`}
+                        </div>
+                      </div>
+                    )}
+                    {proposal.timeline && (
+                      <div>
+                        <div className="text-xs" style={{ color: '#666' }}>Timeline</div>
+                        <div className="text-sm font-semibold mt-1 text-white">{proposal.timeline}</div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {proposal.nextSteps && proposal.nextSteps.length > 0 && (
+                  <div className="rounded-2xl p-5" style={{ background: '#1a1a1a' }}>
+                    <div className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: '#666' }}>
+                      Next Steps
+                    </div>
+                    <ol className="space-y-2">
+                      {proposal.nextSteps.map((s, i) => (
+                        <li key={i} className="flex items-start gap-2.5 text-sm" style={{ color: '#ccc' }}>
+                          <span
+                            className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold shrink-0"
+                            style={{ background: `rgba(${hexToRgb(accent)}, 0.15)`, color: accent }}
+                          >
+                            {i + 1}
+                          </span>
+                          {s}
+                        </li>
+                      ))}
+                    </ol>
+                  </div>
+                )}
+
+                {/* Actions */}
                 {engagement.status === 'proposal_sent' && !proposalDecision && (
-                  <div className="flex gap-3 pt-2">
-                    <Button
-                      className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white"
+                  <div className="space-y-3 pt-2">
+                    <button
                       disabled={!!actionLoading}
-                      onClick={() => handleProposalAction('approve')}
+                      onClick={handleApproveProposal}
+                      className="w-full py-3.5 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 transition-opacity hover:opacity-90"
+                      style={{ background: accent, color: '#fff' }}
                     >
-                      <ThumbsUp className="w-4 h-4 mr-2" />
+                      {actionLoading === 'approve'
+                        ? <Loader2 className="w-4 h-4 animate-spin" />
+                        : <CheckCircle2 className="w-4 h-4" />
+                      }
                       {actionLoading === 'approve' ? 'Approving…' : 'Approve Proposal'}
-                    </Button>
-                    <Button
-                      variant="outline"
-                      className="flex-1"
-                      disabled={!!actionLoading}
-                      onClick={() => handleProposalAction('request_changes')}
-                    >
-                      <MessageSquare className="w-4 h-4 mr-2" />
-                      {actionLoading === 'request_changes' ? 'Sending…' : 'Request Changes'}
-                    </Button>
+                    </button>
+
+                    <div className="rounded-xl p-4" style={{ background: '#1a1a1a' }}>
+                      <div className="text-sm font-medium mb-2 text-white">Request changes</div>
+                      <Textarea
+                        value={changesText}
+                        onChange={e => setChangesText(e.target.value)}
+                        placeholder="Describe what you'd like changed…"
+                        className="resize-none text-sm border-0 bg-transparent p-0 focus-visible:ring-0 focus-visible:ring-offset-0 text-[#ccc] placeholder:text-[#555]"
+                        rows={3}
+                      />
+                      <button
+                        disabled={!!actionLoading || !changesText.trim()}
+                        onClick={handleRequestChanges}
+                        className="mt-3 px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-opacity hover:opacity-80 disabled:opacity-40"
+                        style={{ background: '#2a2a2a', color: '#ccc', border: '1px solid #333' }}
+                      >
+                        {actionLoading === 'request_changes'
+                          ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          : <MessageSquare className="w-3.5 h-3.5" />
+                        }
+                        Send Feedback
+                      </button>
+                    </div>
                   </div>
                 )}
 
                 {proposalDecision === 'approve' && (
-                  <div className="flex items-center gap-2 text-sm text-emerald-600">
-                    <PartyPopper className="w-4 h-4" /> Proposal approved — thank you!
+                  <div
+                    className="rounded-xl p-4 flex items-center gap-3 text-sm"
+                    style={{ background: `rgba(${hexToRgb(accent)}, 0.1)`, color: accent }}
+                  >
+                    <PartyPopper className="w-5 h-5 shrink-0" />
+                    Proposal approved — thank you! The team has been notified.
                   </div>
                 )}
                 {proposalDecision === 'request_changes' && (
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <MessageSquare className="w-4 h-4" /> Changes requested — the team will follow up.
+                  <div
+                    className="rounded-xl p-4 flex items-center gap-3 text-sm"
+                    style={{ background: '#1a1a1a', color: '#888' }}
+                  >
+                    <MessageSquare className="w-5 h-5 shrink-0" />
+                    Feedback sent — the team will review and follow up.
                   </div>
                 )}
               </>
@@ -314,676 +861,430 @@ function EngagementPortal({
           </div>
         )}
 
-        {/* ── Messages tab ── */}
+        {/* ── Invoice Tab ── */}
+        {tab === 'invoice' && (
+          <div className="space-y-4">
+            {invoiceLoading ? (
+              <div className="space-y-3">
+                <Skeleton className="h-24 w-full rounded-2xl" style={{ background: '#1a1a1a' }} />
+                <Skeleton className="h-12 w-full rounded-2xl" style={{ background: '#1a1a1a' }} />
+              </div>
+            ) : !invoice ? (
+              <div className="text-center py-16" style={{ color: '#555' }}>
+                <Receipt className="w-8 h-8 mx-auto mb-3 opacity-40" />
+                <p className="text-sm">No invoice attached yet.</p>
+              </div>
+            ) : (
+              <>
+                <div className="rounded-2xl p-5" style={{ background: '#1a1a1a' }}>
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#666' }}>
+                      Invoice
+                    </div>
+                    <span
+                      className="text-xs px-2.5 py-1 rounded-full font-medium"
+                      style={{
+                        background: invoice.payment_status === 'paid'
+                          ? `rgba(${hexToRgb(accent)}, 0.12)`
+                          : '#2a2a2a',
+                        color: invoice.payment_status === 'paid' ? accent : '#888',
+                      }}
+                    >
+                      {invoice.payment_status === 'paid' ? 'Paid' : invoice.payment_status === 'overdue' ? 'Overdue' : 'Outstanding'}
+                    </span>
+                  </div>
+                  <div className="text-white font-semibold text-lg mb-1">
+                    #{invoice.invoice_number}
+                  </div>
+                  {invoice.description && (
+                    <div className="text-sm mb-3" style={{ color: '#888' }}>
+                      {invoice.description}
+                    </div>
+                  )}
+                  <div className="text-3xl font-bold" style={{ color: accent }}>
+                    ${Number(invoice.amount).toLocaleString()}
+                  </div>
+                  {invoice.due_date && (
+                    <div className="text-xs mt-1" style={{ color: '#666' }}>
+                      Due {new Date(invoice.due_date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+                    </div>
+                  )}
+                </div>
+
+                {invoice.payment_status !== 'paid' ? (
+                  <button
+                    disabled={actionLoading === 'pay'}
+                    onClick={handlePayInvoice}
+                    className="w-full py-3.5 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 transition-opacity hover:opacity-90"
+                    style={{ background: accent, color: '#fff' }}
+                  >
+                    {actionLoading === 'pay'
+                      ? <Loader2 className="w-4 h-4 animate-spin" />
+                      : <Receipt className="w-4 h-4" />
+                    }
+                    {actionLoading === 'pay' ? 'Redirecting…' : 'Pay with Stripe →'}
+                  </button>
+                ) : (
+                  <div
+                    className="rounded-xl p-4 flex items-center justify-center gap-3 text-sm font-semibold"
+                    style={{ background: `rgba(${hexToRgb(accent)}, 0.1)`, color: accent }}
+                  >
+                    <CheckCircle2 className="w-5 h-5" />
+                    Payment received — thank you!
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
+
+        {/* ── Project Tab ── */}
+        {tab === 'project' && (
+          <div className="space-y-4">
+            {projectLoading ? (
+              <Skeleton className="h-48 w-full rounded-2xl" style={{ background: '#1a1a1a' }} />
+            ) : !project ? (
+              <div className="text-center py-16" style={{ color: '#555' }}>
+                <Layers className="w-8 h-8 mx-auto mb-3 opacity-40" />
+                <p className="text-sm">Project hasn't been set up yet.</p>
+              </div>
+            ) : (
+              <>
+                <div className="rounded-2xl p-5" style={{ background: '#1a1a1a' }}>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="font-semibold text-white">{project.name}</div>
+                      {project.description && (
+                        <div className="text-sm mt-1" style={{ color: '#888' }}>
+                          {project.description}
+                        </div>
+                      )}
+                    </div>
+                    <span
+                      className="text-xs px-2.5 py-1 rounded-full font-medium shrink-0"
+                      style={{ background: '#2a2a2a', color: '#888' }}
+                    >
+                      {project.status.replace('_', ' ')}
+                    </span>
+                  </div>
+                </div>
+
+                {tasks.length > 0 && (
+                  <div className="rounded-2xl p-5" style={{ background: '#1a1a1a' }}>
+                    <div className="text-xs font-semibold uppercase tracking-wider mb-4" style={{ color: '#666' }}>
+                      Tasks
+                    </div>
+                    <div className="space-y-2">
+                      {tasks.map(task => (
+                        <div
+                          key={task.id}
+                          className="flex items-start gap-3 p-3 rounded-xl"
+                          style={{ background: '#242424' }}
+                        >
+                          <div
+                            className="w-5 h-5 rounded-md flex items-center justify-center shrink-0 mt-0.5"
+                            style={{
+                              background: task.completed ? `rgba(${hexToRgb(accent)}, 0.15)` : '#333',
+                              color: task.completed ? accent : '#555',
+                            }}
+                          >
+                            {task.completed ? <CheckCircle2 className="w-3 h-3" /> : <Clock className="w-3 h-3" />}
+                          </div>
+                          <div>
+                            <div className="text-sm" style={{ color: task.completed ? '#777' : '#ccc', textDecoration: task.completed ? 'line-through' : 'none' }}>
+                              {task.title}
+                            </div>
+                            {task.description && (
+                              <div className="text-xs mt-0.5" style={{ color: '#555' }}>
+                                {task.description}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="mt-3 text-xs" style={{ color: '#555' }}>
+                      {tasks.filter(t => t.completed).length} / {tasks.length} complete
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
+
+        {/* ── Messages Tab ── */}
         {tab === 'messages' && (
-          <div className="space-y-3">
-            <div className="space-y-2 max-h-[400px] overflow-y-auto pr-1">
-              {messages.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-8">No messages yet. Start the conversation below.</p>
+          <div className="flex flex-col" style={{ height: 'calc(100vh - 180px)' }}>
+            {/* Message list */}
+            <div className="flex-1 overflow-y-auto space-y-3 pb-4 pr-1">
+              {msgLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="w-5 h-5 animate-spin" style={{ color: '#555' }} />
+                </div>
+              ) : messages.length === 0 ? (
+                <div className="text-center py-16" style={{ color: '#555' }}>
+                  <MessageSquare className="w-8 h-8 mx-auto mb-3 opacity-40" />
+                  <p className="text-sm">
+                    No messages yet. Start the conversation.
+                  </p>
+                </div>
               ) : (
                 messages.map(m => (
                   <div
                     key={m.id}
-                    className={`flex ${m.author === 'client' ? 'justify-end' : 'justify-start'}`}
+                    className={`flex ${m.sender_role === 'client' ? 'justify-end' : 'justify-start'}`}
                   >
-                    <div className={`max-w-[80%] rounded-2xl px-4 py-2.5 text-sm ${
-                      m.author === 'client'
-                        ? 'bg-primary text-primary-foreground'
-                        : 'bg-muted'
-                    }`}>
-                      <p>{m.body}</p>
-                      <p className={`text-[10px] mt-1 ${m.author === 'client' ? 'text-primary-foreground/60' : 'text-muted-foreground'}`}>
-                        {new Date(m.created_at).toLocaleString()}
+                    <div
+                      className="max-w-[78%] rounded-2xl px-4 py-2.5"
+                      style={m.sender_role === 'client'
+                        ? { background: accent, color: '#fff' }
+                        : { background: '#1e1e1e', color: '#e5e5e5', border: '1px solid #2a2a2a' }
+                      }
+                    >
+                      <p className="text-sm">{m.body}</p>
+                      <p
+                        className="text-[10px] mt-1"
+                        style={{ color: m.sender_role === 'client' ? 'rgba(255,255,255,0.55)' : '#555' }}
+                      >
+                        {new Date(m.created_at).toLocaleString('en-US', {
+                          month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
+                        })}
                       </p>
                     </div>
                   </div>
                 ))
               )}
+              <div ref={messagesEndRef} />
             </div>
-            <div className="flex gap-2 pt-2">
+
+            {/* Input */}
+            <div
+              className="flex gap-2 items-end pt-3 border-t"
+              style={{ borderColor: '#2a2a2a' }}
+            >
               <Textarea
-                value={messageText}
-                onChange={e => setMessageText(e.target.value)}
-                placeholder="Type a message…"
-                className="resize-none min-h-[60px]"
+                value={msgText}
+                onChange={e => setMsgText(e.target.value)}
+                placeholder={`Message ${businessName}…`}
+                className="flex-1 resize-none min-h-[44px] max-h-32 text-sm rounded-xl border-0 outline-none focus-visible:ring-0 focus-visible:ring-offset-0"
+                style={{ background: '#1e1e1e', color: '#e5e5e5' }}
+                rows={1}
                 onKeyDown={e => {
-                  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendMessage() }
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSendMessage();
+                  }
                 }}
               />
-              <Button
-                size="icon"
-                className="shrink-0 h-auto"
+              <button
                 onClick={handleSendMessage}
-                disabled={sendingMsg || !messageText.trim()}
+                disabled={sendingMsg || !msgText.trim()}
+                className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition-opacity hover:opacity-80 disabled:opacity-40"
+                style={{ background: accent, color: '#fff' }}
               >
-                <Send className="w-4 h-4" />
-              </Button>
+                {sendingMsg
+                  ? <Loader2 className="w-4 h-4 animate-spin" />
+                  : <Send className="w-4 h-4" />
+                }
+              </button>
             </div>
           </div>
         )}
-
-        <div className="text-center text-xs text-muted-foreground pt-4">
-          Powered by <span className="font-semibold text-emerald-600">Forgefly</span>
-        </div>
       </div>
-    </div>
-  )
-}
-
-const STATUS_LABELS: Record<string, string> = {
-  lead: 'To Do',
-  in_progress: 'In Progress',
-  review: 'In Review',
-  completed: 'Completed',
-  archived: 'Archived',
-  draft: 'Draft',
-  sent: 'Awaiting Response',
-  approved: 'Approved',
-  rejected: 'Rejected',
-  unpaid: 'Unpaid',
-  paid: 'Paid',
-  overdue: 'Overdue',
-};
-
-// ─── Legacy portal (old client_portal_tokens architecture) ────────────────────
-
-function LegacyClientPortal({ token }: { token: string }) {
-  const [searchParams] = useSearchParams();
-  const [client, setClient] = useState<Client | null>(null);
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [proposals, setProposals] = useState<Proposal[]>([]);
-  const [invoices, setInvoices] = useState<Invoice[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [actionLoading, setActionLoading] = useState<string | null>(null);
-  const [proposalDecision, setProposalDecision] = useState<{
-    title: string;
-    action: 'approve' | 'request_changes';
-  } | null>(null);
-
-  useEffect(() => {
-    validateTokenAndLoadData();
-  }, [token]);
-
-  useEffect(() => {
-    const payment = searchParams.get('payment');
-    const sessionId = searchParams.get('session_id');
-    if (payment === 'success') {
-      toast.success('Payment successful! Thank you.');
-      if (sessionId) {
-        supabase.functions.invoke('verify-stripe-payment', {
-          body: { sessionId },
-        }).then(() => {
-          // Reload invoices to reflect paid status
-          if (token) validateTokenAndLoadData();
-        });
-      }
-    }
-    if (payment === 'cancelled') toast.info('Payment cancelled.');
-  }, [searchParams]);
-
-  async function validateTokenAndLoadData() {
-    try {
-      setLoading(true);
-      setError(null);
-
-      const { data: tokenData, error: tokenError } = await supabase
-        .from('client_portal_tokens')
-        .select('client_id, expires_at')
-        .eq('token', token)
-        .single();
-
-      if (tokenError || !tokenData) {
-        setError('Invalid or expired portal link. Please contact your service provider for a new link.');
-        return;
-      }
-
-      if (new Date(tokenData.expires_at) < new Date()) {
-        setError('This portal link has expired. Please contact your service provider for a new link.');
-        return;
-      }
-
-      await supabase
-        .from('client_portal_tokens')
-        .update({ last_accessed_at: new Date().toISOString() })
-        .eq('token', token);
-
-      const { data: clientData, error: clientError } = await supabase
-        .from('clients')
-        .select('*')
-        .eq('id', tokenData.client_id)
-        .single();
-
-      if (clientError || !clientData) {
-        setError('Unable to load client data. Please try again later.');
-        return;
-      }
-
-      setClient(clientData);
-
-      const [projectsData, proposalsData, invoicesData] = await Promise.all([
-        supabase.from('projects').select('*').eq('client_id', tokenData.client_id).order('created_at', { ascending: false }),
-        supabase.from('proposals').select('*').eq('client_id', tokenData.client_id).order('created_at', { ascending: false }),
-        supabase.from('invoices').select('*').eq('client_id', tokenData.client_id).order('created_at', { ascending: false }),
-      ]);
-
-      if (projectsData.data) setProjects(projectsData.data);
-      if (proposalsData.data) setProposals(proposalsData.data);
-      if (invoicesData.data) setInvoices(invoicesData.data);
-    } catch {
-      setError('An unexpected error occurred. Please try again later.');
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function handleProposalAction(proposalId: string, action: 'approve' | 'request_changes') {
-    setActionLoading(proposalId + action);
-    try {
-      const { data, error } = await supabase.functions.invoke('portal-approve-proposal', {
-        body: { token, proposalId, action },
-      });
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
-
-      const proposal = proposals.find(p => p.id === proposalId);
-      setProposals(prev => prev.map(p =>
-        p.id === proposalId ? { ...p, status: action === 'approve' ? 'accepted' : 'rejected' } : p
-      ));
-      setProposalDecision({ title: proposal?.title ?? 'Proposal', action });
-    } catch (err: any) {
-      toast.error(err.message || 'Failed to update proposal');
-    } finally {
-      setActionLoading(null);
-    }
-  }
-
-  async function handlePayInvoice(invoiceId: string) {
-    setActionLoading(invoiceId);
-    try {
-      const { data, error } = await supabase.functions.invoke('portal-create-checkout', {
-        body: { token, invoiceId },
-      });
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
-      if (data?.url) {
-        window.location.href = data.url;
-      } else {
-        throw new Error('No checkout URL returned');
-      }
-    } catch (err: any) {
-      toast.error(err.message || 'Failed to initiate payment');
-      setActionLoading(null);
-    }
-  }
-
-  const getStatusColor = (status: string) => {
-    switch (status?.toLowerCase()) {
-      case 'completed': case 'paid': case 'accepted': return 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20';
-      case 'in_progress': case 'sent': return 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20';
-      case 'overdue': case 'rejected': return 'bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20';
-      default: return 'bg-muted text-muted-foreground border-border';
-    }
-  };
-
-  const getStatusIcon = (status: string) => {
-    switch (status?.toLowerCase()) {
-      case 'completed': case 'paid': case 'accepted': return <CheckCircle2 className="w-3 h-3" />;
-      case 'in_progress': case 'sent': return <Clock className="w-3 h-3" />;
-      default: return <AlertCircle className="w-3 h-3" />;
-    }
-  };
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gradient-to-b from-background to-muted/20">
-        <div className="border-b bg-card/50 backdrop-blur-sm">
-          <div className="container mx-auto px-4 py-6">
-            <Skeleton className="h-10 w-64 mb-2" />
-            <Skeleton className="h-4 w-96" />
-          </div>
-        </div>
-        <div className="container mx-auto px-4 py-8 space-y-4">
-          {[1, 2, 3].map((i) => (
-            <Card key={i}><CardContent className="p-6"><Skeleton className="h-24 w-full" /></CardContent></Card>
-          ))}
-        </div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="min-h-screen bg-gradient-to-b from-background to-muted/20 flex items-center justify-center p-4">
-        <Card className="max-w-md w-full">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-destructive">
-              <AlertCircle className="w-5 h-5" />
-              Access Error
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-muted-foreground mb-4">{error}</p>
-            <Button variant="outline" onClick={() => window.location.href = '/'} className="w-full">
-              Return to Home
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
-  const activeProjects = projects.filter(p => p.status === 'in_progress').length;
-  const pendingProposals = proposals.filter(p => p.status === 'sent').length;
-  const unpaidInvoices = invoices.filter(i => i.payment_status === 'unpaid' || i.payment_status === 'overdue');
-  const totalOwed = unpaidInvoices.reduce((sum, i) => sum + (Number(i.amount) || 0), 0);
-
-  const nextSteps: { label: string; cta: string }[] = [];
-  if (pendingProposals > 0) nextSteps.push({ label: `${pendingProposals} proposal${pendingProposals > 1 ? 's' : ''} awaiting your response`, cta: 'Review below' });
-  if (unpaidInvoices.length > 0) nextSteps.push({ label: `$${totalOwed.toLocaleString()} outstanding across ${unpaidInvoices.length} invoice${unpaidInvoices.length > 1 ? 's' : ''}`, cta: 'Pay below' });
-
-  return (
-    <div className="min-h-screen bg-gradient-to-b from-background to-muted/20">
-      {/* Header */}
-      <div className="border-b bg-card/50 backdrop-blur-sm sticky top-0 z-10">
-        <div className="container mx-auto px-4 py-5">
-          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
-            <div>
-              <h1 className="text-2xl font-bold flex items-center gap-2">
-                <Sparkles className="w-6 h-6 text-emerald-500" />
-                Client Portal
-              </h1>
-              <p className="text-sm text-muted-foreground mt-0.5">Welcome back, {client?.name || 'Valued Client'}</p>
-            </div>
-            <p className="text-xl font-bold bg-gradient-to-r from-emerald-500 to-amber-500 bg-clip-text text-transparent">
-              Forgefly
-            </p>
-          </div>
-        </div>
-      </div>
-
-      <div className="container mx-auto px-4 py-8 space-y-6">
-
-        {/* Next Steps — only shown when action needed */}
-        {nextSteps.length > 0 && (
-          <Card className="border-amber-500/40 bg-amber-500/5">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2 text-amber-600 dark:text-amber-400">
-                <ArrowRight className="w-4 h-4" />
-                Action Required
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              {nextSteps.map((step, i) => (
-                <div key={i} className="flex items-center justify-between text-sm">
-                  <span className="text-foreground">{step.label}</span>
-                  <span className="text-amber-600 dark:text-amber-400 font-medium">{step.cta} ↓</span>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Summary Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <Card className="border-emerald-500/20">
-            <CardContent className="p-5">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground mb-1">Active Projects</p>
-                  <p className="text-3xl font-bold">{activeProjects}</p>
-                </div>
-                <div className="w-11 h-11 rounded-full bg-emerald-500/10 flex items-center justify-center">
-                  <Briefcase className="w-5 h-5 text-emerald-500" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card className="border-amber-500/20">
-            <CardContent className="p-5">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground mb-1">Pending Proposals</p>
-                  <p className="text-3xl font-bold">{pendingProposals}</p>
-                </div>
-                <div className="w-11 h-11 rounded-full bg-amber-500/10 flex items-center justify-center">
-                  <FileText className="w-5 h-5 text-amber-500" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card className="border-blue-500/20">
-            <CardContent className="p-5">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground mb-1">Amount Outstanding</p>
-                  <p className="text-3xl font-bold">${totalOwed.toLocaleString()}</p>
-                </div>
-                <div className="w-11 h-11 rounded-full bg-blue-500/10 flex items-center justify-center">
-                  <DollarSign className="w-5 h-5 text-blue-500" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Projects */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Briefcase className="w-4 h-4 text-emerald-500" />
-              Projects
-            </CardTitle>
-            <CardDescription>Your ongoing work</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {projects.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-8">No projects yet</p>
-            ) : (
-              <div className="space-y-3">
-                {projects.map((project) => (
-                  <div key={project.id} className="p-4 rounded-lg bg-muted/50 border border-transparent hover:border-emerald-500/20 transition-colors">
-                    <div className="flex items-start justify-between gap-3 mb-2">
-                      <h4 className="font-semibold">{project.name}</h4>
-                      <Badge variant="outline" className={`shrink-0 flex items-center gap-1 ${getStatusColor(project.status)}`}>
-                        {getStatusIcon(project.status)}
-                        {STATUS_LABELS[project.status] || project.status}
-                      </Badge>
-                    </div>
-                    {project.description && (
-                      <p className="text-sm text-muted-foreground mb-2 line-clamp-2">{project.description}</p>
-                    )}
-                    <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                      {project.deadline && (
-                        <span className="flex items-center gap-1">
-                          <Calendar className="w-3 h-3" />
-                          Due {new Date(project.deadline).toLocaleDateString()}
-                        </span>
-                      )}
-                      {project.value && (
-                        <span className="font-medium text-emerald-600 dark:text-emerald-400">
-                          ${Number(project.value).toLocaleString()}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Proposals */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <FileText className="w-4 h-4 text-amber-500" />
-              Proposals
-            </CardTitle>
-            <CardDescription>Review and respond to proposals</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {proposals.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-8">No proposals yet</p>
-            ) : (
-              <div className="space-y-4">
-                {proposals.map((proposal) => (
-                  <div key={proposal.id} className="p-4 rounded-lg bg-muted/50 border border-transparent hover:border-amber-500/20 transition-colors">
-                    <div className="flex items-start justify-between gap-3 mb-3">
-                      <div>
-                        <h4 className="font-semibold">{proposal.title}</h4>
-                        <p className="text-xs text-muted-foreground mt-0.5">
-                          Sent {new Date(proposal.created_at).toLocaleDateString()}
-                        </p>
-                      </div>
-                      <Badge variant="outline" className={`shrink-0 flex items-center gap-1 ${getStatusColor(proposal.status)}`}>
-                        {getStatusIcon(proposal.status)}
-                        {STATUS_LABELS[proposal.status] || proposal.status}
-                      </Badge>
-                    </div>
-
-                    {proposal.introduction && (
-                      <p className="text-sm text-muted-foreground mb-3 line-clamp-3">{proposal.introduction}</p>
-                    )}
-
-                    <div className="flex flex-wrap gap-3 text-sm mb-4">
-                      {proposal.pricing && (
-                        <span className="flex items-center gap-1 font-semibold text-emerald-600 dark:text-emerald-400">
-                          <DollarSign className="w-3.5 h-3.5" />
-                          ${Number(proposal.pricing).toLocaleString()}
-                        </span>
-                      )}
-                      {proposal.timeline && (
-                        <span className="flex items-center gap-1 text-muted-foreground">
-                          <Clock className="w-3.5 h-3.5" />
-                          {proposal.timeline}
-                        </span>
-                      )}
-                    </div>
-
-                    {proposal.status === 'sent' && (
-                      <div className="flex gap-2 pt-3 border-t border-border">
-                        <Button
-                          size="sm"
-                          className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white"
-                          disabled={actionLoading === proposal.id + 'approve'}
-                          onClick={() => handleProposalAction(proposal.id, 'approve')}
-                        >
-                          <ThumbsUp className="w-3.5 h-3.5 mr-1.5" />
-                          {actionLoading === proposal.id + 'approve' ? 'Approving...' : 'Approve'}
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="flex-1"
-                          disabled={actionLoading === proposal.id + 'request_changes'}
-                          onClick={() => handleProposalAction(proposal.id, 'request_changes')}
-                        >
-                          <MessageSquare className="w-3.5 h-3.5 mr-1.5" />
-                          {actionLoading === proposal.id + 'request_changes' ? 'Sending...' : 'Request Changes'}
-                        </Button>
-                      </div>
-                    )}
-
-                    {proposal.status === 'accepted' && (
-                      <div className="flex items-center gap-2 pt-3 border-t border-border text-sm text-emerald-600 dark:text-emerald-400">
-                        <PartyPopper className="w-4 h-4" />
-                        You approved this proposal
-                      </div>
-                    )}
-
-                    {proposal.status === 'rejected' && (
-                      <div className="flex items-center gap-2 pt-3 border-t border-border text-sm text-muted-foreground">
-                        <MessageSquare className="w-4 h-4" />
-                        Changes requested — the team will follow up
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Invoices */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Receipt className="w-4 h-4 text-blue-500" />
-              Invoices
-            </CardTitle>
-            <CardDescription>Payment information</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {invoices.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-8">No invoices yet</p>
-            ) : (
-              <div className="space-y-3">
-                {invoices.map((invoice) => (
-                  <div key={invoice.id} className="p-4 rounded-lg bg-muted/50 border border-transparent hover:border-blue-500/20 transition-colors">
-                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-3 mb-1">
-                          <h4 className="font-semibold">{invoice.invoice_number}</h4>
-                          <Badge variant="outline" className={`flex items-center gap-1 ${getStatusColor(invoice.payment_status)}`}>
-                            {getStatusIcon(invoice.payment_status)}
-                            {STATUS_LABELS[invoice.payment_status] || invoice.payment_status}
-                          </Badge>
-                        </div>
-                        <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                          {invoice.due_date && (
-                            <span className="flex items-center gap-1">
-                              <Calendar className="w-3 h-3" />
-                              Due {new Date(invoice.due_date).toLocaleDateString()}
-                            </span>
-                          )}
-                          <span className="text-lg font-bold text-foreground">
-                            ${typeof invoice.amount === 'string' ? parseFloat(invoice.amount).toLocaleString() : invoice.amount.toLocaleString()}
-                          </span>
-                        </div>
-                      </div>
-                      {(invoice.payment_status === 'unpaid' || invoice.payment_status === 'overdue') && (
-                        <Button
-                          className="bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 shrink-0"
-                          disabled={actionLoading === invoice.id}
-                          onClick={() => handlePayInvoice(invoice.id)}
-                        >
-                          <Receipt className="w-4 h-4 mr-2" />
-                          {actionLoading === invoice.id ? 'Loading...' : 'Pay Now'}
-                        </Button>
-                      )}
-                      {invoice.payment_status === 'paid' && (
-                        <div className="flex items-center gap-1.5 text-sm text-emerald-600 dark:text-emerald-400 font-medium">
-                          <CheckCircle2 className="w-4 h-4" />
-                          Paid
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Contact */}
-        {client && (client.email || client.phone) && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Need Help?</CardTitle>
-              <CardDescription>Get in touch</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="flex flex-col md:flex-row gap-3">
-                {client.email && (
-                  <Button variant="outline" className="flex-1" onClick={() => window.location.href = `mailto:${client.email}`}>
-                    <Mail className="w-4 h-4 mr-2" />
-                    {client.email}
-                  </Button>
-                )}
-                {client.phone && (
-                  <Button variant="outline" className="flex-1" onClick={() => window.location.href = `tel:${client.phone}`}>
-                    <Phone className="w-4 h-4 mr-2" />
-                    {client.phone}
-                  </Button>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        <div className="text-center text-xs text-muted-foreground py-4">
-          <p>This portal is private and secured. Only you can access this link.</p>
-          <p className="mt-1">Powered by <span className="font-semibold text-emerald-600 dark:text-emerald-400">Forgefly</span></p>
-        </div>
-      </div>
-
-      {/* ── Thank You Dialog ───────────────────────────────────────────────── */}
-      <Dialog open={!!proposalDecision} onOpenChange={() => setProposalDecision(null)}>
-        <DialogContent className="max-w-sm text-center px-8 py-10">
-          {proposalDecision?.action === 'approve' ? (
-            <>
-              <div className="flex justify-center mb-4">
-                <div className="w-20 h-20 rounded-full bg-emerald-500/10 flex items-center justify-center">
-                  <PartyPopper className="w-10 h-10 text-emerald-500" />
-                </div>
-              </div>
-              <h2 className="text-2xl font-bold mb-2">Thank you!</h2>
-              <p className="text-muted-foreground mb-1 font-medium">{proposalDecision.title}</p>
-              <p className="text-sm text-muted-foreground mb-6">
-                Your approval has been received. We're excited to get started — the team has been notified and will be in touch soon.
-              </p>
-              <Button
-                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white"
-                onClick={() => setProposalDecision(null)}
-              >
-                <CheckCircle2 className="w-4 h-4 mr-2" />
-                Back to Portal
-              </Button>
-            </>
-          ) : (
-            <>
-              <div className="flex justify-center mb-4">
-                <div className="w-20 h-20 rounded-full bg-muted flex items-center justify-center">
-                  <MessageSquare className="w-10 h-10 text-muted-foreground" />
-                </div>
-              </div>
-              <h2 className="text-2xl font-bold mb-2">Feedback received</h2>
-              <p className="text-muted-foreground mb-1 font-medium">{proposalDecision?.title}</p>
-              <p className="text-sm text-muted-foreground mb-6">
-                We've noted your request for changes. The team will review your feedback and follow up with a revised proposal shortly.
-              </p>
-              <Button
-                variant="outline"
-                className="w-full"
-                onClick={() => setProposalDecision(null)}
-              >
-                <XCircle className="w-4 h-4 mr-2" />
-                Back to Portal
-              </Button>
-            </>
-          )}
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
 
-// ─── Main entry: detects engagement token, routes to correct portal ────────────
+// ─── Auth-aware wrapper ────────────────────────────────────────────────────────
+
+function PortalWithAuth({
+  engagement,
+  business,
+  token,
+}: {
+  engagement: Engagement
+  business: Business
+  token: string
+}) {
+  const [authState, setAuthState] = useState<'loading' | 'gate' | 'denied' | 'authed'>('loading');
+
+  const accent = business.extracted_data?.brand?.primaryColor || '#10b981';
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function checkAuth() {
+      const { data: { user } } = await supabase.auth.getUser();
+
+      if (!user) {
+        if (mounted) setAuthState('gate');
+        return;
+      }
+
+      // Check if user has an engagement_access row for this engagement
+      const { data: accessRow } = await supabase
+        .from('engagement_access')
+        .select('id, client_user_id, client_email')
+        .eq('engagement_id', engagement.id)
+        .maybeSingle();
+
+      if (!accessRow) {
+        // No access row — show denied
+        if (mounted) setAuthState('denied');
+        return;
+      }
+
+      // If email matches but client_user_id not set, update it
+      if (!accessRow.client_user_id && accessRow.client_email === user.email) {
+        await supabase
+          .from('engagement_access')
+          .update({ client_user_id: user.id })
+          .eq('id', accessRow.id);
+      }
+
+      // Verify email match or user_id match
+      if (
+        accessRow.client_user_id === user.id ||
+        accessRow.client_email === user.email
+      ) {
+        if (mounted) setAuthState('authed');
+      } else {
+        if (mounted) setAuthState('denied');
+      }
+    }
+
+    checkAuth();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event: string, session: unknown) => {
+      if (session) {
+        checkAuth();
+      } else {
+        if (mounted) setAuthState('gate');
+      }
+    });
+
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
+  }, [engagement.id]);
+
+  if (authState === 'loading') {
+    return (
+      <div className="min-h-screen flex items-center justify-center" style={{ background: '#111' }}>
+        <Loader2 className="w-6 h-6 animate-spin" style={{ color: accent }} />
+      </div>
+    );
+  }
+
+  if (authState === 'gate') {
+    return (
+      <AuthGate
+        engagement={engagement}
+        business={business}
+        accent={accent}
+        token={token}
+        onAuthed={() => setAuthState('authed')}
+      />
+    );
+  }
+
+  if (authState === 'denied') {
+    return <AccessDenied accent={accent} />;
+  }
+
+  return <EngagementPortal engagement={engagement} business={business} token={token} />;
+}
+
+// ─── Main entry point ─────────────────────────────────────────────────────────
 
 export default function ClientPortalPage() {
   const { token } = useParams<{ token: string }>();
   const [engagement, setEngagement] = useState<Engagement | null>(null);
+  const [business, setBusiness] = useState<Business | null>(null);
   const [checked, setChecked] = useState(false);
+  const [notFound, setNotFound] = useState(false);
 
   useEffect(() => {
-    if (!token) { setChecked(true); return; }
-    supabase
-      .from('engagements')
-      .select('*, contacts(*)')
-      .eq('portal_token', token)
-      .maybeSingle()
-      .then(({ data }) => {
-        if (data) setEngagement(data as unknown as Engagement);
+    if (!token) {
+      setNotFound(true);
+      setChecked(true);
+      return;
+    }
+
+    async function load() {
+      const { data: eng } = await supabase
+        .from('engagements')
+        .select('*, contacts(*)')
+        .eq('portal_token', token)
+        .maybeSingle();
+
+      if (!eng) {
+        setNotFound(true);
         setChecked(true);
-      });
+        return;
+      }
+
+      setEngagement(eng as Engagement);
+
+      const { data: biz } = await supabase
+        .from('businesses')
+        .select('id, name, extracted_data')
+        .eq('id', eng.business_id)
+        .maybeSingle();
+
+      setBusiness(biz as Business);
+      setChecked(true);
+    }
+
+    load();
   }, [token]);
 
   if (!checked) {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-background to-muted/20">
-        <div className="container mx-auto px-4 py-8 space-y-4">
-          {[1, 2, 3].map((i) => (
-            <Card key={i}><CardContent className="p-6"><Skeleton className="h-24 w-full" /></CardContent></Card>
-          ))}
+      <div className="min-h-screen flex items-center justify-center" style={{ background: '#111' }}>
+        <div className="space-y-3 w-full max-w-3xl px-4">
+          <Skeleton className="h-16 w-full rounded-2xl" style={{ background: '#1a1a1a' }} />
+          <Skeleton className="h-48 w-full rounded-2xl" style={{ background: '#1a1a1a' }} />
+          <Skeleton className="h-32 w-full rounded-2xl" style={{ background: '#1a1a1a' }} />
         </div>
       </div>
     );
   }
 
-  if (engagement) {
-    return <EngagementPortal engagement={engagement} token={token!} onReload={() => {}} />;
+  if (notFound || !engagement || !business) {
+    return (
+      <div
+        className="min-h-screen flex items-center justify-center p-4"
+        style={{ background: '#111' }}
+      >
+        <div
+          className="max-w-sm w-full text-center p-8 rounded-2xl"
+          style={{ background: '#1a1a1a' }}
+        >
+          <AlertCircle className="w-10 h-10 mx-auto mb-4" style={{ color: '#ef4444' }} />
+          <h2 className="text-white text-lg font-semibold mb-2">Portal not found</h2>
+          <p className="text-sm mb-6" style={{ color: '#888' }}>
+            This portal link is invalid or has been removed. Contact your service provider for a new link.
+          </p>
+          <a
+            href="/"
+            className="text-sm px-4 py-2 rounded-lg"
+            style={{ background: '#2a2a2a', color: '#ccc' }}
+          >
+            Go home
+          </a>
+        </div>
+      </div>
+    );
   }
 
-  return <LegacyClientPortal token={token!} />;
+  return (
+    <PortalWithAuth
+      engagement={engagement}
+      business={business}
+      token={token!}
+    />
+  );
 }

@@ -4,49 +4,95 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@/db/supabase";
 import { getProfile } from "@/contexts/AuthContext";
 
+async function upsertBusiness(
+  userId: string,
+  extracted_data: Record<string, unknown>,
+  prompt: string | null,
+  confidence_map: Record<string, string> | null,
+  completeness_score: number,
+): Promise<boolean> {
+  const identity = (extracted_data?.identity ?? {}) as Record<string, string>;
+  const businessName = identity.businessName ?? identity.name ?? 'My Business';
+
+  const { data: business, error: bizError } = await supabase
+    .from('businesses')
+    .upsert(
+      {
+        user_id: userId,
+        name: businessName,
+        extracted_data,
+        status: 'active',
+        confidence_map: confidence_map ?? null,
+        completeness_score: completeness_score ?? 0,
+      },
+      { onConflict: 'user_id', ignoreDuplicates: false },
+    )
+    .select('id')
+    .single();
+
+  if (bizError) {
+    console.error('Failed to save business:', bizError);
+    return false;
+  }
+
+  if (business?.id && prompt) {
+    await supabase.from('prompt_sessions').insert({
+      user_id: userId,
+      business_id: business.id,
+      prompt,
+      prompt_type: 'seed',
+      extracted_data_snapshot: extracted_data,
+    });
+  }
+
+  return true;
+}
+
 async function savePendingPortal(userId: string): Promise<boolean> {
-  const raw = sessionStorage.getItem('pending_portal');
+  // Primary path: token embedded in the email verification URL (works cross-device)
+  const searchParams = new URLSearchParams(window.location.search);
+  const pendingToken = searchParams.get('pending_token');
+
+  if (pendingToken) {
+    try {
+      const { data: row } = await supabase
+        .from('pending_businesses')
+        .select('extracted_data, prompt, confidence_map, completeness_score')
+        .eq('token', pendingToken)
+        .single();
+
+      if (row) {
+        const ok = await upsertBusiness(
+          userId,
+          row.extracted_data,
+          row.prompt,
+          row.confidence_map,
+          row.completeness_score ?? 0,
+        );
+        if (ok) {
+          // Clean up
+          await supabase.from('pending_businesses').delete().eq('token', pendingToken);
+          localStorage.removeItem('pending_portal');
+          localStorage.removeItem('pending_portal_token');
+          return true;
+        }
+      }
+    } catch (err) {
+      console.error('Token-based save error:', err);
+    }
+  }
+
+  // Fallback: same-device localStorage (token missing or expired)
+  const raw = localStorage.getItem('pending_portal');
   if (!raw) return false;
   try {
     const { extracted_data, prompt, confidence_map, completeness_score } = JSON.parse(raw);
-    const identity = extracted_data?.identity ?? {};
-    const businessName = identity.businessName ?? identity.name ?? 'My Business';
-
-    // Upsert business — one active per user (partial unique index handles conflicts)
-    const { data: business, error: bizError } = await supabase
-      .from('businesses')
-      .upsert(
-        {
-          user_id: userId,
-          name: businessName,
-          extracted_data,
-          status: 'active',
-          confidence_map: confidence_map ?? null,
-          completeness_score: completeness_score ?? 0,
-        },
-        { onConflict: 'user_id', ignoreDuplicates: false },
-      )
-      .select('id')
-      .single();
-
-    if (bizError) {
-      console.error('Failed to save business:', bizError);
-      return false;
+    const ok = await upsertBusiness(userId, extracted_data, prompt, confidence_map, completeness_score ?? 0);
+    if (ok) {
+      localStorage.removeItem('pending_portal');
+      localStorage.removeItem('pending_portal_token');
     }
-
-    // Log the prompt session
-    if (business?.id && prompt) {
-      await supabase.from('prompt_sessions').insert({
-        user_id: userId,
-        business_id: business.id,
-        prompt,
-        prompt_type: 'seed',
-        extracted_data_snapshot: extracted_data,
-      });
-    }
-
-    sessionStorage.removeItem('pending_portal');
-    return true;
+    return ok;
   } catch (err) {
     console.error('savePendingPortal error:', err);
     return false;

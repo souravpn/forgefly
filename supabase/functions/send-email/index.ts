@@ -1,6 +1,6 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'jsr:@supabase/supabase-js@2';
-import { getWelcomeEmailTemplate, getProposalEmailTemplate, getInvoiceEmailTemplate, getClientMessageTemplate } from '../_shared/email-templates.ts';
+import { getWelcomeEmailTemplate, getProposalEmailTemplate, getInvoiceEmailTemplate, getClientMessageTemplate, getPortalInviteEmailTemplate } from '../_shared/email-templates.ts';
 
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY');
 const RESEND_API_URL = 'https://api.resend.com/emails';
@@ -125,6 +125,20 @@ serve(async (req) => {
         );
         from = `${data.senderName || 'Forgefly'} <hello@forgefly.io>`;
         break;
+
+      case 'portal_invite': {
+        const tmpl = getPortalInviteEmailTemplate({
+          clientName: data.clientName,
+          businessName: data.businessName,
+          serviceName: data.serviceName,
+          portalUrl: data.portalUrl,
+          token: data.token,
+        });
+        subject = tmpl.subject;
+        html = tmpl.html;
+        from = `${data.businessName || 'Forgefly'} <hello@forgefly.io>`;
+        break;
+      }
 
       default:
         return new Response(

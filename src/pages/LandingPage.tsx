@@ -36,6 +36,7 @@ function validatePrompt(prompt: string): string | null {
   return null;
 }
 import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/db/supabase";
 import useEmblaCarousel from "embla-carousel-react";
 import Autoplay from "embla-carousel-autoplay";
 
@@ -330,17 +331,37 @@ export default function LandingPage() {
       if (!res.ok) throw new Error(await res.text());
       const data = await res.json();
       const elapsedSeconds = Math.round((Date.now() - startedAt) / 1000);
-      sessionStorage.setItem(
-        "pending_portal",
-        JSON.stringify({
-          extracted_data: data.extracted_data,
-          prompt,
-          elapsed_seconds: elapsedSeconds,
-          timestamp: Date.now(),
-          confidence_map: data.confidence_map ?? null,
-          completeness_score: data.completeness_score ?? 0,
-        }),
-      );
+
+      const pendingPayload = {
+        extracted_data: data.extracted_data,
+        prompt,
+        elapsed_seconds: elapsedSeconds,
+        timestamp: Date.now(),
+        confidence_map: data.confidence_map ?? null,
+        completeness_score: data.completeness_score ?? 0,
+      };
+
+      // Save to localStorage as same-device fallback
+      localStorage.setItem("pending_portal", JSON.stringify(pendingPayload));
+
+      // Save to DB so the token can travel through the email verification link
+      try {
+        const { data: row } = await supabase
+          .from("pending_businesses")
+          .insert({
+            extracted_data: data.extracted_data,
+            prompt,
+            elapsed_seconds: elapsedSeconds,
+            confidence_map: data.confidence_map ?? null,
+            completeness_score: data.completeness_score ?? 0,
+          })
+          .select("token")
+          .single();
+        if (row?.token) localStorage.setItem("pending_portal_token", row.token);
+      } catch {
+        // Non-fatal: same-device localStorage fallback still works
+      }
+
       if (stepRef.current) clearInterval(stepRef.current);
       navigate("/preview");
     } catch (err) {

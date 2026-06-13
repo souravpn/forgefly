@@ -17,11 +17,15 @@ const PUBLIC_ROUTES = [...SYSTEM_PUBLIC_ROUTES, ...routePublicPaths];
 
 function matchPublicRoute(path: string, patterns: string[]) {
   return patterns.some(pattern => {
-    if (pattern.includes('*')) {
-      const regex = new RegExp('^' + pattern.replace('*', '.*') + '$');
-      return regex.test(path);
-    }
-    return path === pattern;
+    // Convert React Router param segments (:foo) and wildcards (*) to regex
+    const regex = new RegExp(
+      '^' +
+      pattern
+        .replace(/:[^/]+/g, '[^/]+')  // :slug → any non-slash segment
+        .replace(/\*/g, '.*') +
+      '$'
+    );
+    return regex.test(path);
   });
 }
 

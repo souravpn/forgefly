@@ -1,21 +1,21 @@
-import { useState, useEffect } from 'react';
-import { Card, CardContent } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { CheckCircle2, Clock, Edit, Eye, FileCheck, FileText, Mail, Plus, Search, Send, Sparkles, Trash2, XCircle } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { toast } from 'sonner';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
-import { Plus, FileText, Send, Edit, Trash2, Eye, CheckCircle2, Clock, XCircle, FileCheck, Mail, Search, Sparkles } from 'lucide-react';
-import { toast } from 'sonner';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
+import { useBusiness } from '@/contexts/CurrentBusinessContext';
 import { supabase } from '@/db/supabase';
-import type { Proposal, ProposalStatus, Client, Project } from '@/types/types';
-import { getProposals, createProposal, updateProposal, sendProposal, updateProposalStatus, deleteProposal, subscribeToProposals } from '@/services/proposalService';
 import { getClients } from '@/services/clientService';
 import { getProjects } from '@/services/projectService';
-import { useBusiness } from '@/contexts/CurrentBusinessContext';
+import { createProposal, deleteProposal, getProposals, sendProposal, subscribeToProposals, updateProposal, updateProposalStatus } from '@/services/proposalService';
+import type { Client, Project, Proposal, ProposalStatus } from '@/types/types';
 
 interface ProposalTemplate {
   intro?: string;
@@ -217,25 +217,96 @@ export default function ProposalsPage() {
       return;
     }
 
+    if (!business) {
+      toast.error('Business profile not loaded');
+      return;
+    }
+
     const isResend = selectedProposal.status !== 'draft';
     setSendingEmail(true);
     try {
-      // Generate a fresh portal link (30-day, no-login URL for the client)
-      const { data: portalData } = await supabase.functions.invoke('generate-portal-link', {
-        body: { clientId: selectedProposal.client_id, expiresInDays: 30 },
+      // Build scope from proposal fields so the portal can render it
+      const proposalScope = {
+        title: selectedProposal.title,
+        introduction: selectedProposal.introduction ?? undefined,
+        scopeOfWork: selectedProposal.services
+          ? selectedProposal.services.split('\n').map((s: string) => s.trim()).filter(Boolean)
+          : [],
+        deliverables: selectedProposal.deliverables
+          ? selectedProposal.deliverables.split('\n').map((s: string) => s.trim()).filter(Boolean)
+          : [],
+        pricing: selectedProposal.pricing ? String(selectedProposal.pricing) : undefined,
+        timeline: selectedProposal.timeline ?? undefined,
+        nextSteps: [],
+      };
+
+      // Upsert engagement for this proposal + client
+      const { data: existingEngagements } = await supabase
+        .from('engagements')
+        .select('id, portal_token')
+        .eq('business_id', business.id)
+        .eq('contact_id', selectedProposal.client_id)
+        .eq('service_name', selectedProposal.title)
+        .maybeSingle();
+
+      let engagementId: string;
+
+      if (existingEngagements?.id) {
+        engagementId = existingEngagements.id;
+        // Update scope with latest proposal data
+        await supabase
+          .from('engagements')
+          .update({
+            status: 'proposal_sent',
+            scope: { proposal: proposalScope },
+          })
+          .eq('id', engagementId);
+      } else {
+        const { data: newEngagement, error: engError } = await supabase
+          .from('engagements')
+          .insert({
+            business_id: business.id,
+            contact_id: selectedProposal.client_id,
+            service_name: selectedProposal.title,
+            status: 'proposal_sent',
+            scope: { proposal: proposalScope },
+          })
+          .select('id')
+          .single();
+
+        if (engError || !newEngagement) {
+          console.error('Error creating engagement:', engError);
+          toast.error('Failed to create engagement');
+          return;
+        }
+        engagementId = newEngagement.id;
+      }
+
+      // Generate portal link (idempotent)
+      const { data: portalData, error: portalError } = await supabase.functions.invoke('generate-portal-link', {
+        body: { engagementId },
       });
 
-      const proposalLink = portalData?.portalUrl ?? `${window.location.origin}/portal`;
+      if (portalError || !portalData?.portalUrl) {
+        console.error('Portal link error:', portalError);
+        toast.error('Failed to generate portal link');
+        return;
+      }
 
+      const { portalUrl, token: portalToken } = portalData;
+      const businessName = business.name || 'Your Service Provider';
+
+      // Send portal invite email
       const { error } = await supabase.functions.invoke('send-email', {
         body: {
-          type: 'proposal',
+          type: 'portal_invite',
           to: selectedProposal.client.email,
           data: {
             clientName: selectedProposal.client.name,
-            proposalTitle: selectedProposal.title,
-            amount: typeof selectedProposal.pricing === 'string' ? parseFloat(selectedProposal.pricing || '0') : (selectedProposal.pricing || 0),
-            proposalLink,
+            businessName,
+            serviceName: selectedProposal.title,
+            portalUrl,
+            token: portalToken,
           },
         },
       });

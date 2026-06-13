@@ -217,7 +217,7 @@ export default function GeneratedPortalPage() {
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    const raw = sessionStorage.getItem('pending_portal');
+    const raw = localStorage.getItem('pending_portal');
     if (!raw) {
       navigate('/', { replace: true });
       return;
@@ -226,7 +226,7 @@ export default function GeneratedPortalPage() {
       const parsed = JSON.parse(raw);
       // 24h expiry check
       if (parsed.timestamp && Date.now() - parsed.timestamp > 86_400_000) {
-        sessionStorage.removeItem('pending_portal');
+        localStorage.removeItem('pending_portal');
         navigate('/', { replace: true });
         return;
       }
@@ -275,6 +275,7 @@ export default function GeneratedPortalPage() {
   const accent = brand.primaryColor ?? identity.accentColor ?? '#1D9E75';
   const initials = identity.initials ?? (identity.businessName?.slice(0, 2).toUpperCase() ?? 'FY');
   const businessName = identity.businessName ?? identity.name ?? 'Your Business OS';
+  const portfolioSlug = businessName.toLowerCase().replace(/\s+/g, '');
 
   return (
     <div id="preview-root" className="min-h-screen bg-black text-white">
@@ -423,7 +424,7 @@ export default function GeneratedPortalPage() {
           />
         )}
         {activeTab === 'Client Portal' && (
-          <ClientPortalTab data={data} />
+          <ClientPortalTab data={data} slug={portfolioSlug} />
         )}
       </div>
     </div>

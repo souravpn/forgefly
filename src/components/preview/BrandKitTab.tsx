@@ -134,10 +134,10 @@ export default function BrandKitTab({ brand, businessName, tagline, email, locat
   const updateFont = (pairId: string) => {
     setSelectedFontPair(pairId);
     try {
-      const pending = JSON.parse(sessionStorage.getItem('pending_portal') || '{}');
+      const pending = JSON.parse(localStorage.getItem('pending_portal') || '{}');
       if (pending.extracted_data?.brand) {
         pending.extracted_data.brand.fontPairId = pairId;
-        sessionStorage.setItem('pending_portal', JSON.stringify(pending));
+        localStorage.setItem('pending_portal', JSON.stringify(pending));
       }
     } catch { /* non-fatal */ }
   };

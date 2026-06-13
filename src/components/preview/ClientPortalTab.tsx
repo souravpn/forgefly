@@ -25,9 +25,10 @@ interface ExtractedData {
 
 interface ClientPortalTabProps {
   data: ExtractedData;
+  slug?: string;
 }
 
-export default function ClientPortalTab({ data }: ClientPortalTabProps) {
+export default function ClientPortalTab({ data, slug }: ClientPortalTabProps) {
   const identity = data.identity ?? {};
   const services = data.services ?? [];
   const brand = data.brand ?? {};
@@ -64,7 +65,7 @@ export default function ClientPortalTab({ data }: ClientPortalTabProps) {
               animation: "shimmer 2.5s ease-in-out infinite",
             }}
           >
-            www.forgefly.io/p/your-slug
+            www.forgefly.io/p/{slug ?? 'your-slug'}
           </span>
         </p>
       </div>

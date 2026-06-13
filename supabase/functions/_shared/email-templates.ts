@@ -385,6 +385,68 @@ export interface EmailTemplate {
   html: string
 }
 
+export function getPortalInviteEmailTemplate(data: {
+  clientName: string
+  businessName: string
+  serviceName: string
+  portalUrl: string
+  token: string
+}): EmailTemplate {
+  const { clientName, businessName, serviceName, portalUrl, token } = data
+  return {
+    subject: `${businessName} has shared your client portal`,
+    html: `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Your Client Portal</title>
+  <style>${emailStyles}</style>
+</head>
+<body>
+  <div class="email-container">
+    <div class="email-header">
+      <h1 class="brand-name">${businessName}</h1>
+      <p class="tagline">Your Client Portal is Ready</p>
+    </div>
+    <div class="email-body">
+      <h2 class="greeting">Hi ${clientName},</h2>
+      <p class="content">
+        <strong style="color: #FFFFFF;">${businessName}</strong> has set up a private client portal for your engagement:
+        <strong style="color: #10B981;">${serviceName}</strong>.
+      </p>
+      <p class="content">
+        In your portal you can review the proposal, track project progress, view invoices, and send messages directly to the team.
+      </p>
+      <div class="info-box">
+        <p class="info-label">Your Portal Link</p>
+        <p class="info-value" style="font-size: 14px; word-break: break-all;">${portalUrl}</p>
+      </div>
+      <center>
+        <a href="${portalUrl}" class="button">
+          Open Your Portal →
+        </a>
+      </center>
+      <p class="content" style="font-size: 14px; color: #9CA3AF; margin-top: 24px;">
+        This portal is private and secured for your use only. Sign in with the email this was sent to.
+      </p>
+    </div>
+    <div class="footer">
+      <p class="footer-text">
+        Powered by <strong>Forgefly</strong> — AI Business OS for Solopreneurs
+      </p>
+      <p class="footer-text" style="font-size: 12px; color: #6B7280; margin-top: 16px;">
+        Sent on behalf of ${businessName}
+      </p>
+    </div>
+  </div>
+</body>
+</html>
+    `,
+  }
+}
+
 export function getNewRequestEmailTemplate(data: {
   freelancerName: string
   clientName: string

@@ -51,7 +51,7 @@ export function useCurrentBusiness(): UseCurrentBusinessResult {
 
     // If no business found, check if there's a pending portal from a pre-login generation
     if (!data) {
-      const raw = sessionStorage.getItem('pending_portal')
+      const raw = localStorage.getItem('pending_portal')
       if (raw) {
         try {
           const { extracted_data, prompt, confidence_map, completeness_score } = JSON.parse(raw)
@@ -101,7 +101,7 @@ export function useCurrentBusiness(): UseCurrentBusinessResult {
             }).then(() => {}) // non-fatal
           }
 
-          sessionStorage.removeItem('pending_portal')
+          localStorage.removeItem('pending_portal')
           // Refetch to get the full row
           const { data: saved } = await supabase
             .from('businesses')

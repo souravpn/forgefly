@@ -76,10 +76,10 @@ export default function PublicPortfolioPage() {
   useEffect(() => {
     if (!slug) return
     ;(async () => {
-      // Step 1: resolve username → user_id via profiles
+      // Step 1: resolve username → id (profiles.id = auth.users.id)
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
-        .select('user_id')
+        .select('id')
         .eq('username', slug)
         .maybeSingle()
 
@@ -92,7 +92,7 @@ export default function PublicPortfolioPage() {
       const { data, error } = await supabase
         .from('businesses')
         .select('id, name, extracted_data')
-        .eq('user_id', profile.user_id)
+        .eq('user_id', profile.id)
         .eq('status', 'active')
         .maybeSingle()
 
