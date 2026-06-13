@@ -183,7 +183,7 @@ const SCHEMA_MAP: Record<string, string> = {
   pipeline: `"pipeline": { "stages": ["Prospect","Qualified","Proposal Sent","Negotiating","Closed Won"], "leads": [{ "name": string, "stage": string, "value": string, "service": string }] }`,
   invoices: `"invoices": [{ "client": string, "service": string, "amount": string, "status": "Draft"|"Outstanding"|"Paid"|"Overdue", "date": string, "number": string }]`,
   metrics: `"metrics": { "monthlyRevenue": string, "activeClients": number, "pipelineValue": string, "avgProjectValue": string }`,
-  contacts: `"contacts": [{ "name": string, "company": string, "role": string, "status": "Active client"|"Prospect"|"Past client" }]`,
+  contacts: `"contacts": [{ "name": string, "email": string, "company": string, "role": string, "status": "Active client"|"Prospect"|"Past client" }]`,
   proposal: `"proposal": { "intro": string, "approach": string, "whyUs": string, "nextSteps": [string] }`,
   brand: `"brand": { "primaryColor": string (hex), "secondaryColor": string (hex), "accentColor": string (hex), "fonts": { "heading": string, "body": string }, "tone": string, "keywords": [string] }`,
 };

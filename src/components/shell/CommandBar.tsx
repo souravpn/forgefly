@@ -113,6 +113,19 @@ function buildDiffLines(old: RawData, next: RawData, sections: string[]): DiffLi
       }
     }
 
+    if (section === 'contacts') {
+      type Contact = { name?: string; email?: string; company?: string }
+      const oldContacts = asArr<Contact>(o)
+      const newContacts = asArr<Contact>(n)
+      const oldNames = new Set(oldContacts.map(c => c.name?.toLowerCase()))
+      for (const c of newContacts) {
+        if (c.name && !oldNames.has(c.name.toLowerCase())) {
+          const detail = [c.name, c.email, c.company].filter(Boolean).join(' · ')
+          lines.push({ type: '+', label: 'client', detail })
+        }
+      }
+    }
+
     if (section === 'pipeline') {
       type Lead = { name?: string; value?: string; stage?: string }
       type Pipeline = { leads?: Lead[] }
@@ -250,6 +263,28 @@ export function CommandBar({ onClose, business, extractedData, refetch }: Comman
         .update({ extracted_data: pending.mergedData })
         .eq('id', business.id)
       if (error) throw error
+
+      // Sync new contacts → clients table
+      if (pending.sections.includes('contacts')) {
+        type Contact = { name?: string; email?: string; company?: string; status?: string }
+        const oldContacts = asArr<Contact>((extractedData as RawData)?.contacts)
+        const newContacts = asArr<Contact>((pending.mergedData as RawData)?.contacts)
+        const oldNames = new Set(oldContacts.map(c => c.name?.toLowerCase()).filter(Boolean))
+        const toInsert = newContacts.filter(c => c.name && !oldNames.has(c.name.toLowerCase()))
+        if (toInsert.length > 0) {
+          const rows = toInsert.map(c => ({
+            user_id: business.user_id,
+            name: c.name!,
+            email: c.email ?? null,
+            company: c.company ?? null,
+            status: 'active',
+            total_value: 0,
+          }))
+          const { error: clientErr } = await supabase.from('clients').insert(rows)
+          if (clientErr) console.warn('Client sync warning (non-fatal):', clientErr)
+        }
+      }
+
       await refetch()
       toast.success('Business OS updated')
       setPending(null)

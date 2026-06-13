@@ -1,12 +1,19 @@
-import { LogOut } from 'lucide-react'
+import { useState } from 'react'
+import { LogOut, Globe } from 'lucide-react'
 import { NAV_ITEMS, MORE_ITEMS } from '@/config/navigation'
 import { NavIcon } from './NavIcon'
 import { useAppNavigation } from '@/hooks/useAppNavigation'
 import { useAuth } from '@/contexts/AuthContext'
+import { useBusiness } from '@/contexts/CurrentBusinessContext'
 import { Sheet, SheetContent } from '@/components/ui/sheet'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Separator } from '@/components/ui/separator'
 import { cn } from '@/lib/utils'
+import { PortfolioShareDialog } from '@/components/common/PortfolioShareDialog'
+
+function toSlug(name: string) {
+  return name.toLowerCase().replace(/\s+/g, '')
+}
 
 // Secondary nav: Services, Proposals, Brand Kit from NAV_ITEMS
 const SECONDARY_IDS = ['services', 'proposals', 'brandkit']
@@ -23,6 +30,11 @@ interface MobileMoreSheetProps {
 export function MobileMoreSheet({ open, onClose }: MobileMoreSheetProps) {
   const { navigateTo, activeNavId } = useAppNavigation()
   const { user, profile, signOut } = useAuth()
+  const { business } = useBusiness()
+  const [shareOpen, setShareOpen] = useState(false)
+
+  const slug = profile?.username ?? (business ? toSlug(business.name) : '')
+  const businessName = business?.name ?? 'My Portfolio'
 
   const displayName = profile?.username || user?.user_metadata?.name || user?.email || ''
   const avatarUrl: string | undefined =
@@ -35,6 +47,7 @@ export function MobileMoreSheet({ open, onClose }: MobileMoreSheetProps) {
   }
 
   return (
+    <>
     <Sheet open={open} onOpenChange={isOpen => !isOpen && onClose()}>
       <SheetContent side="bottom" className="p-0 rounded-t-2xl max-h-[80vh]">
         {/* Drag handle */}
@@ -60,6 +73,16 @@ export function MobileMoreSheet({ open, onClose }: MobileMoreSheetProps) {
               {item.label}
             </button>
           ))}
+          {slug && (
+            <button
+              type="button"
+              onClick={() => { setShareOpen(true) }}
+              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors text-left text-foreground hover:bg-accent"
+            >
+              <Globe className="h-4 w-4 shrink-0" />
+              Public Portfolio
+            </button>
+          )}
         </nav>
 
         <Separator className="my-2" />
@@ -87,5 +110,15 @@ export function MobileMoreSheet({ open, onClose }: MobileMoreSheetProps) {
         </div>
       </SheetContent>
     </Sheet>
+
+    {slug && (
+      <PortfolioShareDialog
+        open={shareOpen}
+        onClose={() => setShareOpen(false)}
+        slug={slug}
+        businessName={businessName}
+      />
+    )}
+  </>
   )
 }

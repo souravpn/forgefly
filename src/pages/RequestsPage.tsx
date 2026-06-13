@@ -7,6 +7,7 @@ import { Sparkles, Search, Clock, Building2, Package, CalendarClock } from 'luci
 import { toast } from 'sonner'
 import { supabase } from '@/db/supabase'
 import { useBusiness } from '@/contexts/CurrentBusinessContext'
+import { useAuth } from '@/contexts/AuthContext'
 import { formatDistanceToNow } from 'date-fns'
 
 interface ProposalRequest {
@@ -32,8 +33,13 @@ const STATUS_STYLES: Record<string, string> = {
   declined: 'bg-muted text-muted-foreground border-border',
 }
 
+function toSlug(name: string) {
+  return name.toLowerCase().replace(/\s+/g, '')
+}
+
 export default function RequestsPage() {
   const { business } = useBusiness()
+  const { profile } = useAuth()
   const [requests, setRequests] = useState<ProposalRequest[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -140,7 +146,10 @@ Use my proposal template and services from my business OS. Return a complete pro
           <p className="text-sm">{search ? 'No matching requests.' : 'No requests yet. Share your portfolio link to start receiving them.'}</p>
           {!search && business && (
             <p className="text-xs mt-2">
-              Your portfolio: <span className="font-mono text-foreground">forgefly.io/p/{business.name}</span>
+              Your portfolio:{' '}
+              <span className="font-mono text-foreground">
+                forgefly.io/p/{profile?.username ?? toSlug(business.name)}
+              </span>
             </p>
           )}
         </div>

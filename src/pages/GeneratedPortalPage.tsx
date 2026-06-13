@@ -35,6 +35,7 @@ interface ExtractedService {
 
 interface ExtractedContact {
   name: string;
+  email?: string;
   company?: string;
   role?: string;
   status?: string;
