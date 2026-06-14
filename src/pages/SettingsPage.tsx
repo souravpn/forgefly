@@ -15,9 +15,10 @@ import { supabase } from "@/db/supabase";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import type { BusinessProfile } from "@/types/types";
-import { ExternalLink, Eye, CheckCircle2, AlertCircle, Clock, CreditCard, Loader2 } from "lucide-react";
+import { ExternalLink, Eye, CheckCircle2, AlertCircle, Clock, CreditCard, Loader2, ChevronDown, Trash2, AlertTriangle } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
+import { useBusiness } from "@/contexts/CurrentBusinessContext";
 
 type ConnectStatus = {
   connected: boolean;
@@ -29,7 +30,8 @@ type ConnectStatus = {
 };
 
 export default function SettingsPage() {
-  const { user, profile } = useAuth();
+  const { user, profile, signOut } = useAuth();
+  const { business } = useBusiness();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [businessProfile, setBusinessProfile] =
@@ -38,6 +40,18 @@ export default function SettingsPage() {
   const [connectStatus, setConnectStatus] = useState<ConnectStatus | null>(null);
   const [connectLoading, setConnectLoading] = useState(false);
   const [connectStatusLoading, setConnectStatusLoading] = useState(false);
+
+  // Delete business
+  const [bizDeleteOpen, setBizDeleteOpen] = useState(false);
+  const [bizDeleteConfirm, setBizDeleteConfirm] = useState('');
+  const [bizDeleting, setBizDeleting] = useState(false);
+
+  // Delete account
+  const [acctDeleteOpen, setAcctDeleteOpen] = useState(false);
+  const [otpSent, setOtpSent] = useState(false);
+  const [otpSending, setOtpSending] = useState(false);
+  const [otpCode, setOtpCode] = useState('');
+  const [acctDeleting, setAcctDeleting] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -116,6 +130,56 @@ export default function SettingsPage() {
       toast.success("Business profile updated successfully");
     }
     setLoading(false);
+  };
+
+  const handleDeleteBusiness = async () => {
+    if (!business || bizDeleteConfirm !== 'DELETE') return;
+    setBizDeleting(true);
+    try {
+      const { error } = await supabase
+        .from('businesses')
+        .update({ status: 'archived', archived_at: new Date().toISOString() })
+        .eq('id', business.id);
+      if (error) throw error;
+      toast.success('Business OS archived. You have 7 days to contact support to recover it.');
+      navigate('/');
+    } catch {
+      toast.error('Failed to delete. Please try again.');
+    } finally {
+      setBizDeleting(false);
+    }
+  };
+
+  const handleSendOtp = async () => {
+    setOtpSending(true);
+    try {
+      const { error } = await supabase.functions.invoke('request-deletion-otp');
+      if (error) throw error;
+      setOtpSent(true);
+      toast.success('Confirmation code sent to your email.');
+    } catch {
+      toast.error('Failed to send code. Please try again.');
+    } finally {
+      setOtpSending(false);
+    }
+  };
+
+  const handleConfirmDeleteAccount = async () => {
+    if (!otpCode.trim()) return;
+    setAcctDeleting(true);
+    try {
+      const { error } = await supabase.functions.invoke('confirm-account-deletion', {
+        body: { code: otpCode.trim() },
+      });
+      if (error) throw error;
+      await signOut();
+      navigate('/');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Invalid code or something went wrong.';
+      toast.error(msg);
+    } finally {
+      setAcctDeleting(false);
+    }
   };
 
   return (
@@ -225,6 +289,65 @@ export default function SettingsPage() {
               </Button>
             </CardContent>
           </Card>
+          {/* Delete Business danger zone */}
+          <Card className="border-destructive/30 mt-6">
+            <CardHeader
+              className="cursor-pointer select-none"
+              onClick={() => setBizDeleteOpen(o => !o)}
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Trash2 className="w-4 h-4 text-destructive" />
+                  <CardTitle className="text-base text-destructive">Delete Business OS</CardTitle>
+                </div>
+                <ChevronDown
+                  className={`w-4 h-4 text-muted-foreground transition-transform ${bizDeleteOpen ? 'rotate-180' : ''}`}
+                />
+              </div>
+              <CardDescription>
+                Permanently remove your Business OS and all its data.
+              </CardDescription>
+            </CardHeader>
+
+            {bizDeleteOpen && (
+              <CardContent className="space-y-4 pt-0">
+                <div className="flex items-start gap-3 p-4 rounded-lg bg-destructive/10 border border-destructive/20">
+                  <AlertTriangle className="w-5 h-5 text-destructive shrink-0 mt-0.5" />
+                  <div className="space-y-1 text-sm">
+                    <p className="font-medium text-destructive">This is a destructive action</p>
+                    <p className="text-muted-foreground">
+                      Deleting your Business OS will archive all associated data including clients, proposals, invoices, and projects.
+                      You have <strong>7 days</strong> to contact support to recover it before it is permanently removed.
+                      Your account will remain active.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="bizDeleteConfirm">
+                    Type <span className="font-mono font-bold text-destructive">DELETE</span> to confirm
+                  </Label>
+                  <Input
+                    id="bizDeleteConfirm"
+                    value={bizDeleteConfirm}
+                    onChange={e => setBizDeleteConfirm(e.target.value)}
+                    placeholder="DELETE"
+                    className="border-destructive/30 focus-visible:ring-destructive/50"
+                  />
+                </div>
+
+                <Button
+                  variant="destructive"
+                  disabled={bizDeleteConfirm !== 'DELETE' || bizDeleting || !business}
+                  onClick={handleDeleteBusiness}
+                  className="w-full"
+                >
+                  {bizDeleting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Trash2 className="w-4 h-4 mr-2" />}
+                  Delete Business OS
+                </Button>
+              </CardContent>
+            )}
+          </Card>
         </TabsContent>
 
         <TabsContent value="account" className="mt-6">
@@ -262,6 +385,85 @@ export default function SettingsPage() {
                 </p>
               </div>
             </CardContent>
+          </Card>
+
+          {/* Delete Account danger zone */}
+          <Card className="border-destructive/30 mt-6">
+            <CardHeader
+              className="cursor-pointer select-none"
+              onClick={() => setAcctDeleteOpen(o => !o)}
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Trash2 className="w-4 h-4 text-destructive" />
+                  <CardTitle className="text-base text-destructive">Delete Account</CardTitle>
+                </div>
+                <ChevronDown
+                  className={`w-4 h-4 text-muted-foreground transition-transform ${acctDeleteOpen ? 'rotate-180' : ''}`}
+                />
+              </div>
+              <CardDescription>
+                Permanently delete your Forgefly account and all data.
+              </CardDescription>
+            </CardHeader>
+
+            {acctDeleteOpen && (
+              <CardContent className="space-y-4 pt-0">
+                <div className="flex items-start gap-3 p-4 rounded-lg bg-destructive/10 border border-destructive/20">
+                  <AlertTriangle className="w-5 h-5 text-destructive shrink-0 mt-0.5" />
+                  <div className="space-y-1 text-sm">
+                    <p className="font-medium text-destructive">This action cannot be undone</p>
+                    <p className="text-muted-foreground">
+                      Deleting your account will permanently erase your profile, Business OS, all clients, proposals, invoices, and projects.
+                      You will be signed out immediately and will not be able to recover any data.
+                    </p>
+                  </div>
+                </div>
+
+                {!otpSent ? (
+                  <Button
+                    variant="outline"
+                    className="w-full border-destructive/30 text-destructive hover:bg-destructive/10"
+                    onClick={handleSendOtp}
+                    disabled={otpSending}
+                  >
+                    {otpSending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+                    Send confirmation code to {profile?.email}
+                  </Button>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="space-y-2">
+                      <Label htmlFor="otpCode">Enter the 6-digit code from your email</Label>
+                      <Input
+                        id="otpCode"
+                        value={otpCode}
+                        onChange={e => setOtpCode(e.target.value)}
+                        placeholder="000000"
+                        maxLength={6}
+                        className="font-mono text-center text-lg tracking-widest border-destructive/30 focus-visible:ring-destructive/50"
+                      />
+                      <button
+                        type="button"
+                        className="text-xs text-muted-foreground underline"
+                        onClick={() => { setOtpSent(false); setOtpCode(''); }}
+                      >
+                        Resend code
+                      </button>
+                    </div>
+
+                    <Button
+                      variant="destructive"
+                      className="w-full"
+                      disabled={otpCode.length < 6 || acctDeleting}
+                      onClick={handleConfirmDeleteAccount}
+                    >
+                      {acctDeleting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Trash2 className="w-4 h-4 mr-2" />}
+                      Permanently Delete My Account
+                    </Button>
+                  </div>
+                )}
+              </CardContent>
+            )}
           </Card>
         </TabsContent>
 

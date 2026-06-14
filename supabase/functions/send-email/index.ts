@@ -1,6 +1,6 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'jsr:@supabase/supabase-js@2';
-import { getWelcomeEmailTemplate, getProposalEmailTemplate, getInvoiceEmailTemplate, getClientMessageTemplate, getPortalInviteEmailTemplate } from '../_shared/email-templates.ts';
+import { getWelcomeEmailTemplate, getProposalEmailTemplate, getInvoiceEmailTemplate, getClientMessageTemplate, getPortalInviteEmailTemplate, getDeletionOtpEmailTemplate } from '../_shared/email-templates.ts';
 
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY');
 const RESEND_API_URL = 'https://api.resend.com/emails';
@@ -65,7 +65,7 @@ serve(async (req) => {
       );
     }
 
-    const { type, to, data } = await req.json();
+    const { type, to, cc, data } = await req.json();
 
     if (!RESEND_API_KEY) {
       console.error('RESEND_API_KEY not configured');
@@ -129,16 +129,24 @@ serve(async (req) => {
       case 'portal_invite': {
         const tmpl = getPortalInviteEmailTemplate({
           clientName: data.clientName,
+          clientFirstName: data.clientFirstName,
           businessName: data.businessName,
+          freelancerName: data.freelancerName,
           serviceName: data.serviceName,
           portalUrl: data.portalUrl,
           token: data.token,
+          problemSnippet: data.problemSnippet ?? null,
         });
         subject = tmpl.subject;
         html = tmpl.html;
         from = `${data.businessName || 'Forgefly'} <hello@forgefly.io>`;
         break;
       }
+
+      case 'deletion_otp':
+        subject = 'Your Forgefly account deletion code';
+        html = getDeletionOtpEmailTemplate({ code: data.code, expiresMinutes: data.expiresMinutes ?? 10 });
+        break;
 
       default:
         return new Response(
@@ -157,6 +165,7 @@ serve(async (req) => {
       body: JSON.stringify({
         from,
         to: [to],
+        ...(cc ? { cc: [cc] } : {}),
         subject,
         html,
       }),

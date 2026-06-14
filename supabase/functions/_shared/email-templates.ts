@@ -387,59 +387,97 @@ export interface EmailTemplate {
 
 export function getPortalInviteEmailTemplate(data: {
   clientName: string
+  clientFirstName?: string
   businessName: string
+  freelancerName?: string
   serviceName: string
   portalUrl: string
   token: string
+  problemSnippet?: string | null
 }): EmailTemplate {
-  const { clientName, businessName, serviceName, portalUrl, token } = data
+  const {
+    clientName,
+    clientFirstName,
+    businessName,
+    freelancerName,
+    serviceName,
+    portalUrl,
+    token,
+    problemSnippet,
+  } = data
+  const firstName = clientFirstName ?? clientName.split(' ')[0]
+  const senderName = freelancerName ?? businessName
+  // Extract just the first name of the sender for the sign-off
+  const senderFirstName = senderName.split(' ')[0]
+  // Pull the short URL token for display (e.g. "loom-sarah-7f3a")
+  const displayToken = token ?? portalUrl.split('/').pop() ?? portalUrl
+
+  const openingLine = problemSnippet
+    ? `Thanks for reaching out — ${problemSnippet.charAt(0).toLowerCase()}${problemSnippet.slice(1)} is exactly the kind of problem ${serviceName} is built for.`
+    : `Thanks for reaching out. I've put together a proposal for <strong style="color:#FFFFFF;">${serviceName}</strong>.`
+
   return {
-    subject: `${businessName} has shared your client portal`,
+    subject: `${serviceName} — ${businessName}`,
     html: `
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Your Client Portal</title>
-  <style>${emailStyles}</style>
+  <title>${serviceName} proposal</title>
 </head>
-<body>
-  <div class="email-container">
-    <div class="email-header">
-      <h1 class="brand-name">${businessName}</h1>
-      <p class="tagline">Your Client Portal is Ready</p>
-    </div>
-    <div class="email-body">
-      <h2 class="greeting">Hi ${clientName},</h2>
-      <p class="content">
-        <strong style="color: #FFFFFF;">${businessName}</strong> has set up a private client portal for your engagement:
-        <strong style="color: #10B981;">${serviceName}</strong>.
-      </p>
-      <p class="content">
-        In your portal you can review the proposal, track project progress, view invoices, and send messages directly to the team.
-      </p>
-      <div class="info-box">
-        <p class="info-label">Your Portal Link</p>
-        <p class="info-value" style="font-size: 14px; word-break: break-all;">${portalUrl}</p>
+<body style="margin:0;padding:0;background-color:#111827;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;">
+  <div style="max-width:560px;margin:0 auto;padding:32px 16px;">
+
+    <!-- Card -->
+    <div style="background-color:#1F2937;border-radius:12px;overflow:hidden;">
+
+      <!-- Top accent strip -->
+      <div style="height:4px;background:linear-gradient(90deg,#10B981,#059669);"></div>
+
+      <!-- Body -->
+      <div style="padding:32px;">
+
+        <p style="margin:0 0 20px;font-size:16px;line-height:1.6;color:#E5E7EB;">
+          Hi ${firstName},
+        </p>
+
+        <p style="margin:0 0 20px;font-size:16px;line-height:1.6;color:#E5E7EB;">
+          ${openingLine}
+        </p>
+
+        <p style="margin:0 0 24px;font-size:16px;line-height:1.6;color:#E5E7EB;">
+          I've put together a proposal. You can view the full details, track the project, and pay securely through your client portal:
+        </p>
+
+        <!-- Portal box -->
+        <div style="background-color:#111827;border:1px solid #374151;border-radius:10px;padding:20px 24px;margin-bottom:24px;">
+          <p style="margin:0 0 6px;font-size:12px;color:#6EE7B7;font-weight:600;letter-spacing:0.05em;text-transform:uppercase;">Your client portal</p>
+          <a href="${portalUrl}" style="display:block;font-family:'Courier New',Courier,monospace;font-size:14px;color:#E5E7EB;text-decoration:none;word-break:break-all;margin-bottom:8px;">${displayToken}</a>
+          <p style="margin:0;font-size:12px;color:#6B7280;">Sign in with your Google account to access</p>
+        </div>
+
+        <!-- CTA button -->
+        <div style="text-align:center;margin-bottom:28px;">
+          <a href="${portalUrl}" style="display:inline-block;background-color:#10B981;color:#FFFFFF;font-size:14px;font-weight:600;text-decoration:none;padding:12px 28px;border-radius:8px;">
+            Open Client Portal →
+          </a>
+        </div>
+
+        <p style="margin:0 0 28px;font-size:14px;line-height:1.6;color:#9CA3AF;">
+          From the portal you can: view the proposal, approve and pay, send messages, and track project progress once we kick off.
+        </p>
+
+        <p style="margin:0;font-size:16px;color:#E5E7EB;">
+          — ${senderFirstName}
+        </p>
       </div>
-      <center>
-        <a href="${portalUrl}" class="button">
-          Open Your Portal →
-        </a>
-      </center>
-      <p class="content" style="font-size: 14px; color: #9CA3AF; margin-top: 24px;">
-        This portal is private and secured for your use only. Sign in with the email this was sent to.
-      </p>
     </div>
-    <div class="footer">
-      <p class="footer-text">
-        Powered by <strong>Forgefly</strong> — AI Business OS for Solopreneurs
-      </p>
-      <p class="footer-text" style="font-size: 12px; color: #6B7280; margin-top: 16px;">
-        Sent on behalf of ${businessName}
-      </p>
-    </div>
+
+    <!-- Footer -->
+    <p style="text-align:center;font-size:11px;color:#4B5563;margin-top:20px;">
+      Powered by <strong>Forgefly</strong> · Sent on behalf of ${businessName}
+    </p>
   </div>
 </body>
 </html>
@@ -576,6 +614,48 @@ export function getInvoiceEmailTemplate(
       <p class="footer-text" style="font-size: 12px; color: #6B7280; margin-top: 16px;">
         This invoice was sent via Forgefly
       </p>
+    </div>
+  </div>
+</body>
+</html>
+  `;
+}
+
+export function getDeletionOtpEmailTemplate(data: { code: string; expiresMinutes: number }): string {
+  return `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Confirm Account Deletion</title>
+<style>${emailStyles}</style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1 class="logo">Forgefly</h1>
+    </div>
+    <div class="content-box">
+      <p class="content" style="font-size: 16px; font-weight: 600; color: #EF4444;">
+        ⚠️ Account deletion confirmation
+      </p>
+      <p class="content">
+        We received a request to permanently delete your Forgefly account and all associated data.
+        Use the code below to confirm. This action <strong>cannot be undone</strong>.
+      </p>
+      <div style="text-align: center; margin: 32px 0;">
+        <div style="display: inline-block; background: #1F2937; border: 2px solid #EF444440; border-radius: 12px; padding: 20px 40px;">
+          <p style="margin: 0 0 4px 0; font-size: 11px; color: #9CA3AF; letter-spacing: 0.1em; text-transform: uppercase;">Confirmation code</p>
+          <p style="margin: 0; font-size: 38px; font-weight: 700; letter-spacing: 0.3em; color: #FFFFFF; font-family: monospace;">${data.code}</p>
+          <p style="margin: 8px 0 0 0; font-size: 12px; color: #9CA3AF;">Expires in ${data.expiresMinutes} minutes</p>
+        </div>
+      </div>
+      <p class="content" style="color: #9CA3AF; font-size: 13px;">
+        If you did not request this, you can safely ignore this email. Your account will not be affected.
+      </p>
+    </div>
+    <div class="footer">
+      <p class="footer-text"><strong>Forgefly</strong> — AI Business OS for Solopreneurs</p>
+      <p class="footer-text">Need help? Reply to this email.</p>
     </div>
   </div>
 </body>
