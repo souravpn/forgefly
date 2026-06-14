@@ -67,27 +67,31 @@ export function useCurrentBusiness(): UseCurrentBusinessResult {
             .maybeSingle()
 
           let bizId: string | null = null
+          const fullPayload = {
+            name: businessName, extracted_data,
+            confidence_map: confidence_map ?? null,
+            completeness_score: completeness_score ?? 0,
+          }
+          const basePayload = { name: businessName, extracted_data }
+
           if (existing?.id) {
-            await supabase.from('businesses').update({
-              name: businessName,
-              extracted_data,
-              confidence_map: confidence_map ?? null,
-              completeness_score: completeness_score ?? 0,
-            }).eq('id', existing.id)
+            const { error } = await supabase.from('businesses').update(fullPayload).eq('id', existing.id)
+            if (error?.code === '42703') {
+              await supabase.from('businesses').update(basePayload).eq('id', existing.id)
+            }
             bizId = existing.id
           } else {
-            const { data: inserted } = await supabase
+            let { data: inserted, error } = await supabase
               .from('businesses')
-              .insert({
-                user_id: user.id,
-                name: businessName,
-                extracted_data,
-                status: 'active',
-                confidence_map: confidence_map ?? null,
-                completeness_score: completeness_score ?? 0,
-              })
-              .select('id')
-              .single()
+              .insert({ user_id: user.id, status: 'active', ...fullPayload })
+              .select('id').single()
+            if (error?.code === '42703') {
+              const retried = await supabase
+                .from('businesses')
+                .insert({ user_id: user.id, status: 'active', ...basePayload })
+                .select('id').single()
+              inserted = retried.data
+            }
             bizId = inserted?.id ?? null
           }
 

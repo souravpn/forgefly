@@ -1,10 +1,10 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 // @ts-ignore
 import { supabase } from "@/db/supabase";
 import { getProfile } from "@/contexts/AuthContext";
 
-async function upsertBusiness(
+async function saveBusiness(
   userId: string,
   extracted_data: Record<string, unknown>,
   prompt: string | null,
@@ -14,38 +14,68 @@ async function upsertBusiness(
   const identity = (extracted_data?.identity ?? {}) as Record<string, string>;
   const businessName = identity.businessName ?? identity.name ?? 'My Business';
 
-  const { data: business, error: bizError } = await supabase
+  // Check for existing active business (avoid upsert constraint issues)
+  const { data: existing } = await supabase
     .from('businesses')
-    .upsert(
-      {
-        user_id: userId,
-        name: businessName,
-        extracted_data,
-        status: 'active',
-        confidence_map: confidence_map ?? null,
-        completeness_score: completeness_score ?? 0,
-      },
-      { onConflict: 'user_id', ignoreDuplicates: false },
-    )
     .select('id')
-    .single();
+    .eq('user_id', userId)
+    .eq('status', 'active')
+    .maybeSingle();
 
-  if (bizError) {
-    console.error('Failed to save business:', bizError);
-    return false;
+  // Build payload — try with optional columns, fall back without them
+  const fullPayload = {
+    name: businessName,
+    extracted_data,
+    status: 'active' as const,
+    confidence_map: confidence_map ?? null,
+    completeness_score: completeness_score ?? 0,
+  };
+  const basePayload = { name: businessName, extracted_data, status: 'active' as const };
+
+  let bizId: string | null = null;
+
+  if (existing?.id) {
+    const { error } = await supabase.from('businesses').update(fullPayload).eq('id', existing.id);
+    if (error?.code === '42703') {
+      await supabase.from('businesses').update(basePayload).eq('id', existing.id);
+    } else if (error) {
+      console.error('Failed to update business:', error);
+      return false;
+    }
+    bizId = existing.id;
+  } else {
+    const { data: inserted, error } = await supabase
+      .from('businesses')
+      .insert({ user_id: userId, ...fullPayload })
+      .select('id')
+      .single();
+    if (error?.code === '42703') {
+      const { data: retried, error: retryErr } = await supabase
+        .from('businesses')
+        .insert({ user_id: userId, ...basePayload })
+        .select('id')
+        .single();
+      if (retryErr) { console.error('Failed to insert business:', retryErr); return false; }
+      bizId = retried?.id ?? null;
+    } else if (error) {
+      console.error('Failed to insert business:', error);
+      return false;
+    } else {
+      bizId = inserted?.id ?? null;
+    }
   }
 
-  if (business?.id && prompt) {
+  if (bizId && prompt) {
     await supabase.from('prompt_sessions').insert({
       user_id: userId,
-      business_id: business.id,
+      business_id: bizId,
       prompt,
       prompt_type: 'seed',
       extracted_data_snapshot: extracted_data,
-    });
+    }).then(() => {});
   }
 
-  return true;
+  return !!bizId;
 }
 
 async function savePendingPortal(userId: string): Promise<boolean> {
@@ -62,7 +92,7 @@ async function savePendingPortal(userId: string): Promise<boolean> {
         .single();
 
       if (row) {
-        const ok = await upsertBusiness(
+        const ok = await saveBusiness(
           userId,
           row.extracted_data,
           row.prompt,
@@ -87,7 +117,7 @@ async function savePendingPortal(userId: string): Promise<boolean> {
   if (!raw) return false;
   try {
     const { extracted_data, prompt, confidence_map, completeness_score } = JSON.parse(raw);
-    const ok = await upsertBusiness(userId, extracted_data, prompt, confidence_map, completeness_score ?? 0);
+    const ok = await saveBusiness(userId, extracted_data, prompt, confidence_map, completeness_score ?? 0);
     if (ok) {
       localStorage.removeItem('pending_portal');
       localStorage.removeItem('pending_portal_token');
@@ -101,15 +131,19 @@ async function savePendingPortal(userId: string): Promise<boolean> {
 
 export default function AuthCallbackPage() {
   const navigate = useNavigate();
+  const handled = useRef(false);
 
   useEffect(() => {
     const redirect = async (userId: string) => {
+      // Guard against double-execution from onAuthStateChange + getSession firing together
+      if (handled.current) return;
+      handled.current = true;
       await savePendingPortal(userId);
       const profile = await getProfile(userId);
       navigate(profile ? "/dashboard" : "/onboarding", { replace: true });
     };
 
-    // Listen for the SIGNED_IN event fired when Supabase processes OAuth tokens
+    // Primary: listen for SIGNED_IN (fires when Supabase processes hash tokens)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event: string, session: { user?: { id: string } } | null) => {
         if (event === "SIGNED_IN" && session?.user) {
@@ -118,14 +152,18 @@ export default function AuthCallbackPage() {
       },
     );
 
-    // Also handle the case where session is already established (e.g. page refresh)
-    supabase.auth.getSession().then(
-      ({ data: { session } }: { data: { session: { user?: { id: string } } | null } }) => {
-        if (session?.user) {
-          redirect(session.user.id);
-        }
-      },
-    );
+    // Fallback: session already established before this effect ran
+    // Only use it if there are no hash tokens (those are handled by SIGNED_IN above)
+    const hasHashTokens = window.location.hash.includes('access_token');
+    if (!hasHashTokens) {
+      supabase.auth.getSession().then(
+        ({ data: { session } }: { data: { session: { user?: { id: string } } | null } }) => {
+          if (session?.user) {
+            redirect(session.user.id);
+          }
+        },
+      );
+    }
 
     return () => subscription.unsubscribe();
   }, [navigate]);

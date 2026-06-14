@@ -1,169 +1,188 @@
-import { useEffect, useState } from 'react'
-import { useParams } from 'react-router-dom'
-import { supabase } from '@/db/supabase'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
-import { Checkbox } from '@/components/ui/checkbox'
+import { useEffect, useState } from "react";
+import { useParams } from "react-router-dom";
+import { supabase } from "@/db/supabase";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
-  Dialog, DialogContent, DialogDescription,
-  DialogFooter, DialogHeader, DialogTitle,
-} from '@/components/ui/dialog'
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
-  Select, SelectContent, SelectItem,
-  SelectTrigger, SelectValue,
-} from '@/components/ui/select'
-import { toast } from 'sonner'
-import { Sparkles, CheckCircle2 } from 'lucide-react'
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { toast } from "sonner";
+import { Sparkles, CheckCircle2 } from "lucide-react";
 
 interface ExtractedService {
-  name: string
-  price: string
-  type: 'project' | 'retainer' | 'hourly'
-  description?: string
+  name: string;
+  price: string;
+  type: "project" | "retainer" | "hourly";
+  description?: string;
 }
 
 interface Business {
-  id: string
-  name: string
+  id: string;
+  name: string;
   extracted_data: {
-    identity?: { businessName?: string; tagline?: string; niche?: string }
-    brand?: { primaryColor?: string; secondaryColor?: string; keywords?: string[] }
-    services?: ExtractedService[]
-  }
+    identity?: { businessName?: string; tagline?: string; niche?: string };
+    brand?: {
+      primaryColor?: string;
+      secondaryColor?: string;
+      keywords?: string[];
+    };
+    services?: ExtractedService[];
+  };
 }
 
 interface RequestForm {
-  name: string
-  company: string
-  email: string
-  service_name: string
-  problem: string
-  timeline: string
-  budget_flexible: boolean
-  notes: string
+  name: string;
+  company: string;
+  email: string;
+  service_name: string;
+  problem: string;
+  timeline: string;
+  budget_flexible: boolean;
+  notes: string;
 }
 
 const EMPTY_FORM: RequestForm = {
-  name: '',
-  company: '',
-  email: '',
-  service_name: '',
-  problem: '',
-  timeline: '',
+  name: "",
+  company: "",
+  email: "",
+  service_name: "",
+  problem: "",
+  timeline: "",
   budget_flexible: false,
-  notes: '',
-}
+  notes: "",
+};
 
 const SERVICE_TYPE_LABELS: Record<string, string> = {
-  project: 'Project',
-  retainer: 'Retainer',
-  hourly: 'Hourly',
-}
+  project: "Project",
+  retainer: "Retainer",
+  hourly: "Hourly",
+};
 
 export default function PublicPortfolioPage() {
-  const { slug } = useParams<{ slug: string }>()
-  const [business, setBusiness] = useState<Business | null>(null)
-  const [notFound, setNotFound] = useState(false)
-  const [modalOpen, setModalOpen] = useState(false)
-  const [form, setForm] = useState<RequestForm>(EMPTY_FORM)
-  const [selectedService, setSelectedService] = useState('')
-  const [submitting, setSubmitting] = useState(false)
-  const [submitted, setSubmitted] = useState(false)
+  const { slug } = useParams<{ slug: string }>();
+  const [business, setBusiness] = useState<Business | null>(null);
+  const [notFound, setNotFound] = useState(false);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [form, setForm] = useState<RequestForm>(EMPTY_FORM);
+  const [selectedService, setSelectedService] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
 
   useEffect(() => {
-    if (!slug) return
-    ;(async () => {
+    if (!slug) return;
+    (async () => {
       // Step 1: resolve username → id (profiles.id = auth.users.id)
       const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('username', slug)
-        .maybeSingle()
+        .from("profiles")
+        .select("id")
+        .eq("username", slug)
+        .maybeSingle();
 
       if (profileError || !profile) {
-        setNotFound(true)
-        return
+        setNotFound(true);
+        return;
       }
 
       // Step 2: fetch the active business for that user
       const { data, error } = await supabase
-        .from('businesses')
-        .select('id, name, extracted_data')
-        .eq('user_id', profile.id)
-        .eq('status', 'active')
-        .maybeSingle()
+        .from("businesses")
+        .select("id, name, extracted_data")
+        .eq("user_id", profile.id)
+        .eq("status", "active")
+        .maybeSingle();
 
       if (error || !data) {
-        setNotFound(true)
+        setNotFound(true);
       } else {
-        setBusiness(data as unknown as Business)
+        setBusiness(data as unknown as Business);
       }
-    })()
-  }, [slug])
+    })();
+  }, [slug]);
 
-  const identity = business?.extracted_data?.identity
-  const brand = business?.extracted_data?.brand
-  const services: ExtractedService[] = business?.extracted_data?.services ?? []
-  const primaryColor = brand?.primaryColor ?? '#10B981'
-  const bizName = identity?.businessName ?? business?.name ?? ''
+  const identity = business?.extracted_data?.identity;
+  const brand = business?.extracted_data?.brand;
+  const services: ExtractedService[] = business?.extracted_data?.services ?? [];
+  const primaryColor = brand?.primaryColor ?? "#10B981";
+  const bizName = identity?.businessName ?? business?.name ?? "";
 
   function openModal(serviceName?: string) {
-    setForm(EMPTY_FORM)
-    setSelectedService(serviceName ?? '')
-    setSubmitted(false)
-    setModalOpen(true)
+    setForm(EMPTY_FORM);
+    setSelectedService(serviceName ?? "");
+    setSubmitted(false);
+    setModalOpen(true);
   }
 
   async function handleSubmit() {
     if (!form.name.trim() || !form.email.trim()) {
-      toast.error('Name and email are required.')
-      return
+      toast.error("Name and email are required.");
+      return;
     }
-    if (!business) return
-    setSubmitting(true)
+    if (!business) return;
+    setSubmitting(true);
     try {
-      const { error } = await supabase.functions.invoke('submit-proposal-request', {
-        body: {
-          business_id: business.id,
-          name: form.name.trim(),
-          company: form.company.trim() || null,
-          email: form.email.trim(),
-          service_name: selectedService || null,
-          problem: form.problem.trim() || null,
-          timeline: form.timeline || null,
-          budget_flexible: form.budget_flexible,
-          notes: form.notes.trim() || null,
+      const { error } = await supabase.functions.invoke(
+        "submit-proposal-request",
+        {
+          body: {
+            business_id: business.id,
+            name: form.name.trim(),
+            company: form.company.trim() || null,
+            email: form.email.trim(),
+            service_name: selectedService || null,
+            problem: form.problem.trim() || null,
+            timeline: form.timeline || null,
+            budget_flexible: form.budget_flexible,
+            notes: form.notes.trim() || null,
+          },
         },
-      })
-      if (error) throw error
-      setSubmitted(true)
+      );
+      if (error) throw error;
+      setSubmitted(true);
     } catch {
-      toast.error('Something went wrong. Please try again.')
+      toast.error("Something went wrong. Please try again.");
     } finally {
-      setSubmitting(false)
+      setSubmitting(false);
     }
   }
 
   if (notFound) {
+    console.log("slug: ", slug);
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="text-center">
           <h1 className="text-2xl font-bold mb-2">Portfolio not found</h1>
-          <p className="text-muted-foreground">This freelancer's portfolio doesn't exist or isn't active.</p>
+          <p className="text-muted-foreground">
+            This freelancer's portfolio doesn't exist or isn't active.
+          </p>
         </div>
       </div>
-    )
+    );
   }
 
   if (!business) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="animate-pulse text-muted-foreground text-sm">Loading…</div>
+        <div className="animate-pulse text-muted-foreground text-sm">
+          Loading…
+        </div>
       </div>
-    )
+    );
   }
 
   return (
@@ -181,15 +200,24 @@ export default function PublicPortfolioPage() {
         </div>
         <h1 className="text-3xl font-bold tracking-tight">{bizName}</h1>
         {identity?.tagline && (
-          <p className="mt-2 text-lg text-muted-foreground">{identity.tagline}</p>
+          <p className="mt-2 text-lg text-muted-foreground">
+            {identity.tagline}
+          </p>
         )}
         {identity?.niche && (
-          <Badge variant="secondary" className="mt-3">{identity.niche}</Badge>
+          <Badge variant="secondary" className="mt-3">
+            {identity.niche}
+          </Badge>
         )}
         {brand?.keywords && brand.keywords.length > 0 && (
           <div className="mt-3 flex flex-wrap justify-center gap-2">
-            {brand.keywords.map(k => (
-              <span key={k} className="text-xs text-muted-foreground border rounded-full px-2.5 py-0.5">{k}</span>
+            {brand.keywords.map((k) => (
+              <span
+                key={k}
+                className="text-xs text-muted-foreground border rounded-full px-2.5 py-0.5"
+              >
+                {k}
+              </span>
             ))}
           </div>
         )}
@@ -207,17 +235,31 @@ export default function PublicPortfolioPage() {
                   className="border rounded-xl p-5 flex flex-col gap-3 hover:shadow-md transition-shadow"
                 >
                   <div className="flex items-start justify-between gap-2">
-                    <h3 className="font-semibold text-sm leading-snug">{svc.name}</h3>
+                    <h3 className="font-semibold text-sm leading-snug">
+                      {svc.name}
+                    </h3>
                     <Badge variant="outline" className="shrink-0 text-[10px]">
                       {SERVICE_TYPE_LABELS[svc.type] ?? svc.type}
                     </Badge>
                   </div>
                   {svc.description && (
-                    <p className="text-xs text-muted-foreground line-clamp-3">{svc.description}</p>
+                    <p className="text-xs text-muted-foreground line-clamp-3">
+                      {svc.description}
+                    </p>
                   )}
                   <div className="flex items-center justify-between mt-auto pt-1">
-                    <span className="text-sm font-bold" style={{ color: primaryColor }}>{svc.price}</span>
-                    <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => openModal(svc.name)}>
+                    <span
+                      className="text-sm font-bold"
+                      style={{ color: primaryColor }}
+                    >
+                      {svc.price}
+                    </span>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs"
+                      onClick={() => openModal(svc.name)}
+                    >
                       Request →
                     </Button>
                   </div>
@@ -226,7 +268,9 @@ export default function PublicPortfolioPage() {
             </div>
           </>
         ) : (
-          <p className="text-muted-foreground text-sm text-center py-8">No services listed yet.</p>
+          <p className="text-muted-foreground text-sm text-center py-8">
+            No services listed yet.
+          </p>
         )}
 
         {/* Global CTA */}
@@ -249,7 +293,8 @@ export default function PublicPortfolioPage() {
           <DialogHeader>
             <DialogTitle>Request a Proposal</DialogTitle>
             <DialogDescription>
-              Fill in your details and {bizName} will get back to you with a tailored proposal.
+              Fill in your details and {bizName} will get back to you with a
+              tailored proposal.
             </DialogDescription>
           </DialogHeader>
 
@@ -260,7 +305,9 @@ export default function PublicPortfolioPage() {
               <p className="text-muted-foreground text-sm">
                 {bizName} will review your request and reach out shortly.
               </p>
-              <Button variant="outline" onClick={() => setModalOpen(false)}>Close</Button>
+              <Button variant="outline" onClick={() => setModalOpen(false)}>
+                Close
+              </Button>
             </div>
           ) : (
             <>
@@ -271,7 +318,9 @@ export default function PublicPortfolioPage() {
                     <Input
                       id="req-name"
                       value={form.name}
-                      onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, name: e.target.value }))
+                      }
                       placeholder="Your name"
                     />
                   </div>
@@ -280,7 +329,9 @@ export default function PublicPortfolioPage() {
                     <Input
                       id="req-company"
                       value={form.company}
-                      onChange={e => setForm(f => ({ ...f, company: e.target.value }))}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, company: e.target.value }))
+                      }
                       placeholder="Company (optional)"
                     />
                   </div>
@@ -292,7 +343,9 @@ export default function PublicPortfolioPage() {
                     id="req-email"
                     type="email"
                     value={form.email}
-                    onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, email: e.target.value }))
+                    }
                     placeholder="your@email.com"
                   />
                 </div>
@@ -301,15 +354,19 @@ export default function PublicPortfolioPage() {
                   <div className="space-y-1.5">
                     <Label>Service</Label>
                     <div className="flex flex-wrap gap-2">
-                      {services.map(svc => (
+                      {services.map((svc) => (
                         <button
                           key={svc.name}
                           type="button"
-                          onClick={() => setSelectedService(s => s === svc.name ? '' : svc.name)}
+                          onClick={() =>
+                            setSelectedService((s) =>
+                              s === svc.name ? "" : svc.name,
+                            )
+                          }
                           className={`px-3 py-1 rounded-full text-xs border transition-colors ${
                             selectedService === svc.name
-                              ? 'border-primary bg-primary text-primary-foreground'
-                              : 'border-border hover:border-primary/50'
+                              ? "border-primary bg-primary text-primary-foreground"
+                              : "border-border hover:border-primary/50"
                           }`}
                         >
                           {svc.name}
@@ -320,11 +377,15 @@ export default function PublicPortfolioPage() {
                 )}
 
                 <div className="space-y-1.5">
-                  <Label htmlFor="req-problem">What's the problem you're trying to solve?</Label>
+                  <Label htmlFor="req-problem">
+                    What's the problem you're trying to solve?
+                  </Label>
                   <Textarea
                     id="req-problem"
                     value={form.problem}
-                    onChange={e => setForm(f => ({ ...f, problem: e.target.value }))}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, problem: e.target.value }))
+                    }
                     placeholder="Describe your situation or goals…"
                     className="resize-none"
                     rows={3}
@@ -335,7 +396,9 @@ export default function PublicPortfolioPage() {
                   <Label>Timeline</Label>
                   <Select
                     value={form.timeline}
-                    onValueChange={v => setForm(f => ({ ...f, timeline: v }))}
+                    onValueChange={(v) =>
+                      setForm((f) => ({ ...f, timeline: v }))
+                    }
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="When do you need this?" />
@@ -353,9 +416,14 @@ export default function PublicPortfolioPage() {
                   <Checkbox
                     id="req-budget"
                     checked={form.budget_flexible}
-                    onCheckedChange={v => setForm(f => ({ ...f, budget_flexible: !!v }))}
+                    onCheckedChange={(v) =>
+                      setForm((f) => ({ ...f, budget_flexible: !!v }))
+                    }
                   />
-                  <Label htmlFor="req-budget" className="text-sm font-normal cursor-pointer">
+                  <Label
+                    htmlFor="req-budget"
+                    className="text-sm font-normal cursor-pointer"
+                  >
                     My budget is flexible
                   </Label>
                 </div>
@@ -365,7 +433,9 @@ export default function PublicPortfolioPage() {
                   <Textarea
                     id="req-notes"
                     value={form.notes}
-                    onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, notes: e.target.value }))
+                    }
                     placeholder="Anything else we should know? (optional)"
                     className="resize-none"
                     rows={2}
@@ -374,11 +444,18 @@ export default function PublicPortfolioPage() {
               </div>
 
               <DialogFooter>
-                <Button variant="outline" onClick={() => setModalOpen(false)} disabled={submitting}>
+                <Button
+                  variant="outline"
+                  onClick={() => setModalOpen(false)}
+                  disabled={submitting}
+                >
                   Cancel
                 </Button>
-                <Button onClick={handleSubmit} disabled={submitting || !form.name || !form.email}>
-                  {submitting ? 'Sending…' : 'Send Request'}
+                <Button
+                  onClick={handleSubmit}
+                  disabled={submitting || !form.name || !form.email}
+                >
+                  {submitting ? "Sending…" : "Send Request"}
                 </Button>
               </DialogFooter>
             </>
@@ -386,5 +463,5 @@ export default function PublicPortfolioPage() {
         </DialogContent>
       </Dialog>
     </div>
-  )
+  );
 }
