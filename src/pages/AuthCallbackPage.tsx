@@ -14,7 +14,8 @@ async function saveBusiness(
   const identity = (extracted_data?.identity ?? {}) as Record<string, string>;
   const businessName = identity.businessName ?? identity.name ?? 'My Business';
 
-  // Check for existing active business (avoid upsert constraint issues)
+  // Check for existing active business — if one exists, don't overwrite it.
+  // The user can update via "Update OS" in the dashboard.
   const { data: existing } = await supabase
     .from('businesses')
     .select('id')
@@ -22,7 +23,11 @@ async function saveBusiness(
     .eq('status', 'active')
     .maybeSingle();
 
-  // Build payload — try with optional columns, fall back without them
+  if (existing?.id) {
+    // Business already exists — skip save to avoid clobbering real data.
+    return true;
+  }
+
   const fullPayload = {
     name: businessName,
     extracted_data,
@@ -34,16 +39,7 @@ async function saveBusiness(
 
   let bizId: string | null = null;
 
-  if (existing?.id) {
-    const { error } = await supabase.from('businesses').update(fullPayload).eq('id', existing.id);
-    if (error?.code === '42703') {
-      await supabase.from('businesses').update(basePayload).eq('id', existing.id);
-    } else if (error) {
-      console.error('Failed to update business:', error);
-      return false;
-    }
-    bizId = existing.id;
-  } else {
+  {
     const { data: inserted, error } = await supabase
       .from('businesses')
       .insert({ user_id: userId, ...fullPayload })
