@@ -30,4 +30,8 @@ history/*.json
 
 # Project env files
 .env*.local
+.env*.key
 .env
+*.p12
+*.pem
+*.csr

@@ -1,4 +1,4 @@
-import { CheckCircle2, Sparkles } from "lucide-react";
+import { CheckCircle2, Sparkles, Download, Wallet } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -86,6 +86,7 @@ export default function PublicPortfolioPage() {
   const [selectedService, setSelectedService] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [walletLoading, setWalletLoading] = useState(false);
 
   useEffect(() => {
     if (!slug) return;
@@ -126,6 +127,62 @@ export default function PublicPortfolioPage() {
   const contactEmail = business?.contact_email ?? null;
   const contactPhone = business?.contact_phone ?? null;
   const bizName = identity?.businessName ?? business?.name ?? "";
+
+  const portfolioUrl = `${window.location.origin}/p/${slug}`
+  const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent)
+
+  function saveContact() {
+    const lines: string[] = [
+      'BEGIN:VCARD',
+      'VERSION:3.0',
+      `FN:${bizName}`,
+      `ORG:${bizName}`,
+      `URL:${portfolioUrl}`,
+    ]
+    if (identity?.tagline) lines.push(`NOTE:${identity.tagline}`)
+    if (contactEmail) lines.push(`EMAIL:${contactEmail}`)
+    if (contactPhone) lines.push(`TEL:${contactPhone}`)
+    lines.push('END:VCARD')
+    const blob = new Blob([lines.join('\r\n')], { type: 'text/vcard' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${slug}.vcf`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  async function addToWallet() {
+    setWalletLoading(true);
+    try {
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
+      const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
+      const res = await fetch(`${supabaseUrl}/functions/v1/generate-wallet-pass`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${anonKey}`,
+          apikey: anonKey,
+        },
+        body: JSON.stringify({ slug }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error((err as { error?: string }).error ?? `HTTP ${res.status}`);
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${slug}.pkpass`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      toast.error(`Couldn't generate pass: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setWalletLoading(false);
+    }
+  }
 
   function openModal(serviceName?: string) {
     setForm(EMPTY_FORM);
@@ -313,6 +370,32 @@ export default function PublicPortfolioPage() {
               )}
             </div>
           )}
+
+          {/* Wallet / Save contact CTA */}
+          <div className="pt-2">
+            {isIos ? (
+              <button
+                type="button"
+                onClick={addToWallet}
+                disabled={walletLoading}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-border/60 text-sm text-muted-foreground hover:text-foreground hover:border-border transition-colors disabled:opacity-60"
+              >
+                {walletLoading
+                  ? <div className="h-4 w-4 rounded-full border-2 border-muted-foreground/30 border-t-muted-foreground animate-spin" />
+                  : <Wallet className="h-4 w-4" />}
+                {walletLoading ? 'Generating…' : 'Add to Apple Wallet'}
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={saveContact}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-border/60 text-sm text-muted-foreground hover:text-foreground hover:border-border transition-colors"
+              >
+                <Download className="h-4 w-4" />
+                Save contact
+              </button>
+            )}
+          </div>
         </div>
       </main>
 

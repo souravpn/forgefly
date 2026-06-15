@@ -161,7 +161,7 @@ serve(async (req) => {
     const presenceTier = (ed.business_profile as Record<string, string> | null)?.presence_tier ?? 'b2b_professional';
 
     const portfolioUrl = business.slug
-      ? `${Deno.env.get('PUBLIC_SITE_URL') ?? 'https://forgefly.app'}/p/${business.slug}`
+      ? `${Deno.env.get('SITE_URL') ?? 'https://www.forgefly.io'}/p/${business.slug}`
       : null;
 
     const bizCtx: BusinessContext = {

@@ -289,3 +289,50 @@ Fallback: if LinkedIn page is gated, show paste input for degraded experience.
 Comment quality rule: engage as a peer, never as an admirer. No "great post!" ever.
 Same Edge Function as company research — add `action: "prewarm_comment"` branch.
 Full spec in FORGEFLY_OUTREACH_SPEC.md §10e.
+
+### QR code + Apple Wallet pass (v4.2 addition)
+Two new sharing artifacts. Strategic distinction:
+- QR code = in-person tool (networking, market stall, coffee meeting)
+- Wallet pass = persistence tool (lives in Apple Wallet forever)
+- Natural chain: owner shows QR → visitor scans → lands on /p/[slug] → adds to Wallet
+
+Four touch points:
+1. Share modal (owner) — new "QR code" tab: canvas-rendered QR in brand colors,
+   3 color chips, PNG/SVG download, "Wallet →" shortcut button
+2. /p/[slug] (visitor) — "Add to Apple Wallet" on iOS / "Save contact" (.vcf) on Android,
+   below proposal CTA — for the visitor after scanning, not the owner
+3. Brand Kit page (owner) — QR download section alongside logo downloads:
+   PNG brand color, PNG white-on-dark, SVG — for print/packaging use
+4. Business Settings (owner) — wallet pass preview under new Sharing subsection,
+   "Add to my own Wallet" CTA, regenerate on brand kit change
+
+Wallet pass contents: business name, tagline, logo, brand color background, QR → /p/[slug],
+contact email, portfolio URL. NOT prices or services list.
+.pkpass: server-side only via Supabase Edge Function `generate-wallet-pass`.
+Requires Apple Developer account, Pass Type ID cert, passkit-generator (npm).
+Android: .vcf download, same CTA slot, UA detection to switch.
+
+QR contrast rule: if brand primary luminance > 0.4, auto-fallback to black on white.
+Never white-on-light — must scan reliably.
+
+Full spec in FORGEFLY_OUTREACH_SPEC.md §11. Build estimate: +5 days full, +1.5 days MVP.
+
+### QR code + Apple Wallet pass (v4.2)
+Three new tabs in share modal: Share (existing) / QR code (new) / Wallet pass (new).
+QR = in-person sharing tool. Wallet pass = persistence artifact the visitor keeps.
+The chain: owner shows QR → visitor scans → /p/[slug] → visitor adds to wallet.
+
+Touchpoints:
+- Share modal QR tab: owner accesses, color-customizes, downloads QR
+- Share modal Wallet tab: owner previews pass, adds to own wallet
+- /p/[slug] visitor CTA: "Add to Apple Wallet" (iOS) / "Save contact .vcf" (Android)
+- Brand Kit: QR download assets (PNG brand color, PNG white bg, SVG)
+- Business Settings: live pass preview, auto-updates on brand color change
+
+QR always renders dark color on white. If brand primary luminance > 0.4, auto-fallback
+to #1a1a1a. Never white-on-light.
+
+Wallet pass generated server-side via Edge Function using `passkit-generator`.
+Pass type: generic. Brand primary = pass background. QR embedded natively via
+barcode field. Apple certs stored as Supabase secrets.
+Full .pkpass structure + build order in FORGEFLY_OUTREACH_SPEC.md §11.

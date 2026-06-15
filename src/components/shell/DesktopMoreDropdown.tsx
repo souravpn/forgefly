@@ -29,6 +29,8 @@ export function DesktopMoreDropdown() {
 
   const slug = profile?.username ?? (business ? toSlug(business.name) : '')
   const businessName = business?.name ?? 'My Portfolio'
+  const brandPrimary = business?.extracted_data?.brand?.primaryColor ?? '#10B981'
+  const tagline = business?.extracted_data?.identity?.tagline ?? undefined
 
   return (
     <>
@@ -77,6 +79,10 @@ export function DesktopMoreDropdown() {
           onClose={() => setShareOpen(false)}
           slug={slug}
           businessName={businessName}
+          brandPrimary={brandPrimary}
+          tagline={tagline}
+          contactEmail={business?.contact_email ?? null}
+          contactPhone={business?.contact_phone ?? null}
         />
       )}
     </>

@@ -566,3 +566,205 @@ Post content: {post_content}`
 **Build note:** This is the same Edge Function as company research — add a
 `action: "prewarm_comment"` branch. No new function needed.
 
+
+---
+
+## 11. QR code + Apple Wallet pass — sharing touchpoints
+
+### Strategic distinction
+- QR code = in-person sharing tool (networking event, market stall, coffee meeting)
+- Wallet pass = persistence tool (lives in Apple Wallet, survives phone upgrades)
+- Natural chain: QR code → person scans → lands on /p/[slug] → prompted to Add to Wallet
+
+### Touch point 1 — Share modal (owner-facing): QR code tab
+Location: existing share modal, new third tab alongside Share.
+Content:
+- 160×160 QR rendered on canvas, white background, brand color foreground
+- 3 color chips: brand primary, brand dark, black — user picks
+- Caption includes real /p/[slug] URL (never placeholder)
+- Download buttons: PNG, SVG
+- "Wallet →" shortcut button to navigate to Wallet pass tab
+Implementation: use `qrcode` library + canvas, draw brand color over white.
+Contrast rule: if brand primary luminance > 0.4, auto-fallback to black. Never
+white-on-light or low-contrast QR — must scan reliably.
+
+### Touch point 2 — Public portfolio page (visitor-facing): Add to Wallet
+Location: /p/[slug] — below the proposal/contact CTA, persistent.
+Behavior:
+- iOS Safari: "Add to Apple Wallet" button → generates .pkpass on demand → download
+- Android / other: same slot becomes "Save contact" → .vcf download
+- Detection: navigator.userAgent check (UA string or navigator.platform)
+This CTA is for the visitor, not the owner. It is what they get after scanning.
+
+### Touch point 3 — Brand Kit page (owner-facing): downloadable QR assets
+Location: Brand Kit page, alongside logo download section.
+Offer: "Download QR code" — three variants:
+- PNG in brand primary color on white
+- PNG white on dark (for dark backgrounds)
+- SVG (scalable for print)
+Use case: business cards, packaging inserts, stickers, invoice footers.
+
+### Touch point 4 — Business Settings (owner-facing): wallet pass preview + setup
+Location: Settings tab → Sharing section (new subsection).
+Content:
+- Live preview of the .pkpass card (pulls from brand kit + bio + contact fields)
+- "Add to my own Wallet" CTA — lets owner demo the experience
+- "Regenerate pass" if brand kit changes
+Pass preview renders as a visual card in the settings UI, not a modal.
+
+### Wallet pass contents (.pkpass)
+- Business name (from businesses.name)
+- Tagline (from extracted_data.tagline)
+- Logo (from businesses.logo_url)
+- Brand primary color as pass background
+- QR code linking to /p/[slug]
+- Contact email (from businesses.contact_email)
+- Portfolio URL in brand primary color
+- Pass subtext: "Tap to open portfolio"
+
+Does NOT include: prices, services list (too volatile / too much text for a pass card)
+
+### .pkpass generation
+Server-side only — never client-side. Supabase Edge Function:
+`generate-wallet-pass` action in the existing AI gateway Edge Function.
+Requires: Apple Developer account, Pass Type ID certificate, team identifier.
+Signing: p12 certificate + passphrase stored in Supabase secrets.
+Library: `passkit-generator` (npm) in the Edge Function.
+
+### Android equivalent
+Same "Save contact" CTA generates a .vcf file with:
+- FN (full name / business name)
+- ORG (business name)
+- URL (portfolio link)
+- EMAIL (contact email)
+- NOTE (tagline)
+No Apple-specific dependencies. Pure text format, universally supported.
+
+### Build order addition (append to §9 build order)
+| # | Task | Effort | Depends on |
+|---|---|---|---|
+| 13 | QR code tab in share modal (canvas render + color chips + download) | 1 day | businesses.slug |
+| 14 | Add to Wallet / Save contact CTA on /p/[slug] | 0.5 days | #13 |
+| 15 | Brand Kit QR download section | 0.5 days | #13 |
+| 16 | .pkpass Edge Function + Apple Dev account setup | 2 days | businesses, brand kit |
+| 17 | Wallet pass preview in Business Settings | 1 day | #16 |
+
+Total Phase 3.5 revised estimate: ~19 days full / ~14 days MVP (without wallet pass).
+
+---
+
+## 11. QR code + Apple Wallet pass (v4.2 addition)
+
+### Strategic framing
+
+QR code and wallet pass are distinct artifacts serving different moments:
+- QR code = in-person sharing tool (networking, market stall, coffee meeting)
+- Wallet pass = persistence tool (lives in client's phone forever, survives upgrades)
+
+The ideal chain: owner shows QR → visitor scans → lands on /p/[slug] → prompted to
+"Add to Wallet." QR gets the scan. Wallet pass is what they keep.
+
+### Touchpoint map
+
+| Surface | Who sees it | What it does |
+|---|---|---|
+| Share modal → QR tab | Owner | Access, color-customize, download QR |
+| Share modal → Wallet pass tab | Owner | Preview pass, add to own wallet, one-time setup |
+| Public portfolio /p/[slug] | Visitor (after scanning) | "Add to Apple Wallet" / "Save contact" (.vcf) |
+| Brand Kit page | Owner | Download QR as print-ready asset (PNG, SVG) |
+| Business Settings | Owner | Live pass preview, auto-updates on brand color change |
+
+### Share modal — new tabs
+
+Add two tabs alongside existing Copy / Email / Message:
+
+**QR code tab**
+- Renders QR in brand primary color on white background
+- Color picker: brand primary (default) + 3 presets (purple, teal, black)
+- Rule: always dark color on white — never white-on-light, never low-contrast
+  If brand primary is too light (luminance > 0.4), auto-fallback to dark on white
+- Download options: PNG (transparent bg), PNG (white bg), SVG
+- Footer note: "Also available in Brand Kit as a downloadable asset"
+- QR encodes: https://forgefly.io/p/[slug]
+
+**Wallet pass tab**
+- Live preview of the pass card using brand primary color + logo
+- Pass contents: business name, tagline, portfolio URL, contact email, QR (embedded)
+- Pass does NOT include: prices, services list (too volatile / too long)
+- CTA: "Add to Apple Wallet" (generates .pkpass)
+- Secondary: "Save contact (.vcf)" for Android
+- Footer: "Pass uses your brand primary color. Edit in Business Settings → Brand."
+- Auto-regenerates when brand color or logo changes — no manual re-setup
+
+### Public portfolio — visitor-facing wallet CTA
+
+Location: below the "Request a Proposal" CTA on /p/[slug]
+- iOS Safari: "Add to Apple Wallet" button (renders .pkpass)
+- Android / other: "Save contact" (.vcf download)
+- Detection: `navigator.userAgent` check, render appropriate button
+- This is the conversion point of the QR → scan → save chain
+
+### Brand Kit — QR download assets
+
+In Brand Kit page, alongside logo downloads:
+- QR code PNG (brand primary color, white background)
+- QR code PNG (white, transparent background — for dark surfaces)
+- QR code SVG (scalable, for print)
+- Label: "Use on business cards, packaging, invoice footers, stickers"
+
+### Business Settings — wallet pass management
+
+Location: Settings → Business Settings → Sharing section
+- Live pass preview using current brand color + logo
+- "Add to my own wallet" CTA — useful for owner to demo to clients
+- One-time setup; no re-entry needed unless brand changes
+- Auto-updates: brand color or logo change → pass regenerates on next open
+
+### QR code generation
+
+Library: `qrcode` npm package on the Edge Function side for server-side generation,
+or `qrcodejs` / canvas for client-side preview in the modal.
+
+Color contrast enforcement:
+```typescript
+function getQRColor(brandPrimary: string): string {
+  const luminance = getLuminance(brandPrimary)
+  return luminance > 0.4 ? '#1a1a1a' : brandPrimary
+}
+```
+
+### Apple Wallet pass (.pkpass) — implementation notes
+
+- Generate server-side via Supabase Edge Function using `passkit-generator` npm package
+- Required Apple certs: Pass Type ID cert + WWDR cert (stored as Supabase secrets)
+- Pass type: `generic` (most flexible for business cards)
+- Pass structure:
+  ```json
+  {
+    "formatVersion": 1,
+    "passTypeIdentifier": "pass.io.forgefly.portfolio",
+    "teamIdentifier": "[APPLE_TEAM_ID]",
+    "backgroundColor": "[brand_primary]",
+    "logoText": "[business_name]",
+    "generic": {
+      "primaryFields": [{ "key": "name", "value": "[business_name]" }],
+      "secondaryFields": [{ "key": "url", "value": "forgefly.io/p/[slug]" }],
+      "auxiliaryFields": [{ "key": "email", "value": "[contact_email]" }],
+      "backFields": [{ "key": "tagline", "value": "[tagline]" }]
+    },
+    "barcode": { "message": "https://forgefly.io/p/[slug]", "format": "PKBarcodeFormatQR" }
+  }
+  ```
+- QR is embedded in the pass natively via the `barcode` field — no separate QR image needed
+
+### Build additions to order (append to §9)
+
+| # | Task | Effort | Depends on |
+|---|---|---|---|
+| 13 | QR code generator — modal tab + brand color logic | 1 day | businesses.slug, brand_kit |
+| 14 | Brand Kit — QR download assets | 0.5 days | #13 |
+| 15 | Apple Wallet .pkpass Edge Function | 2 days | Apple certs, passkit-generator |
+| 16 | Public portfolio — Add to Wallet / Save contact CTA | 1 day | #15, /p/[slug] page |
+| 17 | Business Settings — wallet pass preview section | 0.5 days | #15 |
+
+Total additions: ~5 days. Can run in parallel with outreach kit build after #13.
