@@ -47,6 +47,7 @@ export default function SettingsPage() {
     slug: '',
     bio: '',
     contact_email: '',
+    contact_phone: '',
   });
   const [publicIdentLoading, setPublicIdentLoading] = useState(false);
   const [slugStatus, setSlugStatus] = useState<'idle' | 'checking' | 'available' | 'taken'>('idle');
@@ -73,16 +74,20 @@ export default function SettingsPage() {
 
   useEffect(() => {
     if (business) {
+      // If businesses.slug isn't set yet, fall back to the user's profile username
+      // (which is what PublicPortfolioPage currently uses to resolve the portfolio)
+      const slug = business.slug ?? profile?.username ?? '';
       const ident = {
         name: business.name ?? '',
-        slug: business.slug ?? '',
+        slug,
         bio: business.bio ?? '',
         contact_email: business.contact_email ?? '',
+        contact_phone: business.contact_phone ?? '',
       };
       setPublicIdent(ident);
-      setOriginalSlug(business.slug ?? '');
+      setOriginalSlug(slug);
     }
-  }, [business]);
+  }, [business, profile]);
 
   useEffect(() => {
     const connect = searchParams.get('connect');
@@ -173,6 +178,7 @@ export default function SettingsPage() {
         slug: publicIdent.slug || null,
         bio: publicIdent.bio || null,
         contact_email: publicIdent.contact_email || null,
+        contact_phone: publicIdent.contact_phone || null,
       })
       .eq('id', business.id);
     if (error) {
@@ -290,7 +296,10 @@ export default function SettingsPage() {
                 Public Identity
               </CardTitle>
               <CardDescription>
-                Shown on your public portfolio at forgefly.app/p/[slug]
+                Shown on your public portfolio
+                {publicIdent.slug ? (
+                  <> at <span className="font-mono text-foreground/80">forgefly.app/p/{publicIdent.slug}</span></>
+                ) : ''}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -338,17 +347,29 @@ export default function SettingsPage() {
                 <p className="text-xs text-muted-foreground text-right">{publicIdent.bio.length}/500</p>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="publicEmail">Contact Email (public)</Label>
-                <Input
-                  id="publicEmail"
-                  type="email"
-                  value={publicIdent.contact_email}
-                  onChange={(e) => setPublicIdent(p => ({ ...p, contact_email: e.target.value }))}
-                  placeholder="hello@yourbusiness.com"
-                />
-                <p className="text-xs text-muted-foreground">Shown on your public portfolio page</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="publicEmail">Contact Email (public)</Label>
+                  <Input
+                    id="publicEmail"
+                    type="email"
+                    value={publicIdent.contact_email}
+                    onChange={(e) => setPublicIdent(p => ({ ...p, contact_email: e.target.value }))}
+                    placeholder="hello@yourbusiness.com"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="publicPhone">Contact Phone <span className="text-muted-foreground font-normal">(optional)</span></Label>
+                  <Input
+                    id="publicPhone"
+                    type="tel"
+                    value={publicIdent.contact_phone}
+                    onChange={(e) => setPublicIdent(p => ({ ...p, contact_phone: e.target.value }))}
+                    placeholder="+1 (555) 000-0000"
+                  />
+                </div>
               </div>
+              <p className="text-xs text-muted-foreground -mt-2">Shown on your public portfolio page</p>
 
               <Button onClick={handleSavePublicIdent} disabled={publicIdentLoading || slugStatus === 'taken'}>
                 {publicIdentLoading ? 'Saving…' : 'Save Public Identity'}

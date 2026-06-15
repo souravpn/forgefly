@@ -36,6 +36,8 @@ interface Business {
   id: string;
   name: string;
   bio?: string | null;
+  contact_email?: string | null;
+  contact_phone?: string | null;
   extracted_data: {
     identity?: { businessName?: string; tagline?: string; niche?: string };
     brand?: {
@@ -103,7 +105,7 @@ export default function PublicPortfolioPage() {
       // Step 2: fetch the active business for that user
       const { data, error } = await supabase
         .from("businesses")
-        .select("id, name, bio, extracted_data")
+        .select("id, name, bio, contact_email, contact_phone, extracted_data")
         .eq("user_id", profile.id)
         .eq("status", "active")
         .maybeSingle();
@@ -121,6 +123,8 @@ export default function PublicPortfolioPage() {
   const services: ExtractedService[] = business?.extracted_data?.services ?? [];
   const primaryColor = brand?.primaryColor ?? "#10B981";
   const bio = business?.bio ?? null;
+  const contactEmail = business?.contact_email ?? null;
+  const contactPhone = business?.contact_phone ?? null;
   const bizName = identity?.businessName ?? business?.name ?? "";
 
   function openModal(serviceName?: string) {
@@ -284,7 +288,7 @@ export default function PublicPortfolioPage() {
         )}
 
         {/* Global CTA */}
-        <div className="mt-12 text-center">
+        <div className="mt-12 text-center space-y-4">
           <Button
             size="lg"
             className="gap-2"
@@ -294,6 +298,21 @@ export default function PublicPortfolioPage() {
             <Sparkles className="h-4 w-4" />
             Request a Proposal
           </Button>
+          {(contactEmail || contactPhone) && (
+            <div className="flex items-center justify-center gap-4 text-sm text-muted-foreground">
+              {contactEmail && (
+                <a href={`mailto:${contactEmail}`} className="hover:underline" style={{ color: primaryColor }}>
+                  {contactEmail}
+                </a>
+              )}
+              {contactEmail && contactPhone && <span>·</span>}
+              {contactPhone && (
+                <a href={`tel:${contactPhone}`} className="hover:underline" style={{ color: primaryColor }}>
+                  {contactPhone}
+                </a>
+              )}
+            </div>
+          )}
         </div>
       </main>
 

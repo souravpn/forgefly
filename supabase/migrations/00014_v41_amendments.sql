@@ -3,6 +3,7 @@ ALTER TABLE businesses
   ADD COLUMN IF NOT EXISTS bio text,
   ADD COLUMN IF NOT EXISTS slug text,
   ADD COLUMN IF NOT EXISTS contact_email text,
+  ADD COLUMN IF NOT EXISTS contact_phone text,
   ADD COLUMN IF NOT EXISTS logo_url text;
 
 -- Unique slug per business (allow null)

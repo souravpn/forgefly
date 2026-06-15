@@ -10,6 +10,7 @@ export interface Business {
   bio: string | null
   slug: string | null
   contact_email: string | null
+  contact_phone: string | null
   logo_url: string | null
   extracted_data: ExtractedData
   seed_prompt: string | null
