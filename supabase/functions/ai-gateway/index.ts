@@ -632,6 +632,21 @@ serve(async (req) => {
       return await handleExtract(body, supabase, userId);
     }
 
+    if (mode === 'classify') {
+      const { prompt } = body as { prompt?: string };
+      if (!prompt) {
+        return new Response(JSON.stringify({ error: 'prompt required' }), {
+          status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      const classification = await runClassifier(prompt);
+      await logUsage(supabase, userId, null, HAIKU, 'classify', 150, 80);
+      return new Response(
+        JSON.stringify({ business_profile: classification.business_profile ?? null }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
+    }
+
     if (mode === 'chat') {
       if (!userId) {
         return new Response(

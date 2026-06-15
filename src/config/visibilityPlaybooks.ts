@@ -208,3 +208,101 @@ export const PERSONA_EXAMPLES: Record<string, string> = {
   b2b_professional: 'CPA, consultant, bookkeeper, coach',
   hybrid_professional: 'Therapist, personal trainer, financial advisor',
 }
+
+// ─── Channel usage instructions ───────────────────────────────────────────────
+
+export interface ChannelInstruction {
+  steps: { label: string; where: string }[];
+  note?: string;
+}
+
+export const CHANNEL_INSTRUCTIONS: Record<string, ChannelInstruction> = {
+  behance_dribbble_bio: {
+    steps: [
+      { label: 'Behance', where: 'behance.net → ☰ → Edit Profile → "About" field' },
+      { label: 'Dribbble', where: 'dribbble.com → Your name → Edit Profile → "Bio" field' },
+    ],
+    note: 'Keep it under 160 chars for Dribbble — their bio truncates on mobile.',
+  },
+
+  linkedin_kit: {
+    steps: [
+      { label: 'Headline', where: 'LinkedIn → View Profile → pencil icon → "Headline" field' },
+      { label: 'About', where: 'LinkedIn → View Profile → "About" section → pencil icon' },
+      { label: 'Featured', where: 'LinkedIn → View Profile → "Add section" → Featured → Links → paste caption as link description' },
+    ],
+    note: 'Edit your headline from the LinkedIn mobile app too — tap your photo → Edit.',
+  },
+
+  linkedin_authority: {
+    steps: [
+      { label: 'Headline', where: 'LinkedIn → View Profile → pencil icon → "Headline" field' },
+      { label: 'About', where: 'LinkedIn → View Profile → "About" section → pencil icon' },
+      { label: 'Post templates', where: 'LinkedIn → Home → "Start a post" → paste, customise, publish' },
+    ],
+    note: 'Post one thought leadership piece per week for 3 weeks to start building algorithmic reach.',
+  },
+
+  google_business: {
+    steps: [
+      { label: 'Description', where: 'business.google.com → Edit profile → Business information → Description' },
+      { label: 'Services tagline', where: 'business.google.com → Edit profile → Services → add each service with this tagline as the description' },
+    ],
+    note: "Don't have a Google Business profile yet? Create one at business.google.com — it's free.",
+  },
+
+  google_yelp_pro: {
+    steps: [
+      { label: 'Google Business', where: 'business.google.com → Edit profile → Business information → Description' },
+      { label: 'Yelp', where: 'biz.yelp.com → Business Information → "From the Business" section → Edit' },
+    ],
+  },
+
+  instagram_kit: {
+    steps: [
+      { label: 'Bio', where: 'Instagram → Profile tab → Edit Profile → "Bio" field (tap to edit)' },
+      { label: 'Highlights', where: 'Instagram → Profile → + (Highlight icon) → name each one using the suggested names' },
+      { label: 'Captions', where: 'Instagram → + (New post) → write caption → paste and personalise before posting' },
+    ],
+    note: "Instagram bio is 150 chars max. Use a link-in-bio tool (Linktree, etc.) if your bio needs a CTA link.",
+  },
+
+  wedding_profile: {
+    steps: [
+      { label: 'The Knot', where: 'vendor.theknot.com → Log in → Your Storefront → About section' },
+      { label: 'WeddingWire', where: 'pros.weddingwire.com → Log in → Business Info → Business Description' },
+    ],
+    note: 'Add real photos alongside this copy — profile photo quality is the #1 conversion factor on both platforms.',
+  },
+
+  nextdoor_intro: {
+    steps: [
+      { label: 'Nextdoor', where: 'Nextdoor app → Home → Create Post → select "Recommendation" or "For Sale & Free" → paste and post' },
+    ],
+    note: "Pin it as a Business post if you have a Nextdoor Business account — it stays visible longer than a standard post.",
+  },
+
+  alignable_referral: {
+    steps: [
+      { label: 'Alignable bio', where: 'alignable.com → Profile → Edit Profile → "About" section' },
+      { label: 'Referral message', where: 'alignable.com → find a local business owner → Message → paste the intro message' },
+    ],
+    note: "Alignable works best when you're active in your local community feed — like and comment to build reciprocal referrals.",
+  },
+
+  trust_kit: {
+    steps: [
+      { label: 'Credentials callout', where: 'Your website → About page or homepage bio section → paste as a paragraph' },
+      { label: 'Testimonial request', where: 'Email to a recent happy client → replace [REVIEW_LINK] with your Google Business or Yelp review link' },
+    ],
+    note: 'Send the testimonial request within 48 hours of completing a project — response rates drop sharply after a week.',
+  },
+
+  seo_bio: {
+    steps: [
+      { label: 'Website bio', where: 'Your website → About page → replace or supplement your existing bio' },
+      { label: 'Google Business', where: "business.google.com → Edit profile → Description (if you haven't added the google_business copy yet)" },
+    ],
+    note: 'Paste the same bio into any professional directory listing (Clutch, UpCity, etc.) for consistent SEO signals.',
+  },
+}

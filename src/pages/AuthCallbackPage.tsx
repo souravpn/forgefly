@@ -134,9 +134,16 @@ export default function AuthCallbackPage() {
       // Guard against double-execution from onAuthStateChange + getSession firing together
       if (handled.current) return;
       handled.current = true;
-      await savePendingPortal(userId);
+      const savedNewBusiness = await savePendingPortal(userId);
       const profile = await getProfile(userId);
-      navigate(profile ? "/dashboard" : "/onboarding", { replace: true });
+      if (!profile) {
+        navigate("/onboarding", { replace: true });
+      } else if (savedNewBusiness) {
+        // New business just created — land on Visibility to set their playbook
+        navigate("/dashboard/visibility", { replace: true });
+      } else {
+        navigate("/dashboard", { replace: true });
+      }
     };
 
     // Primary: listen for SIGNED_IN (fires when Supabase processes hash tokens)

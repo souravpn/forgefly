@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Sparkles, ArrowRight, Copy, Check, Loader2, ChevronRight, Radio, Zap, TrendingUp } from 'lucide-react';
+import { Sparkles, ArrowRight, Copy, Check, Loader2, ChevronRight, Radio, Zap, TrendingUp, MapPin } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
@@ -11,6 +11,7 @@ import {
   PLAYBOOKS,
   PERSONA_EXAMPLES,
   PRESENCE_TIER_LABELS,
+  CHANNEL_INSTRUCTIONS,
   type VisibilityChannel,
   type ChannelTier,
 } from '@/config/visibilityPlaybooks';
@@ -132,6 +133,35 @@ function CopyKitDisplay({ channelId, kit }: { channelId: string; kit: unknown })
   );
 }
 
+// ─── Where-to-use callout ─────────────────────────────────────────────────────
+
+function WhereToUse({ channelId }: { channelId: string }) {
+  const instruction = CHANNEL_INSTRUCTIONS[channelId];
+  if (!instruction) return null;
+
+  return (
+    <div className="rounded-xl border border-orange-500/30 bg-orange-500/8 px-4 py-3 space-y-2">
+      <div className="flex items-center gap-1.5">
+        <MapPin className="w-3.5 h-3.5 text-orange-500 shrink-0" />
+        <span className="text-xs font-semibold text-orange-600 uppercase tracking-wide">Where to add this</span>
+      </div>
+      <div className="space-y-1.5">
+        {instruction.steps.map((step, i) => (
+          <div key={i} className="flex items-start gap-2 text-xs">
+            <span className="font-medium text-orange-700 shrink-0 min-w-[80px]">{step.label}</span>
+            <span className="text-orange-700/80 leading-relaxed">{step.where}</span>
+          </div>
+        ))}
+      </div>
+      {instruction.note && (
+        <p className="text-[11px] text-orange-600/70 pt-0.5 border-t border-orange-500/20 leading-relaxed">
+          💡 {instruction.note}
+        </p>
+      )}
+    </div>
+  );
+}
+
 // ─── Channel card ─────────────────────────────────────────────────────────────
 
 function ChannelCard({
@@ -193,7 +223,8 @@ function ChannelCard({
         </div>
 
         {open && hasKit && !isOutreachEntry && (
-          <div className="mt-3 pt-3 border-t border-border">
+          <div className="mt-3 pt-3 border-t border-border space-y-4">
+            <WhereToUse channelId={channel.id} />
             <CopyKitDisplay channelId={channel.id} kit={kitContent} />
           </div>
         )}
@@ -206,7 +237,31 @@ function ChannelCard({
 
 const TIER_KEYS = ['b2b_creative', 'b2c_local', 'b2b_professional', 'hybrid_professional'] as const;
 
-function PersonaPicker({ onSelect }: { onSelect: (tier: string) => void }) {
+function PersonaPicker({ onSelect }: { onSelect: (tier: string, description?: string) => void }) {
+  const [showOther, setShowOther] = useState(false);
+  const [description, setDescription] = useState('');
+  const [classifying, setClassifying] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  async function handleOtherSubmit() {
+    if (!description.trim()) return;
+    setClassifying(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('ai-gateway', {
+        body: { mode: 'classify', prompt: description.trim() },
+      });
+      if (error) throw error;
+      const tier = (data as { business_profile?: { presence_tier?: string } })
+        ?.business_profile?.presence_tier ?? 'hybrid_professional';
+      onSelect(tier, description.trim());
+    } catch {
+      // Fallback: use hybrid as the safest catch-all
+      onSelect('hybrid_professional', description.trim());
+    } finally {
+      setClassifying(false);
+    }
+  }
+
   return (
     <div className="max-w-2xl mx-auto space-y-4">
       <div className="text-center mb-8">
@@ -229,6 +284,71 @@ function PersonaPicker({ onSelect }: { onSelect: (tier: string) => void }) {
             <div className="text-xs text-muted-foreground">{PERSONA_EXAMPLES[tier]}</div>
           </button>
         ))}
+
+        {/* Other card */}
+        <button
+          type="button"
+          onClick={() => {
+            setShowOther(true);
+            setTimeout(() => textareaRef.current?.focus(), 50);
+          }}
+          className={`text-left p-4 rounded-xl border transition-all group ${
+            showOther
+              ? 'border-accent bg-accent/5 col-span-full'
+              : 'border-border hover:border-accent hover:bg-accent/5'
+          }`}
+        >
+          {!showOther ? (
+            <>
+              <div className="font-medium text-sm mb-1 group-hover:text-accent transition-colors">
+                Other
+              </div>
+              <div className="text-xs text-muted-foreground">
+                Something else — describe it and we'll find your playbook
+              </div>
+            </>
+          ) : (
+            <div className="space-y-3" onClick={e => e.stopPropagation()}>
+              <div>
+                <div className="font-medium text-sm mb-1 text-accent">Tell us about your business</div>
+                <p className="text-xs text-muted-foreground mb-3">
+                  e.g. "I do social media management for restaurants" or "I teach piano to kids"
+                </p>
+              </div>
+              <textarea
+                ref={textareaRef}
+                value={description}
+                onChange={e => setDescription(e.target.value)}
+                placeholder="Describe what you do and who you serve…"
+                rows={3}
+                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-accent"
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleOtherSubmit();
+                }}
+              />
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  className="glow-accent"
+                  disabled={!description.trim() || classifying}
+                  onClick={handleOtherSubmit}
+                >
+                  {classifying
+                    ? <><Loader2 className="w-3 h-3 animate-spin mr-1.5" />Finding your playbook…</>
+                    : <>Find my playbook <ArrowRight className="w-3 h-3 ml-1.5" /></>
+                  }
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => { setShowOther(false); setDescription(''); }}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          )}
+        </button>
       </div>
     </div>
   );
@@ -250,7 +370,7 @@ export default function VisibilityPage() {
 
   // ── Persona picker: save manual selection ────────────────────────────────
 
-  async function handlePersonaSelect(tier: string) {
+  async function handlePersonaSelect(tier: string, customDescription?: string) {
     if (!business) return;
     setSaving(true);
     try {
@@ -260,6 +380,7 @@ export default function VisibilityPage() {
           ...(businessProfile ?? {}),
           presence_tier: tier,
           motion: tier.startsWith('b2b') ? 'b2b' : tier === 'hybrid_professional' ? 'hybrid' : 'b2c',
+          ...(customDescription ? { industry_vertical: customDescription } : {}),
         },
       };
       await supabase.from('businesses').update({ extracted_data: updated }).eq('id', business.id);
@@ -352,7 +473,7 @@ export default function VisibilityPage() {
               <span className="text-sm text-muted-foreground">Saving your playbook…</span>
             </div>
           ) : (
-            <PersonaPicker onSelect={handlePersonaSelect} />
+            <PersonaPicker onSelect={(tier, desc) => handlePersonaSelect(tier, desc)} />
           )}
         </div>
       )}
