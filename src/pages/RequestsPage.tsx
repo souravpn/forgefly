@@ -13,6 +13,7 @@ import { useBusiness } from '@/contexts/CurrentBusinessContext'
 import { useAuth } from '@/contexts/AuthContext'
 import { formatDistanceToNow, format } from 'date-fns'
 import { cn } from '@/lib/utils'
+import { createCalendarEvent } from '@/services/calendarService'
 
 interface ProposalRequest {
   id: string
@@ -57,6 +58,54 @@ function toSlug(name: string) {
   return name.toLowerCase().replace(/\s+/g, '')
 }
 
+function parseDateTimeSuggestion(text: string): { start: Date; end: Date } | null {
+  const lower = text.toLowerCase()
+  const timeMatch = lower.match(/\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b/)
+  if (!timeMatch) return null
+
+  let hour = parseInt(timeMatch[1])
+  const minute = timeMatch[2] ? parseInt(timeMatch[2]) : 0
+  const meridiem = timeMatch[3]
+  if (meridiem === 'pm' && hour !== 12) hour += 12
+  if (meridiem === 'am' && hour === 12) hour = 0
+
+  const now = new Date()
+  const target = new Date(now)
+
+  if (/\btomorrow\b/.test(lower)) {
+    target.setDate(target.getDate() + 1)
+  } else if (!/\btoday\b/.test(lower)) {
+    const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
+    const nextMod = lower.match(/\bnext\s+(sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b/)
+    const dayMod = lower.match(/\b(sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b/)
+    if (nextMod || dayMod) {
+      const dayName = (nextMod?.[1] ?? dayMod?.[1]) as string
+      const targetDow = days.indexOf(dayName)
+      const currentDow = now.getDay()
+      let ahead = targetDow - currentDow
+      if (ahead <= 0 || nextMod) ahead += 7
+      target.setDate(target.getDate() + ahead)
+    } else {
+      // no day cue — assume today if the time is still in the future, else tomorrow
+      const probe = new Date(now)
+      probe.setHours(hour, minute, 0, 0)
+      if (probe <= now) target.setDate(target.getDate() + 1)
+    }
+  }
+
+  target.setHours(hour, minute, 0, 0)
+
+  let durationMins = 30
+  const durMatch = lower.match(/\b(\d+)\s*[-\s]?\s*(min(?:ute)?s?|hr?s?|hour?s?)\b/)
+  if (durMatch) {
+    const val = parseInt(durMatch[1])
+    durationMins = /^h/.test(durMatch[2]) ? val * 60 : val
+  }
+
+  const end = new Date(target.getTime() + durationMins * 60_000)
+  return { start: target, end }
+}
+
 function parsePricing(v: unknown): number | null {
   if (typeof v === 'number') return v
   if (typeof v === 'string') {
@@ -85,6 +134,7 @@ export default function RequestsPage() {
   const [questionCardId, setQuestionCardId] = useState<string | null>(null)
   const [questionText, setQuestionText] = useState('')
   const [sendingQuestion, setSendingQuestion] = useState(false)
+  const [calSuggestion, setCalSuggestion] = useState<{ start: Date; end: Date } | null>(null)
 
   // Draft modal
   const [modal, setModal] = useState<DraftModalState | null>(null)
@@ -107,6 +157,11 @@ export default function RequestsPage() {
       setLoading(false)
     })()
   }, [business])
+
+  useEffect(() => {
+    if (!questionCardId) { setCalSuggestion(null); return }
+    setCalSuggestion(parseDateTimeSuggestion(questionText))
+  }, [questionText, questionCardId])
 
   function openModal(state: DraftModalState) {
     setModal(state)
@@ -156,10 +211,33 @@ export default function RequestsPage() {
       toast.success(`Message sent to ${request.name}`)
       setQuestionCardId(null)
       setQuestionText('')
+      setCalSuggestion(null)
     } catch {
       toast.error('Failed to send. Try again.')
     } finally {
       setSendingQuestion(false)
+    }
+  }
+
+  async function handleAddToCalendar(request: ProposalRequest) {
+    if (!calSuggestion) return
+    try {
+      await createCalendarEvent({
+        title: `Call with ${request.name.split(' ')[0]}${request.company ? ` · ${request.company}` : ''}`,
+        description: `${request.service_name ?? 'Project inquiry'}\n\nContact: ${request.email}`,
+        event_type: 'meeting',
+        start_time: calSuggestion.start.toISOString(),
+        end_time: calSuggestion.end.toISOString(),
+        all_day: false,
+        client_id: null,
+        project_id: null,
+        location: null,
+        meeting_link: null,
+      })
+      toast.success('Added to Calendar')
+      setCalSuggestion(null)
+    } catch {
+      toast.error('Failed to add to calendar')
     }
   }
 
@@ -670,12 +748,31 @@ Use my proposal template and services from my business OS. Return a complete pro
                       onChange={e => setQuestionText(e.target.value)}
                       className="text-sm resize-none"
                     />
+                    {calSuggestion && (
+                      <div className="flex items-center gap-2 px-3 py-2 bg-blue-500/8 border border-blue-500/20 rounded-lg">
+                        <CalendarClock className="h-3.5 w-3.5 text-blue-500 shrink-0" />
+                        <span className="text-xs text-foreground flex-1">
+                          <span className="font-medium">
+                            {format(calSuggestion.start, 'EEE, MMM d')} at {format(calSuggestion.start, 'h:mm a')}
+                          </span>
+                          {' · '}
+                          {Math.round((calSuggestion.end.getTime() - calSuggestion.start.getTime()) / 60_000)} min
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleAddToCalendar(r)}
+                          className="text-xs text-blue-500 font-medium hover:underline whitespace-nowrap"
+                        >
+                          + Add to Calendar
+                        </button>
+                      </div>
+                    )}
                     <div className="flex gap-2 justify-end">
                       <Button
                         size="sm"
                         variant="ghost"
                         className="h-7 text-xs"
-                        onClick={() => { setQuestionCardId(null); setQuestionText('') }}
+                        onClick={() => { setQuestionCardId(null); setQuestionText(''); setCalSuggestion(null) }}
                         disabled={sendingQuestion}
                       >
                         Cancel
