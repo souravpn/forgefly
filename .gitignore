@@ -29,9 +29,9 @@ history/*.json
 .vite_cache
 
 # Project env files
-.env*.local
-.env*.key
 .env
+*.local
+*.key
 *.p12
 *.pem
 *.csr

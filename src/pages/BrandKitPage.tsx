@@ -1,4 +1,5 @@
-import { ArrowRight, Check, Copy, Plus, Sparkles, X } from 'lucide-react';
+import QRCode from 'qrcode';
+import { ArrowRight, Check, Copy, Download, Plus, Sparkles, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -256,12 +257,39 @@ export default function BrandKitPage() {
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [saving, setSaving] = useState(false);
 
+  // QR download assets
+  const [qrLight, setQrLight] = useState('');   // primary on white
+  const [qrDark, setQrDark] = useState('');     // white on dark
+  const [qrSvg, setQrSvg] = useState('');
+
+  const portfolioSlug = business?.slug ?? '';
+  const portfolioUrl = portfolioSlug ? `${window.location.origin}/p/${portfolioSlug}` : '';
+
   // Sync from extractedData on load
   useEffect(() => {
     if (extractedData?.brand) {
       setBrand(extractedData.brand as BrandData);
     }
   }, [extractedData]);
+
+  // Regenerate QR assets whenever primary color or slug changes
+  useEffect(() => {
+    if (!portfolioUrl) return;
+    const primary = brand.primaryColor ?? '#10B981';
+    // If brand primary is too light, fall back to near-black so QR stays scannable
+    const r = parseInt(primary.slice(1, 3), 16);
+    const g = parseInt(primary.slice(3, 5), 16);
+    const b = parseInt(primary.slice(5, 7), 16);
+    const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+    const safeColor = lum > 0.55 ? '#1a1a1a' : primary;
+
+    QRCode.toDataURL(portfolioUrl, { width: 600, margin: 2, color: { dark: safeColor, light: '#ffffff' } })
+      .then(setQrLight).catch(() => {});
+    QRCode.toDataURL(portfolioUrl, { width: 600, margin: 2, color: { dark: '#ffffff', light: '#1a1a1a' } })
+      .then(setQrDark).catch(() => {});
+    QRCode.toString(portfolioUrl, { type: 'svg', margin: 2 })
+      .then(setQrSvg).catch(() => {});
+  }, [portfolioUrl, brand.primaryColor]);
 
   const identity = extractedData?.identity;
   const businessName = identity?.businessName ?? identity?.name ?? 'Your Business';
@@ -338,6 +366,24 @@ export default function BrandKitPage() {
   };
 
   const hasBusiness = !bizLoading && !!business;
+
+  function downloadDataUrl(dataUrl: string, filename: string) {
+    const a = document.createElement('a');
+    a.href = dataUrl;
+    a.download = filename;
+    a.click();
+  }
+
+  function downloadSvg() {
+    if (!qrSvg) return;
+    const blob = new Blob([qrSvg], { type: 'image/svg+xml' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${portfolioSlug || 'portfolio'}-qr.svg`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
 
   // ── Render ──────────────────────────────────────────────────────────────────
 
@@ -556,6 +602,91 @@ export default function BrandKitPage() {
           </div>
 
         </div>
+
+        {/* ── QR code download assets ─────────────────────────────────── */}
+        {portfolioUrl && (
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">QR Code Downloads</CardTitle>
+              <CardDescription>
+                Print-ready QR codes linking to your portfolio — use on business cards, packaging, invoice footers, and stickers.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+
+                {/* Light variant */}
+                <div className="flex flex-col items-center gap-3 p-4 rounded-xl border border-border/60 bg-white">
+                  {qrLight
+                    ? <img src={qrLight} alt="QR — brand color on white" width={120} height={120} className="block" />
+                    : <div className="w-[120px] h-[120px] flex items-center justify-center text-xs text-muted-foreground">Generating…</div>
+                  }
+                  <div className="text-center">
+                    <p className="text-xs font-medium">Brand color on white</p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">For light print</p>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="w-full gap-1.5"
+                    disabled={!qrLight}
+                    onClick={() => downloadDataUrl(qrLight, `${portfolioSlug || 'portfolio'}-qr-light.png`)}
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                    PNG
+                  </Button>
+                </div>
+
+                {/* Dark variant */}
+                <div className="flex flex-col items-center gap-3 p-4 rounded-xl border border-border/60 bg-[#1a1a1a]">
+                  {qrDark
+                    ? <img src={qrDark} alt="QR — white on dark" width={120} height={120} className="block" />
+                    : <div className="w-[120px] h-[120px] flex items-center justify-center text-xs text-white/40">Generating…</div>
+                  }
+                  <div className="text-center">
+                    <p className="text-xs font-medium text-white">White on dark</p>
+                    <p className="text-[11px] text-white/50 mt-0.5">For dark backgrounds</p>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="w-full gap-1.5 border-white/20 text-white hover:bg-white/10 hover:text-white"
+                    disabled={!qrDark}
+                    onClick={() => downloadDataUrl(qrDark, `${portfolioSlug || 'portfolio'}-qr-dark.png`)}
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                    PNG
+                  </Button>
+                </div>
+
+                {/* SVG variant */}
+                <div className="flex flex-col items-center gap-3 p-4 rounded-xl border border-border/60">
+                  <div className="w-[120px] h-[120px] flex flex-col items-center justify-center gap-2">
+                    <div className="text-4xl font-bold text-muted-foreground/30 select-none">SVG</div>
+                    <p className="text-[11px] text-muted-foreground text-center">Scales to any size without quality loss</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-xs font-medium">Vector (scalable)</p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">For large-format print</p>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="w-full gap-1.5"
+                    disabled={!qrSvg}
+                    onClick={downloadSvg}
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                    SVG
+                  </Button>
+                </div>
+
+              </div>
+              <p className="text-[11px] text-muted-foreground mt-4 font-mono">{`${window.location.origin}/p/${portfolioSlug}`}</p>
+            </CardContent>
+          </Card>
+        )}
+
       )}
     </div>
   );

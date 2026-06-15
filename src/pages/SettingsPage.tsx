@@ -1,4 +1,5 @@
-import { AlertCircle, AlertTriangle, CheckCircle2, ChevronDown, Clock, CreditCard, ExternalLink, Eye, Globe, Loader2, Trash2 } from "lucide-react";
+import QRCode from 'qrcode';
+import { AlertCircle, AlertTriangle, CheckCircle2, ChevronDown, Clock, CreditCard, Download, ExternalLink, Eye, Globe, Loader2, Trash2, Wallet } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -65,6 +66,10 @@ export default function SettingsPage() {
   const [otpCode, setOtpCode] = useState('');
   const [acctDeleting, setAcctDeleting] = useState(false);
 
+  // Wallet pass
+  const [walletLoading, setWalletLoading] = useState(false);
+  const [passQrDataUrl, setPassQrDataUrl] = useState('');
+
   useEffect(() => {
     if (user) {
       loadBusinessProfile();
@@ -96,6 +101,15 @@ export default function SettingsPage() {
       setSearchParams({ tab: 'payments' }, { replace: true });
     }
   }, []);
+
+  // Generate pass preview QR whenever the portfolio slug changes
+  useEffect(() => {
+    const slug = publicIdent.slug;
+    if (!slug) return;
+    const url = `${window.location.origin}/p/${slug}`;
+    QRCode.toDataURL(url, { width: 80, margin: 1, color: { dark: '#ffffff', light: '#00000000' } })
+      .then(setPassQrDataUrl).catch(() => {});
+  }, [publicIdent.slug]);
 
   const loadBusinessProfile = async () => {
     if (!user) return;
@@ -159,6 +173,41 @@ export default function SettingsPage() {
     const clean = val.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-{2,}/g, '-');
     setPublicIdent(p => ({ ...p, slug: clean }));
     setSlugStatus('idle');
+  };
+
+  const addOwnWallet = async () => {
+    if (!business) return;
+    setWalletLoading(true);
+    try {
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
+      const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token ?? anonKey;
+      const res = await fetch(`${supabaseUrl}/functions/v1/generate-wallet-pass`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+          apikey: anonKey,
+        },
+        body: JSON.stringify({ business_id: business.id }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error((err as { error?: string }).error ?? `HTTP ${res.status}`);
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${publicIdent.slug || 'portfolio'}.pkpass`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      toast.error(`Couldn't generate pass: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setWalletLoading(false);
+    }
   };
 
   const handleSavePublicIdent = async () => {
@@ -376,6 +425,84 @@ export default function SettingsPage() {
               </Button>
             </CardContent>
           </Card>
+
+          {/* Sharing — wallet pass preview */}
+          {business && (() => {
+            const primary = business.extracted_data?.brand?.primaryColor ?? '#10B981';
+            const r = parseInt(primary.replace('#','').slice(0,2), 16);
+            const g = parseInt(primary.replace('#','').slice(2,4), 16);
+            const b = parseInt(primary.replace('#','').slice(4,6), 16);
+            const lum = (0.299*r + 0.587*g + 0.114*b) / 255;
+            const fgColor = lum > 0.5 ? '#000000' : '#ffffff';
+            const tagline = business.extracted_data?.identity?.tagline ?? '';
+            const bizName = business.extracted_data?.identity?.businessName ?? business.name ?? '';
+            const portfolioUrl = publicIdent.slug ? `forgefly.io/p/${publicIdent.slug}` : '';
+
+            return (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-balance flex items-center gap-2">
+                    <Wallet className="w-4 h-4" />
+                    Sharing
+                  </CardTitle>
+                  <CardDescription>
+                    Your Apple Wallet pass — clients save this after scanning your QR code.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {/* Pass card preview */}
+                  <div
+                    className="rounded-2xl p-5 flex flex-col gap-3 shadow-md max-w-xs"
+                    style={{ backgroundColor: primary, color: fgColor }}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex-1 min-w-0">
+                        <div
+                          className="h-9 w-9 rounded-xl flex items-center justify-center text-xs font-bold mb-3"
+                          style={{ backgroundColor: `${fgColor}20`, color: fgColor }}
+                        >
+                          {bizName.slice(0, 2).toUpperCase()}
+                        </div>
+                        <p className="font-bold text-sm leading-snug truncate">{bizName}</p>
+                        {tagline && (
+                          <p className="text-[11px] mt-1 leading-snug line-clamp-2" style={{ opacity: 0.75 }}>
+                            {tagline}
+                          </p>
+                        )}
+                      </div>
+                      {passQrDataUrl && (
+                        <img src={passQrDataUrl} alt="" width={52} height={52} className="rounded-lg shrink-0 mt-1" />
+                      )}
+                    </div>
+                    {portfolioUrl && (
+                      <p className="text-[10px] font-mono" style={{ opacity: 0.6 }}>{portfolioUrl}</p>
+                    )}
+                  </div>
+
+                  <p className="text-xs text-muted-foreground">
+                    Pass uses your brand primary color and auto-updates when your brand kit changes.
+                  </p>
+
+                  <div className="flex gap-2 flex-wrap">
+                    <Button
+                      onClick={addOwnWallet}
+                      disabled={walletLoading || !publicIdent.slug}
+                      className="gap-2"
+                      style={{ backgroundColor: primary }}
+                    >
+                      {walletLoading
+                        ? <Loader2 className="h-4 w-4 animate-spin" />
+                        : <Wallet className="h-4 w-4" />}
+                      {walletLoading ? 'Generating…' : 'Add to my Wallet'}
+                    </Button>
+                    {!publicIdent.slug && (
+                      <p className="text-xs text-muted-foreground self-center">Set a public URL slug above first.</p>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })()}
 
           <Card>
             <CardHeader>
