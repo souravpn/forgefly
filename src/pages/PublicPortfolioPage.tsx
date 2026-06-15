@@ -1,11 +1,9 @@
+import { CheckCircle2, Sparkles } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
-import { supabase } from "@/db/supabase";
-import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
+import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
@@ -15,6 +13,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -22,8 +22,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { toast } from "sonner";
-import { Sparkles, CheckCircle2 } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import { supabase } from "@/db/supabase";
 
 interface ExtractedService {
   name: string;
@@ -35,6 +35,7 @@ interface ExtractedService {
 interface Business {
   id: string;
   name: string;
+  bio?: string | null;
   extracted_data: {
     identity?: { businessName?: string; tagline?: string; niche?: string };
     brand?: {
@@ -102,7 +103,7 @@ export default function PublicPortfolioPage() {
       // Step 2: fetch the active business for that user
       const { data, error } = await supabase
         .from("businesses")
-        .select("id, name, extracted_data")
+        .select("id, name, bio, extracted_data")
         .eq("user_id", profile.id)
         .eq("status", "active")
         .maybeSingle();
@@ -119,6 +120,7 @@ export default function PublicPortfolioPage() {
   const brand = business?.extracted_data?.brand;
   const services: ExtractedService[] = business?.extracted_data?.services ?? [];
   const primaryColor = brand?.primaryColor ?? "#10B981";
+  const bio = business?.bio ?? null;
   const bizName = identity?.businessName ?? business?.name ?? "";
 
   function openModal(serviceName?: string) {
@@ -222,6 +224,14 @@ export default function PublicPortfolioPage() {
           </div>
         )}
       </header>
+
+      {/* Bio / About */}
+      {bio && (
+        <div className="w-full md:max-w-[60vw] mx-auto px-4 md:px-6 pt-10">
+          <h2 className="text-lg font-semibold mb-3">About</h2>
+          <p className="text-muted-foreground leading-relaxed">{bio}</p>
+        </div>
+      )}
 
       {/* Services grid */}
       <main className="w-full md:max-w-[60vw] mx-auto px-4 md:px-6 py-12">

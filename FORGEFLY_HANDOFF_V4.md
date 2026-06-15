@@ -250,3 +250,42 @@ exists. Report what was completed before we continue."
 ├── FORGEFLY_HANDOFF_V4.md         # This file
 └── FORGEFLY_OUTREACH_SPEC.md      # Phase 3.5 feature spec
 ```
+
+---
+
+## v4.1 amendments (same session — June 14, 2026)
+
+### Portfolio link in outreach copy
+Every visibility/outreach copy surface must inject the real `/p/[slug]` URL — never a
+placeholder. Read `businesses.slug` at generation time. Affected: cold email, LinkedIn
+About, Behance bio, Nextdoor intro. Omit from connection note (char limit) and initial DM.
+
+### Public portfolio — Bio/About added before services
+New field: `businesses.bio` (text, ~500 chars, nullable). AI pre-populated from seed
+prompt at portal generation (Haiku). Editable in Business Settings.
+Portfolio render order: Header → **Bio/About** → Services → Portfolio → Contact/CTA.
+
+### Business Settings additions
+Settings tab → Business Settings now owns identity-level fields:
+Business name, Slug (with availability check + change warning), Bio/About (new),
+Logo, Contact email. All write directly to `businesses` table — not extracted_data,
+not command bar flow.
+
+### Brand Kit consistency bug — fix before Phase 4
+Brand Kit page (old layout) and Preview tab (4 colors + font families) are out of sync.
+Preview is correct. Brand Kit page must match. Use shared components — never duplicate
+display logic. Must be fixed before Phase 4 ships (client portal inherits brand values).
+
+CLAUDE.md entry to add:
+# KNOWN BUG: Brand Kit page and preview tab are out of sync.
+# Preview (4 colors + font families) is correct. Brand Kit page must be updated to match.
+# Fix before Phase 4. Shared component approach — do not duplicate display logic.
+
+### Pre-warm — AI finds the post automatically
+Corrected: user should never have to open LinkedIn before the pre-warm step.
+Edge Function web-searches for the company's recent LinkedIn post, fetches content,
+drafts a craft-level peer comment (not a compliment — engages with specific detail).
+Fallback: if LinkedIn page is gated, show paste input for degraded experience.
+Comment quality rule: engage as a peer, never as an admirer. No "great post!" ever.
+Same Edge Function as company research — add `action: "prewarm_comment"` branch.
+Full spec in FORGEFLY_OUTREACH_SPEC.md §10e.

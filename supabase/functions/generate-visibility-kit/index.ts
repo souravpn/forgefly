@@ -41,14 +41,16 @@ type BusinessContext = {
   tagline: string;
   services: string;
   location: string;
+  portfolioUrl?: string | null;
 };
 
 function ctx(b: BusinessContext) {
+  const portfolioLine = b.portfolioUrl ? `\nPortfolio URL: ${b.portfolioUrl}` : '';
   return `Business: ${b.name}
 Niche: ${b.niche}
 Tagline: ${b.tagline}
 Services: ${b.services}
-Location: ${b.location}`;
+Location: ${b.location}${portfolioLine}`;
 }
 
 const CHANNEL_GENERATORS: Record<string, {
@@ -60,19 +62,19 @@ const CHANNEL_GENERATORS: Record<string, {
   behance_dribbble_bio: {
     model: HAIKU,
     maxTokens: 300,
-    system: 'You write punchy portfolio bios for creative freelancers. Write in first person, under 120 words. Focus on what the freelancer makes, who they make it for, and one signal of credibility. No buzzwords. Return plain text, no markdown.',
+    system: 'You write punchy portfolio bios for creative freelancers. Write in first person, under 120 words. Focus on what the freelancer makes, who they make it for, and one signal of credibility. No buzzwords. If a Portfolio URL is provided, end with it naturally (e.g. "See my work at [url]"). Return plain text, no markdown.',
     userPrompt: (b) => `${ctx(b)}\n\nWrite a Behance/Dribbble profile bio.`,
   },
   linkedin_kit: {
     model: SONNET,
     maxTokens: 800,
-    system: 'You write LinkedIn profile copy for B2B creative freelancers. Return a JSON object with keys: headline (under 220 chars), about (3 short paragraphs, first-person, no buzzwords), featured_caption (one line for the Featured section pointing to their portfolio). No markdown fences.',
+    system: 'You write LinkedIn profile copy for B2B creative freelancers. Return a JSON object with keys: headline (under 220 chars), about (3 short paragraphs, first-person, no buzzwords — if a Portfolio URL is provided, include it naturally in the About section), featured_caption (one line for the Featured section pointing to their portfolio, include the Portfolio URL if provided). No markdown fences.',
     userPrompt: (b) => `${ctx(b)}\n\nWrite the LinkedIn presence kit.`,
   },
   linkedin_authority: {
     model: SONNET,
     maxTokens: 1000,
-    system: 'You write LinkedIn authority content for B2B professional service providers. Return a JSON object with keys: headline (under 220 chars), about (3 paragraphs establishing expertise and trust), post_templates (array of 3 short thought leadership post templates, each under 150 words, plain text). No markdown fences.',
+    system: 'You write LinkedIn authority content for B2B professional service providers. Return a JSON object with keys: headline (under 220 chars), about (3 paragraphs establishing expertise and trust — if a Portfolio URL is provided, mention it naturally in the third paragraph), post_templates (array of 3 short thought leadership post templates, each under 150 words, plain text). No markdown fences.',
     userPrompt: (b) => `${ctx(b)}\n\nWrite the LinkedIn authority kit.`,
   },
   google_business: {
@@ -102,7 +104,7 @@ const CHANNEL_GENERATORS: Record<string, {
   nextdoor_intro: {
     model: HAIKU,
     maxTokens: 250,
-    system: 'You write Nextdoor neighborhood introduction posts for local service businesses. Write in first person, friendly and community-focused, under 100 words. Mention the neighborhood or local area. End with a soft offer to help. Return plain text, no markdown.',
+    system: 'You write Nextdoor neighborhood introduction posts for local service businesses. Write in first person, friendly and community-focused, under 100 words. Mention the neighborhood or local area. If a Portfolio URL is provided, include it at the end. End with a soft offer to help. Return plain text, no markdown.',
     userPrompt: (b) => `${ctx(b)}\n\nWrite the Nextdoor intro post.`,
   },
   alignable_referral: {
@@ -143,7 +145,7 @@ serve(async (req) => {
 
     const { data: business, error: bizErr } = await supabase
       .from('businesses')
-      .select('id, name, extracted_data')
+      .select('id, name, slug, bio, extracted_data')
       .eq('id', body.business_id)
       .single();
 
@@ -158,12 +160,17 @@ serve(async (req) => {
     const services = (ed.services as Array<{ name: string }> ?? []).map(s => s.name).join(', ');
     const presenceTier = (ed.business_profile as Record<string, string> | null)?.presence_tier ?? 'b2b_professional';
 
+    const portfolioUrl = business.slug
+      ? `${Deno.env.get('PUBLIC_SITE_URL') ?? 'https://forgefly.app'}/p/${business.slug}`
+      : null;
+
     const bizCtx: BusinessContext = {
       name: identity.businessName ?? business.name ?? 'this business',
       niche: identity.niche ?? '',
       tagline: identity.tagline ?? '',
       services,
       location: identity.location ?? 'Remote',
+      portfolioUrl,
     };
 
     // Determine which channels to generate based on presence_tier
@@ -200,14 +207,30 @@ serve(async (req) => {
       }
     }
 
-    // Patch extracted_data.visibility_kit in DB
+    // Generate bio if not already set (pre-populate from business context)
+    let bio = (business as { bio?: string | null }).bio ?? null;
+    if (!bio) {
+      try {
+        const bioSystem = 'You write short professional bios for freelancers and solopreneurs. Write in first person, 2–4 sentences, under 80 words. Cover: what they do, who they help, and what makes them different. No buzzwords. No "passionate" or "driven". Plain text only.';
+        const bioUser = `${ctx(bizCtx)}\n\nWrite a professional bio for this freelancer's public portfolio page.`;
+        bio = await callAnthropic(HAIKU, bioSystem, bioUser, 200);
+        bio = bio.trim();
+      } catch {
+        bio = null;
+      }
+    }
+
+    // Patch extracted_data.visibility_kit in DB and bio column
     const updatedData = { ...ed, visibility_kit: visibilityKit };
+    const updatePayload: Record<string, unknown> = { extracted_data: updatedData };
+    if (bio) updatePayload.bio = bio;
+
     await supabase
       .from('businesses')
-      .update({ extracted_data: updatedData })
+      .update(updatePayload)
       .eq('id', body.business_id);
 
-    return new Response(JSON.stringify({ visibility_kit: visibilityKit }), {
+    return new Response(JSON.stringify({ visibility_kit: visibilityKit, bio }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (err) {

@@ -417,3 +417,152 @@ show the one most relevant to the current step):
 
 Total estimate: ~14 days for full feature set. MVP (steps 1–9, no post-step offers):
 ~11 days.
+
+---
+
+## 10. Amendments — v4.1 (June 14, 2026 follow-up)
+
+### 10a. Public portfolio link in all outreach channels
+
+Every channel that generates copy must auto-inject the user's live public portfolio URL
+(`/p/[slug]`). This is already generated at portal creation — do not use a placeholder.
+
+**Affected surfaces:**
+- Cold email: replace `[Portfolio link]` placeholder with real `businesses.slug` URL
+- LinkedIn About copy: append portfolio URL to the generated bio
+- Behance / Dribbble bio: include as "See full portfolio at [url]"
+- Nextdoor intro post: include as a natural closing line
+- Connection note: omit (too short, URL kills the character limit)
+- LinkedIn DM: omit from initial DM, include in follow-up if they engage
+
+**Implementation:** At copy generation time, read `businesses.slug` from the DB and
+inject as `https://[domain]/p/[slug]`. Never hardcode or leave as placeholder.
+
+---
+
+### 10b. Public portfolio — Bio/About section addition
+
+**Change:** Add a Bio/About section to the public portfolio (`/p/[slug]`) that renders
+*before* the services section.
+
+**Why:** The service list without context reads like a menu. A short bio first answers
+"who is this person" before "what do they offer."
+
+**Data source:** New field `businesses.bio` (text, nullable, max ~500 chars). Separate
+from `extracted_data` — this is identity-level data, not operational data.
+
+**AI pre-population:** At portal generation time, Haiku generates a short bio from the
+seed prompt and stores it in `businesses.bio`. User can edit via Business Settings.
+
+**Public portfolio render order:**
+1. Header (name, logo, tagline)
+2. **Bio/About** ← new, before services
+3. Services / packages
+4. Portfolio / case studies (if present)
+5. Contact / CTA
+
+---
+
+### 10c. Business Settings — Brand Name & Bio editable fields
+
+**Location:** Settings tab → Business Settings section (not command bar, not
+extracted_data flow — this is identity data).
+
+**Fields to add to Business Settings:**
+| Field | DB column | Notes |
+|---|---|---|
+| Business name | `businesses.name` | Already exists, make editable here |
+| Public URL slug | `businesses.slug` | Show live URL preview, availability check on change |
+| Bio / About | `businesses.bio` | New field — plain text, ~500 char limit, no markdown |
+| Logo | `businesses.logo_url` | Already exists, upload trigger here |
+| Contact email (public) | `businesses.contact_email` | Shown on portfolio |
+
+**Writes:** Directly to `businesses` table. Not through `extracted_data`. Not through
+the command bar flow. These are always intentional, explicit user edits.
+
+**Slug change:** If user changes slug, show warning: "Your current portfolio link will
+stop working. Anyone with the old link won't be able to find you." Require confirmation.
+Update `businesses.slug` and redirect `/p/[old]` → `/p/[new]` with 301 if feasible.
+
+---
+
+### 10d. Brand Kit — consistency fix (known bug)
+
+**Problem:** Brand Kit page renders the old layout. Preview tab renders the new layout
+(4 colors + font families). These are out of sync.
+
+**Rule:** Preview is the source of truth. The Brand Kit page must match it exactly:
+- 4 color swatches (primary, secondary, accent, background) — same as preview
+- Font families displayed as named pairs with specimen text — same as preview
+- No other layout differences
+
+**Fix approach:** Extract the color/font display components from the preview into shared
+components. Both Brand Kit page and preview tab import from the same component. Never
+let them diverge again.
+
+**Priority:** Fix before Phase 4 (client portal) ships. The client portal inherits brand
+kit values — a mismatch here causes visible inconsistencies in the client-facing portal.
+
+Add to CLAUDE.md:
+```
+# KNOWN BUG: Brand Kit page and preview tab are out of sync.
+# Preview (4 colors + font families) is correct. Brand Kit page must be updated to match.
+# Fix before Phase 4. Shared component approach — do not duplicate display logic.
+```
+
+---
+
+### 10e. Pre-warm — AI finds the post, user never has to
+
+**Corrected behavior (replaces previous spec):**
+
+The pre-warm feature should find the relevant company post automatically. The user
+should never have to open LinkedIn before the pre-warm step. That defeats the purpose.
+
+**Flow:**
+1. User clicks "Pre-warm first?" in the outreach kit
+2. Edge Function fires a web search: `"[company name]" LinkedIn post site:linkedin.com`
+3. Fetch the top result URL, extract the post content
+4. Pass to Haiku with freelancer's service context → draft a genuine, craft-level comment
+5. Surface to user: post snippet/title (so they can verify it's real) + drafted comment
+6. User copies comment, opens LinkedIn, pastes — that's the only manual step
+
+**Fallback (LinkedIn login wall):**
+LinkedIn public post pages are sometimes gated. If the fetch fails or returns a login
+redirect:
+- Show: "We couldn't pull a recent post automatically — paste it here and we'll draft
+  the comment."
+- Textarea appears for user to paste post content
+- Same Claude call fires once content is pasted
+- This is a clean degraded experience, not a silent failure
+
+**Comment quality bar:** The drafted comment must read as craft-level, not a compliment.
+It should engage with a specific decision, technique, or detail in the post — the kind
+of comment a professional peer would leave, not a fan. Haiku system prompt should
+explicitly say: "Do not compliment. Engage with a specific detail, technique, or
+decision visible in the post. Write as a peer, not an admirer."
+
+**Updated API call for pre-warm:**
+
+```typescript
+// Model: claude-haiku-4-5-20251001
+// System prompt key instruction:
+`You are drafting a LinkedIn comment for a freelancer who is about to cold DM this company.
+The goal is to appear on their radar as a genuine peer before the DM lands.
+
+Rules:
+- Do NOT compliment or flatter. No "great post!" or "love this!"
+- Engage with a SPECIFIC detail, decision, or technique mentioned in the post
+- Write as a peer — someone who works in the same space and has an informed opinion
+- 2–3 sentences maximum
+- Natural, conversational — not polished or corporate
+- Must make the commenter look like they actually read and thought about the post
+
+Freelancer context: {services}, {industry_vertical}
+Company: {company_name}
+Post content: {post_content}`
+```
+
+**Build note:** This is the same Edge Function as company research — add a
+`action: "prewarm_comment"` branch. No new function needed.
+

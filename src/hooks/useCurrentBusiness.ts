@@ -1,12 +1,16 @@
 import { useCallback, useEffect, useState } from 'react'
-import { supabase } from '@/db/supabase'
 import { useAuth } from '@/contexts/AuthContext'
+import { supabase } from '@/db/supabase'
 import type { ExtractedData } from '@/pages/GeneratedPortalPage'
 
 export interface Business {
   id: string
   user_id: string
   name: string
+  bio: string | null
+  slug: string | null
+  contact_email: string | null
+  logo_url: string | null
   extracted_data: ExtractedData
   seed_prompt: string | null
   confidence_map: Record<string, string> | null

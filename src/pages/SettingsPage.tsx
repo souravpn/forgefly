@@ -1,4 +1,9 @@
+import { AlertCircle, AlertTriangle, CheckCircle2, ChevronDown, Clock, CreditCard, ExternalLink, Eye, Globe, Loader2, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { toast } from "sonner";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -6,19 +11,14 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { supabase } from "@/db/supabase";
+import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/contexts/AuthContext";
-import { toast } from "sonner";
-import type { BusinessProfile } from "@/types/types";
-import { ExternalLink, Eye, CheckCircle2, AlertCircle, Clock, CreditCard, Loader2, ChevronDown, Trash2, AlertTriangle } from "lucide-react";
-import { useNavigate, useSearchParams } from "react-router-dom";
-import { Badge } from "@/components/ui/badge";
 import { useBusiness } from "@/contexts/CurrentBusinessContext";
+import { supabase } from "@/db/supabase";
+import type { BusinessProfile } from "@/types/types";
 
 type ConnectStatus = {
   connected: boolean;
@@ -41,6 +41,17 @@ export default function SettingsPage() {
   const [connectLoading, setConnectLoading] = useState(false);
   const [connectStatusLoading, setConnectStatusLoading] = useState(false);
 
+  // Public identity (writes to businesses table)
+  const [publicIdent, setPublicIdent] = useState({
+    name: '',
+    slug: '',
+    bio: '',
+    contact_email: '',
+  });
+  const [publicIdentLoading, setPublicIdentLoading] = useState(false);
+  const [slugStatus, setSlugStatus] = useState<'idle' | 'checking' | 'available' | 'taken'>('idle');
+  const [originalSlug, setOriginalSlug] = useState('');
+
   // Delete business
   const [bizDeleteOpen, setBizDeleteOpen] = useState(false);
   const [bizDeleteConfirm, setBizDeleteConfirm] = useState('');
@@ -59,6 +70,19 @@ export default function SettingsPage() {
       loadConnectStatus();
     }
   }, [user]);
+
+  useEffect(() => {
+    if (business) {
+      const ident = {
+        name: business.name ?? '',
+        slug: business.slug ?? '',
+        bio: business.bio ?? '',
+        contact_email: business.contact_email ?? '',
+      };
+      setPublicIdent(ident);
+      setOriginalSlug(business.slug ?? '');
+    }
+  }, [business]);
 
   useEffect(() => {
     const connect = searchParams.get('connect');
@@ -112,6 +136,53 @@ export default function SettingsPage() {
     } finally {
       setConnectLoading(false);
     }
+  };
+
+  const checkSlugAvailability = async (slug: string) => {
+    if (!slug || slug === originalSlug) { setSlugStatus('idle'); return; }
+    setSlugStatus('checking');
+    const { data } = await supabase
+      .from('businesses')
+      .select('id')
+      .eq('slug', slug)
+      .neq('id', business?.id ?? '')
+      .maybeSingle();
+    setSlugStatus(data ? 'taken' : 'available');
+  };
+
+  const handlePublicIdentSlugChange = (val: string) => {
+    const clean = val.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-{2,}/g, '-');
+    setPublicIdent(p => ({ ...p, slug: clean }));
+    setSlugStatus('idle');
+  };
+
+  const handleSavePublicIdent = async () => {
+    if (!business) return;
+    if (slugStatus === 'taken') { toast.error('That URL slug is already taken.'); return; }
+    if (publicIdent.slug !== originalSlug) {
+      const confirmed = window.confirm(
+        `Changing your public URL from /p/${originalSlug || '(none)'} to /p/${publicIdent.slug} will break any links you've already shared. Continue?`
+      );
+      if (!confirmed) return;
+    }
+    setPublicIdentLoading(true);
+    const { error } = await supabase
+      .from('businesses')
+      .update({
+        name: publicIdent.name || business.name,
+        slug: publicIdent.slug || null,
+        bio: publicIdent.bio || null,
+        contact_email: publicIdent.contact_email || null,
+      })
+      .eq('id', business.id);
+    if (error) {
+      toast.error('Failed to save public identity');
+    } else {
+      setOriginalSlug(publicIdent.slug);
+      setSlugStatus('idle');
+      toast.success('Public identity saved');
+    }
+    setPublicIdentLoading(false);
   };
 
   const handleSaveBusinessProfile = async () => {
@@ -210,7 +281,81 @@ export default function SettingsPage() {
           <TabsTrigger value="ai-history">AI History</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="business" className="mt-6">
+        <TabsContent value="business" className="mt-6 space-y-6">
+          {/* Public Identity — writes directly to businesses table */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-balance flex items-center gap-2">
+                <Globe className="w-4 h-4" />
+                Public Identity
+              </CardTitle>
+              <CardDescription>
+                Shown on your public portfolio at forgefly.app/p/[slug]
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="publicName">Business Name</Label>
+                <Input
+                  id="publicName"
+                  value={publicIdent.name}
+                  onChange={(e) => setPublicIdent(p => ({ ...p, name: e.target.value }))}
+                  placeholder="Your business name"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="publicSlug">Public URL Slug</Label>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground shrink-0">forgefly.app/p/</span>
+                  <Input
+                    id="publicSlug"
+                    value={publicIdent.slug}
+                    onChange={(e) => handlePublicIdentSlugChange(e.target.value)}
+                    onBlur={() => checkSlugAvailability(publicIdent.slug)}
+                    placeholder="your-slug"
+                    className="flex-1"
+                  />
+                </div>
+                {slugStatus === 'checking' && <p className="text-xs text-muted-foreground">Checking availability…</p>}
+                {slugStatus === 'available' && <p className="text-xs text-emerald-500">✓ Available</p>}
+                {slugStatus === 'taken' && <p className="text-xs text-destructive">✗ Already taken — choose another</p>}
+                {publicIdent.slug && publicIdent.slug !== originalSlug && slugStatus === 'idle' && (
+                  <p className="text-xs text-amber-500">⚠ Changing your slug will break existing shared links</p>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="publicBio">Bio / About</Label>
+                <Textarea
+                  id="publicBio"
+                  value={publicIdent.bio}
+                  onChange={(e) => setPublicIdent(p => ({ ...p, bio: e.target.value }))}
+                  placeholder="A short bio shown on your public portfolio…"
+                  className="min-h-[80px] resize-none"
+                  maxLength={500}
+                />
+                <p className="text-xs text-muted-foreground text-right">{publicIdent.bio.length}/500</p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="publicEmail">Contact Email (public)</Label>
+                <Input
+                  id="publicEmail"
+                  type="email"
+                  value={publicIdent.contact_email}
+                  onChange={(e) => setPublicIdent(p => ({ ...p, contact_email: e.target.value }))}
+                  placeholder="hello@yourbusiness.com"
+                />
+                <p className="text-xs text-muted-foreground">Shown on your public portfolio page</p>
+              </div>
+
+              <Button onClick={handleSavePublicIdent} disabled={publicIdentLoading || slugStatus === 'taken'}>
+                {publicIdentLoading ? 'Saving…' : 'Save Public Identity'}
+              </Button>
+            </CardContent>
+          </Card>
+
           <Card>
             <CardHeader>
               <CardTitle className="text-balance">
@@ -290,7 +435,7 @@ export default function SettingsPage() {
             </CardContent>
           </Card>
           {/* Delete Business danger zone */}
-          <Card className="border-destructive/30 mt-6">
+          <Card className="border-destructive/30">
             <CardHeader
               className="cursor-pointer select-none"
               onClick={() => setBizDeleteOpen(o => !o)}

@@ -1,14 +1,14 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { ArrowRight, Check, Copy, Plus, Sparkles, X } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Badge } from '@/components/ui/badge';
-import { Sparkles, ArrowRight, Plus, X, Copy, Check } from 'lucide-react';
-import { toast } from 'sonner';
-import { supabase } from '@/db/supabase';
-import { useNavigate } from 'react-router-dom';
 import { useBusiness } from '@/contexts/CurrentBusinessContext';
+import { supabase } from '@/db/supabase';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -16,6 +16,7 @@ interface BrandData {
   primaryColor?: string;
   secondaryColor?: string;
   accentColor?: string;
+  ctaColor?: string;
   tone?: string;
   keywords?: string[];
   fonts?: { heading?: string; body?: string };
@@ -136,6 +137,7 @@ function LivePreview({
   const primary = brand.primaryColor ?? '#1D9E75';
   const accent = brand.accentColor ?? '#E1F5EE';
   const secondary = brand.secondaryColor ?? '#085041';
+  const cta = brand.ctaColor ?? primary;
 
   return (
     <div className="space-y-5">
@@ -214,8 +216,8 @@ function LivePreview({
           type="button"
           className="px-5 py-2 rounded-lg text-sm font-semibold transition-opacity hover:opacity-90"
           style={{
-            background: primary,
-            color: contrastColor(primary),
+            background: cta,
+            color: contrastColor(cta),
           }}
         >
           Get in Touch
@@ -229,11 +231,13 @@ function LivePreview({
           <div className="flex-1" style={{ background: primary }} />
           <div className="flex-1" style={{ background: secondary }} />
           <div className="flex-1" style={{ background: accent }} />
+          <div className="flex-1" style={{ background: cta }} />
         </div>
         <div className="flex text-[10px] text-muted-foreground mt-1 font-mono">
           <span className="flex-1">{primary}</span>
           <span className="flex-1 text-center">{secondary}</span>
-          <span className="flex-1 text-right">{accent}</span>
+          <span className="flex-1 text-center">{accent}</span>
+          <span className="flex-1 text-right">{cta}</span>
         </div>
       </div>
     </div>
@@ -294,7 +298,7 @@ export default function BrandKitPage() {
 
   // ── Field handlers ──────────────────────────────────────────────────────────
 
-  const handleColorChange = (key: 'primaryColor' | 'secondaryColor' | 'accentColor') =>
+  const handleColorChange = (key: 'primaryColor' | 'secondaryColor' | 'accentColor' | 'ctaColor') =>
     (hex: string) => {
       const updated = { ...brand, [key]: hex };
       setBrand(updated);
@@ -387,7 +391,7 @@ export default function BrandKitPage() {
                 <CardDescription>Click a swatch to open the color picker</CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="flex gap-8">
+                <div className="flex gap-6 flex-wrap">
                   <ColorEditor
                     label="Primary"
                     value={brand.primaryColor ?? '#1D9E75'}
@@ -403,7 +407,13 @@ export default function BrandKitPage() {
                     value={brand.accentColor ?? '#E1F5EE'}
                     onChange={handleColorChange('accentColor')}
                   />
+                  <ColorEditor
+                    label="CTA"
+                    value={brand.ctaColor ?? brand.primaryColor ?? '#1D9E75'}
+                    onChange={handleColorChange('ctaColor')}
+                  />
                 </div>
+                <p className="text-xs text-muted-foreground mt-2">Primary: text & icons · Secondary: soft backgrounds · Accent: card backgrounds · CTA: action buttons</p>
               </CardContent>
             </Card>
 

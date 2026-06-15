@@ -1,22 +1,22 @@
-import { useState, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
-import {
-  ArrowRight, ArrowLeft, Check, Copy, Loader2, AlertTriangle,
-  Building2, MapPin, Users, Briefcase, ExternalLink, Plus,
-  ChevronRight, Send, MessageSquare, Sparkles, X,
+import {AlertTriangle,ArrowLeft, 
+  ArrowRight, Briefcase, 
+  Building2, Check, 
+  ChevronRight, Copy, ExternalLink, Loader2, MapPin, MessageSquare, Plus,Send, Sparkles, Users, X,
 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
+import { useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+  Dialog, DialogContent, DialogFooter,DialogHeader, DialogTitle, 
 } from '@/components/ui/dialog';
-import { toast } from 'sonner';
-import { supabase } from '@/db/supabase';
-import { useBusiness } from '@/contexts/CurrentBusinessContext';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { useAuth } from '@/contexts/AuthContext';
+import { useBusiness } from '@/contexts/CurrentBusinessContext';
+import { supabase } from '@/db/supabase';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -362,6 +362,7 @@ function Step4({
   const [prewarmPost, setPrewarmPost] = useState('');
   const [prewarmComment, setPrewarmComment] = useState('');
   const [prewarmLoading, setPrewarmLoading] = useState(false);
+  const [prewarmGated, setPrewarmGated] = useState(false);
   const { extractedData } = useBusiness();
 
   const tabs: { id: CopyTab; label: string }[] = [
@@ -372,6 +373,35 @@ function Step4({
   ];
 
   async function handlePrewarm() {
+    setPrewarmLoading(true);
+    setPrewarmGated(false);
+    setPrewarmComment('');
+    try {
+      const identity = extractedData?.identity as Record<string, string> ?? {};
+      const { data } = await supabase.functions.invoke('research-company', {
+        body: {
+          action: 'prewarm_comment',
+          company_input: intel.company_url || intel.company_name,
+          company_name: intel.company_name,
+          services: [],
+          freelancer_name: identity.name ?? 'the freelancer',
+        },
+      });
+      const result = data as { gated?: boolean; comment?: string };
+      if (result.gated) {
+        setPrewarmGated(true);
+      } else {
+        setPrewarmComment(result.comment ?? '');
+      }
+    } catch {
+      toast.error('Failed to find post — paste it manually below');
+      setPrewarmGated(true);
+    } finally {
+      setPrewarmLoading(false);
+    }
+  }
+
+  async function handlePrewarmFromPaste() {
     if (!prewarmPost.trim()) return;
     setPrewarmLoading(true);
     try {
@@ -380,7 +410,7 @@ function Step4({
       const { data } = await supabase.functions.invoke('ai-gateway', {
         body: {
           mode: 'chat',
-          message: `Write a genuine, insightful comment (under 120 words) on this LinkedIn post from ${intel.company_name}. I'm a ${identity.niche ?? 'freelancer'} who offers ${services.slice(0, 3).join(', ')}. The comment should be substantive — add a perspective or ask a smart question. Don't make it promotional. Here's the post:\n\n"${prewarmPost}"`,
+          message: `Write a genuine, peer-level comment (under 3 sentences) on this LinkedIn post from ${intel.company_name}. Rules: do NOT compliment the post. Engage with ONE specific detail or decision. Write as a ${identity.niche ?? 'freelancer'} who offers ${services.slice(0, 2).join(', ')}. Do not pitch services. Here's the post:\n\n"${prewarmPost}"`,
           current_page: 'outreach',
         },
       });
@@ -463,27 +493,35 @@ function Step4({
                 <div>
                   <p className="text-sm font-medium">Pre-warm first? <span className="font-normal text-muted-foreground">(recommended)</span></p>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    Commenting on their recent post before DMing converts 2–3× better. Paste a post below and we'll draft a genuine comment.
+                    Commenting on their recent post before DMing converts 2–3× better. Forgefly finds their latest post and drafts a peer-level comment.
                   </p>
                 </div>
               </div>
               {!showPrewarm ? (
-                <Button variant="outline" size="sm" onClick={() => setShowPrewarm(true)}>
-                  Draft a comment →
+                <Button variant="outline" size="sm" onClick={() => { setShowPrewarm(true); handlePrewarm(); }}>
+                  Find post + draft comment →
                 </Button>
               ) : (
                 <div className="space-y-3">
-                  <Textarea
-                    placeholder="Paste their LinkedIn post here…"
-                    value={prewarmPost}
-                    onChange={e => setPrewarmPost(e.target.value)}
-                    className="text-sm resize-none"
-                    rows={4}
-                  />
-                  <Button size="sm" onClick={handlePrewarm} disabled={prewarmLoading || !prewarmPost.trim()}>
-                    {prewarmLoading ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : null}
-                    Generate comment
-                  </Button>
+                  {prewarmLoading && (
+                    <p className="text-xs text-muted-foreground animate-pulse">Searching for their recent LinkedIn post…</p>
+                  )}
+                  {!prewarmLoading && prewarmGated && (
+                    <div className="space-y-2">
+                      <p className="text-xs text-muted-foreground">LinkedIn is gated — paste their post below and we'll draft the comment.</p>
+                      <Textarea
+                        placeholder="Paste their LinkedIn post here…"
+                        value={prewarmPost}
+                        onChange={e => setPrewarmPost(e.target.value)}
+                        className="text-sm resize-none"
+                        rows={4}
+                      />
+                      <Button size="sm" onClick={handlePrewarmFromPaste} disabled={prewarmLoading || !prewarmPost.trim()}>
+                        {prewarmLoading ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : null}
+                        Generate comment
+                      </Button>
+                    </div>
+                  )}
                   {prewarmComment && (
                     <div>
                       <div className="flex items-center justify-between mb-1">
@@ -959,11 +997,22 @@ export default function OutreachKitPage() {
       const services = (extractedData?.services as Array<{ name: string }> ?? []).map(s => s.name);
       const identity = extractedData?.identity as Record<string, string> ?? {};
 
+      const { data: bizData } = await supabase
+        .from('businesses')
+        .select('slug')
+        .eq('user_id', user?.id ?? '')
+        .eq('status', 'active')
+        .maybeSingle();
+      const portfolioUrl = bizData?.slug
+        ? `${window.location.origin}/p/${bizData.slug}`
+        : null;
+
       const { data, error } = await supabase.functions.invoke('research-company', {
         body: {
           company_input: input,
           services,
           freelancer_name: identity.name ?? user?.email ?? 'the freelancer',
+          portfolio_url: portfolioUrl,
         },
       });
 
