@@ -9,6 +9,8 @@ import {
   Calendar,
   Zap,
   Settings,
+  Sparkles,
+  Inbox,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -23,6 +25,8 @@ const ICON_MAP: Record<string, LucideIcon> = {
   'calendar': Calendar,
   'bolt': Zap,
   'settings': Settings,
+  'sparkles': Sparkles,
+  'inbox': Inbox,
 }
 
 export function NavIcon({ name, className }: { name: string; className?: string }) {

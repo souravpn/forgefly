@@ -32,6 +32,7 @@ import { useBusiness } from '@/contexts/CurrentBusinessContext';
 const STAGES = [
   'Prospect',
   'Qualified',
+  'Contacted',
   'Proposal Sent',
   'Negotiating',
   'Closed Won',
@@ -64,6 +65,7 @@ const EMPTY_FORM: LeadFormData = {
 const STAGE_CONFIG: Record<Stage, { label: string; color: string; dot: string }> = {
   'Prospect':      { label: 'Prospect',      color: 'bg-gray-500/10 text-gray-600 border-gray-500/20',   dot: 'bg-gray-400' },
   'Qualified':     { label: 'Qualified',      color: 'bg-blue-500/10 text-blue-600 border-blue-500/20',   dot: 'bg-blue-500' },
+  'Contacted':     { label: 'Contacted',      color: 'bg-cyan-500/10 text-cyan-600 border-cyan-500/20',   dot: 'bg-cyan-500' },
   'Proposal Sent': { label: 'Proposal Sent',  color: 'bg-violet-500/10 text-violet-600 border-violet-500/20', dot: 'bg-violet-500' },
   'Negotiating':   { label: 'Negotiating',    color: 'bg-amber-500/10 text-amber-600 border-amber-500/20', dot: 'bg-amber-500' },
   'Closed Won':    { label: 'Closed Won',     color: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20', dot: 'bg-emerald-500' },
@@ -553,10 +555,21 @@ export default function PipelinePage() {
           </p>
         </div>
         {hasBusiness && (
-          <Button size="lg" className="glow-accent w-full md:w-auto" onClick={() => openAdd()}>
-            <Plus className="w-5 h-5 mr-2" />
-            Add Lead
-          </Button>
+          <div className="flex gap-2 w-full md:w-auto">
+            <Button
+              size="lg"
+              variant="outline"
+              className="flex-1 md:flex-none"
+              onClick={() => navigate('/dashboard/outreach')}
+            >
+              <Sparkles className="w-4 h-4 mr-2" />
+              Research a company
+            </Button>
+            <Button size="lg" className="glow-accent flex-1 md:flex-none" onClick={() => openAdd()}>
+              <Plus className="w-5 h-5 mr-2" />
+              Add Lead
+            </Button>
+          </div>
         )}
       </div>
 
@@ -607,7 +620,7 @@ export default function PipelinePage() {
           onDragEnd={handleDragEnd}
         >
           <div className="overflow-x-auto pb-4 -mx-4 px-4">
-            <div className="flex gap-3 min-w-max lg:min-w-0 lg:grid lg:grid-cols-5">
+            <div className="flex gap-3 min-w-max lg:min-w-0 lg:grid lg:grid-cols-6">
               {STAGES.map(stage => (
                 <StageColumn
                   key={stage}

@@ -33,6 +33,16 @@ interface ConfidenceMap {
   brand: ConfidenceLevel;
 }
 
+interface BusinessProfile {
+  motion: 'b2b' | 'b2c' | 'hybrid';
+  industry_vertical: string;
+  sale_type: 'portfolio_forward' | 'review_driven' | 'trust_referral' | 'direct_search';
+  client_decision_maker: string;
+  sales_cycle: 'async_long' | 'urgency_driven' | 'relationship_slow';
+  presence_tier: 'b2b_creative' | 'b2c_local' | 'b2b_professional' | 'hybrid_professional';
+  confidence?: ConfidenceLevel;
+}
+
 interface ClassifierOutput {
   prompt_type: 'seed' | 'additive' | 'revision' | 'scoped';
   complexity: 'simple' | 'medium' | 'rich';
@@ -41,6 +51,7 @@ interface ClassifierOutput {
   has_pricing: boolean;
   language: string;
   confidence_map?: ConfidenceMap;
+  business_profile?: BusinessProfile;
 }
 
 interface AnthropicRequest {
@@ -147,6 +158,15 @@ Output schema (return exactly this shape):
     "location": "high" | "medium" | "low",
     "niche": "high" | "medium" | "low",
     "brand": "high" | "medium" | "low"
+  },
+  "business_profile": {
+    "motion": "b2b" | "b2c" | "hybrid",
+    "industry_vertical": string,
+    "sale_type": "portfolio_forward" | "review_driven" | "trust_referral" | "direct_search",
+    "client_decision_maker": string,
+    "sales_cycle": "async_long" | "urgency_driven" | "relationship_slow",
+    "presence_tier": "b2b_creative" | "b2c_local" | "b2b_professional" | "hybrid_professional",
+    "confidence": "high" | "medium" | "low"
   }
 }
 
@@ -160,7 +180,12 @@ Rules:
 - rich: detailed, many services, complex pricing
 - sections_needed: only include sections the prompt actually touches
 - token_estimate: estimated output tokens needed (100–2500)
-- confidence_map: rate how explicitly each field is mentioned (high=explicit, medium=implied, low=absent)`;
+- confidence_map: rate how explicitly each field is mentioned (high=explicit, medium=implied, low=absent)
+- business_profile: classify the business motion and presence tier (include on ALL prompt_types)
+  - motion: b2b=sells to businesses, b2c=sells to consumers, hybrid=both
+  - sale_type: portfolio_forward=work portfolio drives decisions, review_driven=reviews/ratings, trust_referral=credentials+referrals, direct_search=people search for the service
+  - presence_tier: b2b_creative=design/creative B2B, b2c_local=local consumer services, b2b_professional=professional services B2B, hybrid_professional=both motions
+  - If ambiguous, pick most likely and set confidence: "low"`;
 
 async function runClassifier(prompt: string): Promise<ClassifierOutput> {
   const result = await callAnthropic({
@@ -396,9 +421,15 @@ async function handleExtract(
   }
 
   // Step 4: Merge for diff mode
-  const finalData = (isDiff && current_data)
+  let finalData = (isDiff && current_data)
     ? deepMerge(current_data, extractedData)
     : extractedData;
+
+  // Embed business_profile from classifier into extracted_data on seed prompts
+  // (non-seed prompts preserve whatever business_profile is already stored)
+  if (classification.business_profile && prompt_type === 'seed') {
+    finalData = { ...finalData, business_profile: classification.business_profile };
+  }
 
   await logUsage(supabase, userId, business_id ?? null, model, prompt_type, totalInputTokens, totalOutputTokens);
 

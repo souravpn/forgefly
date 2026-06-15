@@ -1,6 +1,7 @@
 export const NAV_ITEMS = [
   { id: 'overview',    label: 'Overview',    icon: 'layout-dashboard', route: '/dashboard' },
   { id: 'services',    label: 'Services',    icon: 'package',          route: '/dashboard/services' },
+  { id: 'visibility',  label: 'Visibility',  icon: 'sparkles',         route: '/dashboard/visibility' },
   { id: 'pipeline',    label: 'Pipeline',    icon: 'chart-arrows',     route: '/dashboard/pipeline' },
   { id: 'invoices',    label: 'Invoices',    icon: 'receipt',          route: '/dashboard/invoices' },
   { id: 'clients',     label: 'Clients',     icon: 'users',            route: '/dashboard/clients' },
