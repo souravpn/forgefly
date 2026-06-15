@@ -81,6 +81,11 @@ export default function RequestsPage() {
   const [draftingId, setDraftingId] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'new' | 'drafted' | 'sent' | 'declined' | 'all'>('all')
 
+  // Ask a question inline
+  const [questionCardId, setQuestionCardId] = useState<string | null>(null)
+  const [questionText, setQuestionText] = useState('')
+  const [sendingQuestion, setSendingQuestion] = useState(false)
+
   // Draft modal
   const [modal, setModal] = useState<DraftModalState | null>(null)
   const [editMode, setEditMode] = useState(false)
@@ -128,6 +133,34 @@ export default function RequestsPage() {
     if (error) { toast.error('Failed to update'); return }
     setRequests(prev => prev.map(r => r.id === id ? { ...r, status: 'declined' } : r))
     toast.success('Request declined')
+  }
+
+  async function handleSendQuestion(request: ProposalRequest) {
+    if (!questionText.trim() || !business) return
+    setSendingQuestion(true)
+    try {
+      const subject = `Re: Your ${request.service_name ?? 'proposal'} request`
+      const { error } = await supabase.functions.invoke('send-email', {
+        body: {
+          type: 'client_message',
+          to: request.email,
+          data: {
+            clientName: request.name,
+            senderName: business.name,
+            subject,
+            message: questionText.trim(),
+          },
+        },
+      })
+      if (error) throw error
+      toast.success(`Message sent to ${request.name}`)
+      setQuestionCardId(null)
+      setQuestionText('')
+    } catch {
+      toast.error('Failed to send. Try again.')
+    } finally {
+      setSendingQuestion(false)
+    }
   }
 
   async function runAIDraft(request: ProposalRequest): Promise<DraftFields | null> {
@@ -600,6 +633,17 @@ Use my proposal template and services from my business OS. Return a complete pro
                         size="sm"
                         variant="ghost"
                         className="h-7 text-xs text-muted-foreground"
+                        onClick={() => {
+                          setQuestionCardId(id => id === r.id ? null : r.id)
+                          setQuestionText('')
+                        }}
+                      >
+                        Ask a Question
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 text-xs text-muted-foreground"
                         onClick={() => handleDecline(r.id)}
                       >
                         Decline
@@ -611,6 +655,45 @@ Use my proposal template and services from my business OS. Return a complete pro
                     <span className="text-xs text-accent shrink-0">View draft →</span>
                   )}
                 </div>
+
+                {/* Inline question composer */}
+                {questionCardId === r.id && (
+                  <div className="mt-3 pt-3 border-t space-y-2" onClick={e => e.stopPropagation()}>
+                    <p className="text-xs text-muted-foreground">
+                      Sending to <span className="text-foreground font-medium">{r.email}</span>
+                    </p>
+                    <Textarea
+                      autoFocus
+                      rows={3}
+                      placeholder={`Hi ${r.name.split(' ')[0]}, thanks for reaching out…`}
+                      value={questionText}
+                      onChange={e => setQuestionText(e.target.value)}
+                      className="text-sm resize-none"
+                    />
+                    <div className="flex gap-2 justify-end">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 text-xs"
+                        onClick={() => { setQuestionCardId(null); setQuestionText('') }}
+                        disabled={sendingQuestion}
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        size="sm"
+                        className="h-7 text-xs gap-1.5"
+                        onClick={() => handleSendQuestion(r)}
+                        disabled={!questionText.trim() || sendingQuestion}
+                      >
+                        {sendingQuestion
+                          ? <Loader2 className="h-3 w-3 animate-spin" />
+                          : <Send className="h-3 w-3" />}
+                        Send to {r.name.split(' ')[0]}
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
           ))}
