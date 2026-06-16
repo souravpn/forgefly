@@ -1485,75 +1485,79 @@ Use my proposal template and services from my business OS. Return a complete pro
 
       {/* ── Send / Resend dialog (freelancer-initiated) ───────────────────── */}
       <AlertDialog open={!!sendDialog} onOpenChange={(open) => { if (!open) setSendDialog(null); }}>
-        <AlertDialogContent className="max-w-[calc(100%-2rem)] md:max-w-lg">
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              {sendDialog?.status !== 'draft' ? 'Resend Proposal' : 'Send Proposal via Email'}
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              {sendDialog?.status !== 'draft'
-                ? `A new portal link will be sent to ${getClientDisplay(sendDialog!)}.`
-                : `This will send the proposal to ${getClientDisplay(sendDialog!)} at `}
-              {sendDialog?.status === 'draft' && (
-                <strong className="text-accent">{getClientEmail(sendDialog!)}</strong>
-              )}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <div className="py-3">
-            <div className="bg-muted/50 rounded-lg p-4 space-y-2 text-sm">
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Proposal</span>
-                <span className="font-medium truncate ml-2">{sendDialog?.title}</span>
-              </div>
-              {(sendDialog?.total_amount ?? sendDialog?.pricing) ? (
+        {sendDialog && (
+          <AlertDialogContent className="max-w-[calc(100%-2rem)] md:max-w-lg">
+            <AlertDialogHeader>
+              <AlertDialogTitle>
+                {sendDialog.status !== 'draft' ? 'Resend Proposal' : 'Send Proposal via Email'}
+              </AlertDialogTitle>
+              <AlertDialogDescription>
+                {sendDialog.status !== 'draft'
+                  ? `A new portal link will be sent to ${getClientDisplay(sendDialog)}.`
+                  : `This will send the proposal to ${getClientDisplay(sendDialog)} at `}
+                {sendDialog.status === 'draft' && (
+                  <strong className="text-accent">{getClientEmail(sendDialog)}</strong>
+                )}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <div className="py-3">
+              <div className="bg-muted/50 rounded-lg p-4 space-y-2 text-sm">
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">Value</span>
-                  <span className="font-bold text-accent">{fmtPrice(sendDialog?.total_amount ?? sendDialog?.pricing)}</span>
+                  <span className="text-muted-foreground">Proposal</span>
+                  <span className="font-medium truncate ml-2">{sendDialog.title}</span>
                 </div>
-              ) : null}
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">To</span>
-                <span className="text-muted-foreground">{getClientEmail(sendDialog!)}</span>
+                {(sendDialog.total_amount ?? sendDialog.pricing) ? (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Value</span>
+                    <span className="font-bold text-accent">{fmtPrice(sendDialog.total_amount ?? sendDialog.pricing)}</span>
+                  </div>
+                ) : null}
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">To</span>
+                  <span className="text-muted-foreground">{getClientEmail(sendDialog)}</span>
+                </div>
+                <p className="text-xs text-muted-foreground pt-1">
+                  Client receives a branded email with a secure portal link — no account needed.
+                </p>
               </div>
-              <p className="text-xs text-muted-foreground pt-1">
-                Client receives a branded email with a secure portal link — no account needed.
-              </p>
             </div>
-          </div>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={sendingEmail}>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleSendEmail} disabled={sendingEmail} className="glow-accent">
-              {sendingEmail ? 'Sending…' : sendDialog?.status !== 'draft' ? 'Resend' : 'Send Email'}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={sendingEmail}>Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={handleSendEmail} disabled={sendingEmail} className="glow-accent">
+                {sendingEmail ? 'Sending…' : sendDialog.status !== 'draft' ? 'Resend' : 'Send Email'}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        )}
       </AlertDialog>
 
       {/* ── Follow-up dialog ──────────────────────────────────────────────── */}
       <Dialog open={!!followUpProposal} onOpenChange={(open) => { if (!open) setFollowUpProposal(null); }}>
-        <DialogContent className="max-w-[calc(100%-2rem)] md:max-w-lg">
-          <div className="py-2">
-            <h2 className="text-lg font-semibold mb-1">Send Follow-up</h2>
-            <p className="text-sm text-muted-foreground mb-4">
-              To: <strong>{getClientEmail(followUpProposal!) ?? getClientDisplay(followUpProposal!)}</strong>
-            </p>
-            <Textarea
-              value={followUpText}
-              onChange={(e) => setFollowUpText(e.target.value)}
-              rows={8}
-              className="text-sm font-mono"
-            />
-            <div className="flex justify-end gap-3 mt-4">
-              <Button variant="outline" onClick={() => setFollowUpProposal(null)} disabled={sendingFollowUp}>
-                Cancel
-              </Button>
-              <Button onClick={handleSendFollowUp} disabled={!followUpText.trim() || sendingFollowUp} className="glow-accent">
-                {sendingFollowUp ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Send className="h-4 w-4 mr-2" />}
-                {sendingFollowUp ? 'Sending…' : 'Send'}
-              </Button>
+        {followUpProposal && (
+          <DialogContent className="max-w-[calc(100%-2rem)] md:max-w-lg">
+            <div className="py-2">
+              <h2 className="text-lg font-semibold mb-1">Send Follow-up</h2>
+              <p className="text-sm text-muted-foreground mb-4">
+                To: <strong>{getClientEmail(followUpProposal) ?? getClientDisplay(followUpProposal)}</strong>
+              </p>
+              <Textarea
+                value={followUpText}
+                onChange={(e) => setFollowUpText(e.target.value)}
+                rows={8}
+                className="text-sm font-mono"
+              />
+              <div className="flex justify-end gap-3 mt-4">
+                <Button variant="outline" onClick={() => setFollowUpProposal(null)} disabled={sendingFollowUp}>
+                  Cancel
+                </Button>
+                <Button onClick={handleSendFollowUp} disabled={!followUpText.trim() || sendingFollowUp} className="glow-accent">
+                  {sendingFollowUp ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Send className="h-4 w-4 mr-2" />}
+                  {sendingFollowUp ? 'Sending…' : 'Send'}
+                </Button>
+              </div>
             </div>
-          </div>
-        </DialogContent>
+          </DialogContent>
+        )}
       </Dialog>
 
       {/* ── Delete dialog ─────────────────────────────────────────────────── */}
