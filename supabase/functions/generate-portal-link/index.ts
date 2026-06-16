@@ -68,7 +68,10 @@ serve(async (req) => {
     }
 
     const body = await req.json();
-    const { engagementId } = body;
+    const { engagementId, clientEmail: clientEmailOverride } = body as {
+      engagementId?: string;
+      clientEmail?: string;
+    };
 
     if (!engagementId) {
       return new Response(
@@ -105,7 +108,8 @@ serve(async (req) => {
     const contact = engagement.contacts;
     const contactName = contact?.name ?? 'client';
     const company = contact?.company ?? null;
-    const clientEmail = contact?.email ?? null;
+    // Use contact email if available; fall back to the email passed by the caller
+    const clientEmail = contact?.email ?? clientEmailOverride ?? null;
 
     const token = generateHumanToken(contactName, company);
 

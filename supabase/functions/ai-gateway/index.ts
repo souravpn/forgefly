@@ -197,7 +197,20 @@ async function runClassifier(prompt: string): Promise<ClassifierOutput> {
   });
 
   const text = result.content[0]?.text ?? '{}';
-  return JSON.parse(stripFences(text));
+  try {
+    return JSON.parse(stripFences(text));
+  } catch {
+    // Haiku returned natural language instead of JSON — use safe defaults
+    console.warn('Classifier returned non-JSON, using fallback classification');
+    return {
+      prompt_type: 'scoped',
+      complexity: 'simple',
+      token_estimate: 400,
+      sections_needed: [],
+      has_pricing: false,
+      language: 'en',
+    };
+  }
 }
 
 // ─── Extraction ─────────────────────────────────────────────────────────────
@@ -363,6 +376,24 @@ async function handleExtract(
 
   const { prompt_type, complexity, token_estimate, sections_needed } = classification;
   const isDiff = prompt_type === 'additive' || prompt_type === 'revision';
+
+  // Guard: classifier found no business sections — prompt is not a business update
+  if (sections_needed.length === 0 && !isDiff) {
+    return new Response(
+      JSON.stringify({
+        extracted_data: current_data ?? {},
+        is_diff: false,
+        prompt_type: 'scoped',
+        sections_updated: [],
+        classification,
+        confidence_map: confidenceMap,
+        completeness_score: completenessScore,
+        not_applicable: true,
+        message: "That doesn't look like a business update. Try asking the AI Copilot instead.",
+      }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+    );
+  }
 
   // Step 2: Tier selection
   let model: string;

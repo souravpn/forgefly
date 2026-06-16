@@ -33,15 +33,14 @@ CREATE POLICY "Freelancer manages messages on their engagements"
   );
 
 -- Client: read and insert on engagements they have access to (via engagement_access allowlist)
+-- Uses auth.uid() / auth.email() — never joins auth.users directly (permission denied for authenticated role)
 CREATE POLICY "Client reads and sends messages on their portal"
   ON messages FOR SELECT
   USING (
     EXISTS (
-      SELECT 1
-      FROM engagement_access ea
-      JOIN auth.users u ON u.email = ea.client_email
+      SELECT 1 FROM engagement_access ea
       WHERE ea.engagement_id = messages.engagement_id
-        AND u.id = auth.uid()
+        AND (ea.client_user_id = auth.uid() OR ea.client_email = auth.email())
     )
   );
 
@@ -50,11 +49,9 @@ CREATE POLICY "Client inserts messages on their portal"
   WITH CHECK (
     auth.uid() = sender_id
     AND EXISTS (
-      SELECT 1
-      FROM engagement_access ea
-      JOIN auth.users u ON u.email = ea.client_email
+      SELECT 1 FROM engagement_access ea
       WHERE ea.engagement_id = messages.engagement_id
-        AND u.id = auth.uid()
+        AND (ea.client_user_id = auth.uid() OR ea.client_email = auth.email())
     )
   );
 

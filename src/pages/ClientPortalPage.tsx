@@ -416,10 +416,9 @@ function EngagementPortal({
   async function handleApproveProposal() {
     setActionLoading('approve');
     try {
-      const { error } = await supabase
-        .from('engagements')
-        .update({ status: 'active' })
-        .eq('id', engagement.id);
+      const { error } = await supabase.functions.invoke('portal-approve-proposal', {
+        body: { engagementId: engagement.id, action: 'approve' },
+      });
       if (error) throw error;
       setProposalDecision('approve');
     } catch (err: unknown) {

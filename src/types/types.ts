@@ -6,7 +6,25 @@ export type InvoiceStatus = 'draft' | 'sent' | 'paid' | 'overdue';
 
 export type PaymentStatus = 'unpaid' | 'processing' | 'paid' | 'failed';
 
-export type ProposalStatus = 'draft' | 'sent' | 'accepted' | 'rejected';
+export type ProposalStatus = 'draft' | 'sent' | 'viewed' | 'accepted' | 'declined' | 'rejected' | 'expired' | 'withdrawn';
+
+export type ProposalOrigin = 'freelancer' | 'client' | 'pipeline';
+
+export interface ProposalLineItem {
+  label: string;
+  qty: number;
+  unit_price: number;
+}
+
+export interface ProposalRequestContext {
+  original_request_id?: string;
+  company?: string | null;
+  service_name?: string | null;
+  problem?: string | null;
+  timeline?: string | null;
+  budget_flexible?: boolean;
+  notes?: string | null;
+}
 
 export interface Profile {
   id: string;
@@ -89,19 +107,42 @@ export interface Invoice {
 export interface Proposal {
   id: string;
   user_id: string;
+  business_id: string | null;
   client_id: string | null;
   project_id: string | null;
   title: string;
   status: ProposalStatus;
+  initiated_by: ProposalOrigin;
+  // Legacy content fields (freelancer-initiated)
   introduction: string | null;
   services: string | null;
   deliverables: string | null;
   pricing: number | null;
   timeline: string | null;
   terms: string | null;
+  // Unified content fields
+  client_name: string | null;
+  client_email: string | null;
+  description: string | null;
+  line_items: ProposalLineItem[] | null;
+  total_amount: number | null;
+  currency: string;
+  // AI metadata
+  ai_generated: boolean;
+  ai_generation_tone: string | null;
+  ai_model_used: string | null;
+  // Pipeline link
+  pipeline_lead_id: string | null;
+  // Request context (client-initiated only)
+  request_context: ProposalRequestContext | null;
+  // Timestamps
   sent_at: string | null;
+  viewed_at: string | null;
+  responded_at: string | null;
+  expires_at: string | null;
   created_at: string;
   updated_at: string;
+  // Relations
   client?: Client;
   project?: Project;
 }
