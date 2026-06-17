@@ -65,7 +65,7 @@ serve(async (req) => {
       );
     }
 
-    const { type, to, cc, data } = await req.json();
+    const { type, to, cc, reply_to, data } = await req.json();
 
     if (!RESEND_API_KEY) {
       console.error('RESEND_API_KEY not configured');
@@ -122,6 +122,7 @@ serve(async (req) => {
           data.senderName || 'Your Freelancer',
           data.subject,
           data.message,
+          data.portalUrl,
         );
         from = `${data.senderName || 'Forgefly'} <hello@forgefly.io>`;
         break;
@@ -166,6 +167,7 @@ serve(async (req) => {
         from,
         to: [to],
         ...(cc ? { cc: [cc] } : {}),
+        ...(reply_to ? { reply_to: [reply_to] } : {}),
         subject,
         html,
       }),

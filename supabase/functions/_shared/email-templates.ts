@@ -268,8 +268,15 @@ export function getClientMessageTemplate(
   senderName: string,
   subject: string,
   message: string,
+  portalUrl?: string,
 ): string {
   const messageHtml = message.replace(/\n/g, '<br/>');
+  const ctaBlock = portalUrl ? `
+    <div style="text-align:center;margin:32px 0;">
+      <a href="${portalUrl}" class="button" style="background:linear-gradient(135deg,#10B981 0%,#F59E0B 100%);">
+        View in portal →
+      </a>
+    </div>` : '';
   return `
 <!DOCTYPE html>
 <html lang="en">
@@ -289,6 +296,7 @@ export function getClientMessageTemplate(
     <div class="email-body">
       <h2 class="greeting">Hi ${clientName},</h2>
       <p class="content">${messageHtml}</p>
+      ${ctaBlock}
       <p class="content" style="margin-top: 32px;">
         Best regards,<br/>
         <strong style="color: #FFFFFF;">${senderName}</strong>
@@ -661,4 +669,65 @@ export function getDeletionOtpEmailTemplate(data: { code: string; expiresMinutes
 </body>
 </html>
   `;
+}
+
+// ─── Daily digest ─────────────────────────────────────────────────────────────
+
+const NUDGE_TYPE_LABEL: Record<string, string> = {
+  overdue_invoice:  'Overdue invoice',
+  stale_lead:       'Stale lead',
+  unsent_proposal:  'Draft proposal',
+  new_request:      'New request',
+  client_message:   'Client message',
+  portal_visit:     'Portal visit',
+}
+
+export function getDailyDigestEmailTemplate(data: {
+  username: string
+  nudges: Array<{ title: string; body: string; type: string; actionUrl: string | null }>
+  dashboardUrl: string
+}): { subject: string; html: string } {
+  const { username, nudges, dashboardUrl } = data
+  const count = nudges.length
+  const subject = `${count} thing${count === 1 ? '' : 's'} waiting for you — Forgefly`
+
+  const items = nudges.map((n) => {
+    const label = NUDGE_TYPE_LABEL[n.type] ?? 'Update'
+    const url = n.actionUrl
+      ? `${dashboardUrl.replace('/dashboard', '')}${n.actionUrl}`
+      : dashboardUrl
+    return `
+      <div style="border-left:3px solid #10B981;padding:12px 16px;margin-bottom:12px;background:#111827;border-radius:0 8px 8px 0;">
+        <p style="margin:0 0 2px 0;font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#10B981;">${label}</p>
+        <p style="margin:0 0 4px 0;font-size:14px;font-weight:600;color:#F9FAFB;">${n.title}</p>
+        <p style="margin:0 0 8px 0;font-size:13px;color:#9CA3AF;">${n.body}</p>
+        <a href="${url}" style="font-size:12px;color:#10B981;text-decoration:none;font-weight:500;">Take action →</a>
+      </div>`
+  }).join('\n')
+
+  const html = `<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Daily digest</title>
+<style>${emailStyles}</style>
+</head>
+<body>
+  <div class="container">
+    <div class="header"><h1 class="logo">Forgefly</h1></div>
+    <div class="content-box">
+      <p class="content" style="font-size:18px;font-weight:700;color:#F9FAFB;margin-bottom:4px;">Good morning, ${username} 👋</p>
+      <p class="content" style="color:#9CA3AF;margin-top:0;">Here's what needs your attention today.</p>
+      <div style="margin:24px 0;">${items}</div>
+      <div style="text-align:center;margin-top:28px;">
+        <a href="${dashboardUrl}" class="button">Open dashboard</a>
+      </div>
+      <p style="text-align:center;margin-top:20px;font-size:11px;color:#6B7280;">
+        Sent because you have unread notifications and haven't checked in recently.
+      </p>
+    </div>
+  </div>
+</body>
+</html>`
+
+  return { subject, html }
 }

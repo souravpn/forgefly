@@ -45,6 +45,24 @@ export function useNudges(): UseNudgesResult {
     fetch()
   }, [fetch])
 
+  useEffect(() => {
+    if (!user) return
+
+    const channel = supabase
+      .channel(`nudges:${user.id}`)
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'nudges',
+        filter: `user_id=eq.${user.id}`,
+      }, (payload: { new: Nudge }) => {
+        setNudges(prev => [payload.new, ...prev])
+      })
+      .subscribe()
+
+    return () => { channel.unsubscribe() }
+  }, [user?.id])
+
   const markRead = useCallback(async (id: string) => {
     await supabase.from('nudges').update({ read: true }).eq('id', id)
     setNudges(prev => prev.map(n => n.id === id ? { ...n, read: true } : n))

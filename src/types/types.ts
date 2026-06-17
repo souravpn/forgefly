@@ -70,12 +70,15 @@ export interface Project {
   id: string;
   user_id: string;
   client_id: string | null;
+  contact_id: string | null;
   name: string;
   description: string | null;
   status: ProjectStatus;
   value: number | null;
   deadline: string | null;
   progress: number;
+  client_visible_status: 'not_started' | 'in_progress' | 'review' | 'complete' | null;
+  client_visible_note: string | null;
   created_at: string;
   updated_at: string;
   client?: Client;
@@ -246,4 +249,91 @@ export interface Payment {
   client?: Client;
   invoice?: Invoice;
   package?: Package;
+}
+
+export type TransactionType = 'income' | 'expense';
+export type IncomeCategory = 'services' | 'products' | 'licensing' | 'royalties';
+export type RecurrenceRule = 'monthly' | 'annual';
+
+export interface ExpenseCategory {
+  id: string;
+  business_id: string | null;
+  name: string;
+  schedule_c_line: string | null;
+  is_cogs: boolean;
+  is_default: boolean;
+  vertical: 'b2c_local' | 'b2b_creative' | 'b2b_professional' | null;
+  sort_order: number;
+  created_at: string;
+}
+
+export interface Transaction {
+  id: string;
+  business_id: string;
+  type: TransactionType;
+  amount: number;
+  currency: string;
+  // income
+  invoice_id: string | null;
+  client_id: string | null;
+  income_category: IncomeCategory | null;
+  // expense
+  expense_category_id: string | null;
+  vendor: string | null;
+  receipt_url: string | null;
+  receipt_extracted: boolean;
+  is_recurring: boolean;
+  recurrence_rule: RecurrenceRule | null;
+  // shared
+  description: string | null;
+  transaction_date: string;
+  tax_year: number;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+  // relations
+  expense_category?: ExpenseCategory;
+}
+
+export interface MileageLog {
+  id: string;
+  business_id: string;
+  trip_date: string;
+  miles: number;
+  purpose: string;
+  client_id: string | null;
+  project_id: string | null;
+  irs_rate: number;
+  deductible_amount: number;
+  tax_year: number;
+  created_at: string;
+}
+
+export interface TimeEntry {
+  id: string;
+  business_id: string;
+  project_id: string;
+  client_id: string | null;
+  entry_date: string;
+  hours: number;
+  note: string | null;
+  timer_started_at: string | null;
+  tax_year: number;
+  created_at: string;
+  project?: Project;
+}
+
+export interface ContractorPayment {
+  id: string;
+  business_id: string;
+  contractor_name: string;
+  contractor_email: string | null;
+  w9_on_file: boolean;
+  payment_date: string;
+  amount: number;
+  description: string | null;
+  tax_year: number;
+  ytd_total: number | null;
+  threshold_flag: boolean;
+  created_at: string;
 }

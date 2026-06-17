@@ -117,7 +117,30 @@ Deno.serve(async (req) => {
             .eq("id", contact.id);
         }
 
-        // 5. Notify freelancer by email
+        // 5a. In-app nudge for freelancer (shows in dashboard bell immediately)
+        if (business) {
+          await admin.from("nudges").insert({
+            user_id: business.user_id,
+            business_id: business.id,
+            type: "proposal_accepted",
+            title: `${proposal.client_email} approved a proposal`,
+            body: proposal.title || "A proposal was accepted.",
+            action_url: "/dashboard/proposals",
+          });
+
+          await admin.from("notifications").insert({
+            business_id: business.id,
+            client_id: contact?.id ?? null,
+            recipient_role: "freelancer",
+            type: "proposal_accepted",
+            title: `${proposal.client_email} approved a proposal`,
+            body: proposal.title || "A proposal was accepted.",
+            entity_type: "proposal",
+            entity_id: proposalId,
+          });
+        }
+
+        // 5b. Notify freelancer by email
         if (business && RESEND_API_KEY) {
           const { data: freelancerUser } = await admin.auth.admin.getUserById(business.user_id);
           const freelancerEmail = business.contact_email ?? freelancerUser?.user?.email;

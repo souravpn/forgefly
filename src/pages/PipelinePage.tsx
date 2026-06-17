@@ -21,7 +21,7 @@ import {
 } from '@dnd-kit/core';
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Plus, Edit, Trash2, DollarSign, Briefcase, Sparkles, Link2, ExternalLink } from 'lucide-react';
+import { Plus, Edit, Trash2, DollarSign, Briefcase, Sparkles, Link2, ExternalLink, ChevronRight } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/db/supabase';
 import { useNavigate } from 'react-router-dom';

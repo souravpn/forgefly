@@ -1,5 +1,5 @@
 import QRCode from 'qrcode';
-import { AlertCircle, AlertTriangle, CheckCircle2, ChevronDown, Clock, CreditCard, Download, ExternalLink, Eye, Globe, Loader2, Trash2, Wallet } from "lucide-react";
+import { AlertCircle, AlertTriangle, Bell, CheckCircle2, ChevronDown, Clock, CreditCard, Download, ExternalLink, Eye, Globe, Loader2, Trash2, Wallet } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -20,6 +20,26 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useBusiness } from "@/contexts/CurrentBusinessContext";
 import { supabase } from "@/db/supabase";
 import type { BusinessProfile } from "@/types/types";
+
+const TIMEZONES = [
+  { value: 'Pacific/Honolulu',    label: 'Hawaii (UTC-10)' },
+  { value: 'America/Anchorage',   label: 'Alaska (UTC-9)' },
+  { value: 'America/Los_Angeles', label: 'Pacific Time (UTC-8/7)' },
+  { value: 'America/Denver',      label: 'Mountain Time (UTC-7/6)' },
+  { value: 'America/Phoenix',     label: 'Arizona (UTC-7)' },
+  { value: 'America/Chicago',     label: 'Central Time (UTC-6/5)' },
+  { value: 'America/New_York',    label: 'Eastern Time (UTC-5/4)' },
+  { value: 'America/Sao_Paulo',   label: 'São Paulo (UTC-3)' },
+  { value: 'Europe/London',       label: 'London (UTC+0/1)' },
+  { value: 'Europe/Paris',        label: 'Paris / Berlin (UTC+1/2)' },
+  { value: 'Europe/Helsinki',     label: 'Helsinki (UTC+2/3)' },
+  { value: 'Asia/Dubai',          label: 'Dubai (UTC+4)' },
+  { value: 'Asia/Kolkata',        label: 'India (UTC+5:30)' },
+  { value: 'Asia/Singapore',      label: 'Singapore (UTC+8)' },
+  { value: 'Asia/Tokyo',          label: 'Tokyo (UTC+9)' },
+  { value: 'Australia/Sydney',    label: 'Sydney (UTC+10/11)' },
+  { value: 'Pacific/Auckland',    label: 'Auckland (UTC+12/13)' },
+];
 
 type ConnectStatus = {
   connected: boolean;
@@ -53,6 +73,10 @@ export default function SettingsPage() {
   const [publicIdentLoading, setPublicIdentLoading] = useState(false);
   const [slugStatus, setSlugStatus] = useState<'idle' | 'checking' | 'available' | 'taken'>('idle');
   const [originalSlug, setOriginalSlug] = useState('');
+
+  // Notification preferences (timezone for daily digest)
+  const [notifTimezone, setNotifTimezone] = useState('');
+  const [notifLoading, setNotifLoading] = useState(false);
 
   // Delete business
   const [bizDeleteOpen, setBizDeleteOpen] = useState(false);
@@ -91,6 +115,10 @@ export default function SettingsPage() {
       };
       setPublicIdent(ident);
       setOriginalSlug(slug);
+
+      // Load saved timezone, fall back to browser timezone
+      const saved = (business.extracted_data as Record<string, unknown> | null)?.timezone as string | undefined;
+      setNotifTimezone(saved ?? Intl.DateTimeFormat().resolvedOptions().timeZone);
     }
   }, [business, profile]);
 
@@ -238,6 +266,26 @@ export default function SettingsPage() {
       toast.success('Public identity saved');
     }
     setPublicIdentLoading(false);
+  };
+
+  const handleSaveNotifPrefs = async () => {
+    if (!business) return;
+    setNotifLoading(true);
+    const { error } = await supabase
+      .from('businesses')
+      .update({
+        extracted_data: {
+          ...(business.extracted_data as Record<string, unknown> ?? {}),
+          timezone: notifTimezone,
+        },
+      })
+      .eq('id', business.id);
+    if (error) {
+      toast.error('Failed to save notification preferences');
+    } else {
+      toast.success('Notification preferences saved');
+    }
+    setNotifLoading(false);
   };
 
   const handleSaveBusinessProfile = async () => {
@@ -582,6 +630,40 @@ export default function SettingsPage() {
               </Button>
             </CardContent>
           </Card>
+          {/* Notification Preferences */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-balance flex items-center gap-2">
+                <Bell className="w-4 h-4" />
+                Notification Preferences
+              </CardTitle>
+              <CardDescription>
+                Controls when your daily digest email is delivered
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="notifTimezone">Your Timezone</Label>
+                <select
+                  id="notifTimezone"
+                  value={notifTimezone}
+                  onChange={(e) => setNotifTimezone(e.target.value)}
+                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                >
+                  {TIMEZONES.map((tz) => (
+                    <option key={tz.value} value={tz.value}>{tz.label}</option>
+                  ))}
+                </select>
+                <p className="text-xs text-muted-foreground">
+                  Your daily digest is sent at 8am in this timezone when you have unread notifications and haven't logged in recently.
+                </p>
+              </div>
+              <Button onClick={handleSaveNotifPrefs} disabled={notifLoading}>
+                {notifLoading ? 'Saving…' : 'Save Preferences'}
+              </Button>
+            </CardContent>
+          </Card>
+
           {/* Delete Business danger zone */}
           <Card className="border-destructive/30">
             <CardHeader

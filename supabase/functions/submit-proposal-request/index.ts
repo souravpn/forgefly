@@ -48,12 +48,21 @@ serve(async (req) => {
 
     const proposalTitle = service_name ? `${service_name} request` : 'Proposal request'
 
+    // ── Look up existing client record for FK link ────────────────────────────
+    const { data: existingClient } = await supabase
+      .from('clients')
+      .select('id')
+      .eq('user_id', business.user_id)
+      .eq('email', email)
+      .maybeSingle()
+
     // Insert directly into proposals with initiated_by='client'
     const { data: request, error: insertErr } = await supabase
       .from('proposals')
       .insert({
         business_id,
         user_id: business.user_id,
+        client_id: existingClient?.id ?? null,
         client_name: name,
         client_email: email,
         title: proposalTitle,
@@ -72,6 +81,61 @@ serve(async (req) => {
       .single()
 
     if (insertErr) throw insertErr
+
+    // ── Upsert contact + pipeline card ────────────────────────────────────────
+    let contactId: string | null = null
+
+    const { data: existingContact } = await supabase
+      .from('contacts')
+      .select('id, lifecycle_status')
+      .eq('business_id', business_id)
+      .eq('email', email)
+      .maybeSingle()
+
+    if (existingContact) {
+      contactId = existingContact.id
+      // Returning client: reset archived or engaged → prospect (re-engaging)
+      if (existingContact.lifecycle_status === 'archived' || existingContact.lifecycle_status === 'engaged') {
+        await supabase
+          .from('contacts')
+          .update({ lifecycle_status: 'prospect' })
+          .eq('id', existingContact.id)
+      }
+    } else {
+      const { data: newContact } = await supabase
+        .from('contacts')
+        .insert({
+          business_id,
+          name,
+          email,
+          company: company || null,
+          lifecycle_status: 'prospect',
+        })
+        .select('id')
+        .single()
+      contactId = newContact?.id ?? null
+    }
+
+    // Create pipeline lead at Prospect if no active lead already exists
+    if (contactId) {
+      const { data: existingLead } = await supabase
+        .from('pipeline_leads')
+        .select('id')
+        .eq('business_id', business_id)
+        .eq('contact_id', contactId)
+        .not('stage', 'in', '("Closed Won","Lost")')
+        .maybeSingle()
+
+      if (!existingLead) {
+        await supabase.from('pipeline_leads').insert({
+          business_id,
+          contact_id: contactId,
+          stage: 'Prospect',
+          service_name: service_name || null,
+          source: 'portal_request',
+        })
+      }
+    }
 
     if (business) {
       const { data: profile } = await supabase

@@ -16,6 +16,10 @@ import { CSS } from '@dnd-kit/utilities';
 import type { Project, ProjectStatus, Client } from '@/types/types';
 import { getProjects, createProject, updateProject, updateProjectStatus, deleteProject, subscribeToProjects } from '@/services/projectService';
 import { getClients } from '@/services/clientService';
+import { supabase } from '@/db/supabase';
+import { useBusiness } from '@/contexts/CurrentBusinessContext';
+
+const SITE_URL = import.meta.env.VITE_SITE_URL ?? 'https://www.forgefly.io';
 
 const COLUMNS: { id: ProjectStatus; title: string }[] = [
   { id: 'lead', title: 'To Do' },
@@ -113,6 +117,7 @@ function DroppableColumn({ id, children }: { id: string; children: React.ReactNo
 }
 
 export default function ProjectsPage() {
+  const { business } = useBusiness();
   const [projects, setProjects] = useState<Project[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
@@ -129,6 +134,8 @@ export default function ProjectsPage() {
     value: '',
     deadline: '',
     status: 'lead' as ProjectStatus,
+    client_visible_status: '' as Project['client_visible_status'] | '',
+    client_visible_note: '',
   });
   const [submitting, setSubmitting] = useState(false);
 
@@ -185,6 +192,8 @@ export default function ProjectsPage() {
       value: '',
       deadline: '',
       status: 'lead',
+      client_visible_status: '',
+      client_visible_note: '',
     });
     setIsCreateModalOpen(true);
   }
@@ -198,6 +207,8 @@ export default function ProjectsPage() {
       value: project.value?.toString() || '',
       deadline: project.deadline || '',
       status: project.status,
+      client_visible_status: project.client_visible_status ?? '',
+      client_visible_note: project.client_visible_note || '',
     });
     setIsEditModalOpen(true);
   }
@@ -212,14 +223,37 @@ export default function ProjectsPage() {
     setSubmitting(true);
 
     try {
+      // Auto-resolve contact_id from the selected client's email → contacts table
+      let contactId: string | null = null;
+      let contactEmail: string | null = null;
+      let contactName: string | null = null;
+      let contactPortalToken: string | null = null;
+      if (formData.client_id) {
+        const client = clients.find(c => c.id === formData.client_id);
+        if (client?.email) {
+          const { data: match } = await supabase
+            .from('contacts')
+            .select('id, email, name, portal_token')
+            .eq('email', client.email)
+            .maybeSingle();
+          contactId = match?.id ?? null;
+          contactEmail = match?.email ?? null;
+          contactName = match?.name ?? null;
+          contactPortalToken = match?.portal_token ?? null;
+        }
+      }
+
       const projectData = {
         name: formData.name,
         description: formData.description || null,
         client_id: formData.client_id || null,
+        contact_id: contactId,
         value: formData.value ? parseFloat(formData.value) : null,
         deadline: formData.deadline || null,
         status: formData.status,
         progress: 0,
+        client_visible_status: formData.client_visible_status || null,
+        client_visible_note: formData.client_visible_note || null,
       };
 
       if (isEditModalOpen && selectedProject) {
@@ -230,6 +264,38 @@ export default function ProjectsPage() {
         await createProject(projectData);
         toast.success('Project created successfully!');
         setIsCreateModalOpen(false);
+      }
+
+      // Email client when status becomes visible — fire-and-forget
+      const statusChanged = isEditModalOpen
+        ? projectData.client_visible_status !== selectedProject?.client_visible_status
+        : true;
+      if (projectData.client_visible_status && contactEmail && statusChanged && business) {
+        const statusLabel: Record<string, string> = {
+          not_started: 'Not started', in_progress: 'In progress',
+          review: 'In review', complete: 'Complete',
+        };
+        const portalUrl = contactPortalToken
+          ? `${SITE_URL}/portal/${contactPortalToken}`
+          : undefined;
+        const msgBody = [
+          `Status: ${statusLabel[projectData.client_visible_status] ?? projectData.client_visible_status}`,
+          projectData.client_visible_note ? `\n${projectData.client_visible_note}` : '',
+        ].join('');
+        supabase.functions.invoke('send-email', {
+          body: {
+            type: 'client_message',
+            to: contactEmail,
+            reply_to: business.contact_email ?? undefined,
+            data: {
+              clientName: contactName ?? 'there',
+              senderName: business.name,
+              subject: `Project update: ${projectData.name}`,
+              message: msgBody,
+              portalUrl,
+            },
+          },
+        });
       }
 
       loadProjects();
@@ -478,6 +544,38 @@ export default function ProjectsPage() {
                     ))}
                   </SelectContent>
                 </Select>
+              </div>
+
+              <div className="pt-2 border-t space-y-3">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Visible to client in portal</p>
+                <div className="space-y-2">
+                  <Label htmlFor="client_visible_status">Client status</Label>
+                  <Select
+                    value={formData.client_visible_status || 'none'}
+                    onValueChange={(value) => setFormData({ ...formData, client_visible_status: value === 'none' ? '' : value as Project['client_visible_status'] })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Not shared" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Not shared</SelectItem>
+                      <SelectItem value="not_started">Not started</SelectItem>
+                      <SelectItem value="in_progress">In progress</SelectItem>
+                      <SelectItem value="review">In review</SelectItem>
+                      <SelectItem value="complete">Complete</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="client_visible_note">Note for client</Label>
+                  <Textarea
+                    id="client_visible_note"
+                    value={formData.client_visible_note}
+                    onChange={(e) => setFormData({ ...formData, client_visible_note: e.target.value })}
+                    placeholder="Optional update message shown to the client…"
+                    rows={2}
+                  />
+                </div>
               </div>
             </div>
             <DialogFooter>

@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { Plus, Search, Mail, Phone, Building2, Edit, Trash2, User, Users, UserPlus, Crown, Send } from 'lucide-react';
+import { Plus, Search, Mail, Phone, Building2, Edit, Trash2, User, Users, UserPlus, Crown, Send, Link } from 'lucide-react';
 import { toast } from 'sonner';
 import type { Client } from '@/types/types';
 import { getClients, createClient, updateClient, deleteClient, uploadAvatar, subscribeToClients } from '@/services/clientService';
@@ -38,6 +38,8 @@ export default function ClientsPage() {
   });
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  // email → portal_token map from contacts table
+  const [portalTokenMap, setPortalTokenMap] = useState<Record<string, string>>({});
 
   useEffect(() => {
     loadClients();
@@ -55,12 +57,30 @@ export default function ClientsPage() {
     try {
       const data = await getClients();
       setClients(data);
+      // Load portal tokens for clients that have emails
+      const emails = data.map(c => c.email).filter(Boolean) as string[];
+      if (emails.length > 0) {
+        const { data: contacts } = await supabase
+          .from('contacts')
+          .select('email, portal_token')
+          .in('email', emails)
+          .not('portal_token', 'is', null);
+        if (contacts) {
+          setPortalTokenMap(Object.fromEntries(contacts.map(c => [c.email, c.portal_token])));
+        }
+      }
     } catch (error) {
       console.error('Error loading clients:', error);
       toast.error('Failed to load clients');
     } finally {
       setLoading(false);
     }
+  }
+
+  function copyPortalLink(token: string) {
+    const url = `${window.location.origin}/portal/${token}`;
+    navigator.clipboard.writeText(url);
+    toast.success('Portal link copied to clipboard');
   }
 
   function openCreateModal() {
@@ -327,6 +347,18 @@ export default function ClientsPage() {
                     >
                       <Send className="w-4 h-4 mr-2" />
                       Email
+                    </Button>
+                  )}
+                  {client.email && portalTokenMap[client.email] && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="flex-1"
+                      title="Copy client portal link"
+                      onClick={() => copyPortalLink(portalTokenMap[client.email!])}
+                    >
+                      <Link className="w-4 h-4 mr-2" />
+                      Portal link
                     </Button>
                   )}
                   <Button
