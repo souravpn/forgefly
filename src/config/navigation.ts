@@ -4,6 +4,7 @@ export const NAV_ITEMS = [
   { id: 'visibility',  label: 'Visibility',  icon: 'sparkles',         route: '/dashboard/visibility' },
   { id: 'pipeline',    label: 'Pipeline',    icon: 'chart-arrows',     route: '/dashboard/pipeline' },
   { id: 'invoices',    label: 'Invoices',    icon: 'receipt',          route: '/dashboard/invoices' },
+  { id: 'finances',    label: 'Finances',    icon: 'landmark',         route: '/dashboard/finances' },
   { id: 'clients',     label: 'Clients',     icon: 'users',            route: '/dashboard/clients' },
   { id: 'proposals',   label: 'Proposals',   icon: 'file-text',        route: '/dashboard/proposals' },
   { id: 'brandkit',    label: 'Brand Kit',   icon: 'palette',          route: '/dashboard/brand' },
