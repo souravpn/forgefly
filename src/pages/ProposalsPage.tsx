@@ -3,7 +3,9 @@ import {
   CalendarClock,
   CheckCircle2,
   ChevronDown,
+  ChevronRight,
   Clock,
+  Copy,
   Edit2,
   Eye,
   FileCheck,
@@ -36,7 +38,9 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Dialog, DialogContent } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { Sheet, SheetContent, SheetHeader } from '@/components/ui/sheet';
+import { Separator } from '@/components/ui/separator';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -198,6 +202,21 @@ export default function ProposalsPage() {
   // Delete dialog
   const [deleteDialog, setDeleteDialog] = useState<Proposal | null>(null);
 
+  // Detail slide-over
+  const [detailProposal, setDetailProposal] = useState<Proposal | null>(null);
+
+  // New proposal wizard
+  const [wizardOpen, setWizardOpen] = useState(false);
+  const [wizardStep, setWizardStep] = useState<1 | 2 | 3>(1);
+  const [wizardClientMode, setWizardClientMode] = useState<'existing' | 'new'>('existing');
+  const [wizardClientId, setWizardClientId] = useState('');
+  const [wizardNewName, setWizardNewName] = useState('');
+  const [wizardNewEmail, setWizardNewEmail] = useState('');
+  const [wizardStartMode, setWizardStartMode] = useState<'ai' | 'blank' | 'duplicate'>('ai');
+  const [wizardDupId, setWizardDupId] = useState('');
+  const [wizardContext, setWizardContext] = useState('');
+  const [wizardGenerating, setWizardGenerating] = useState(false);
+
   // Follow-up compose
   const [followUpProposal, setFollowUpProposal] = useState<Proposal | null>(null);
   const [followUpText, setFollowUpText] = useState('');
@@ -277,57 +296,70 @@ export default function ProposalsPage() {
   // ── AI Draft modal (client-initiated) ─────────────────────────────────────
 
   async function runAIDraft(proposal: Proposal): Promise<DraftFields | null> {
-    const ctx = buildRequestContext(proposal);
     const { data, error } = await supabase.functions.invoke('ai-gateway', {
       body: {
-        mode: 'chat',
-        message: `Draft a professional proposal for this potential client:
-- Name: ${ctx.name}${ctx.company ? `, ${ctx.company}` : ''}
-- Service requested: ${ctx.service_name ?? 'general services'}
-- Their problem: ${ctx.problem ?? 'not specified'}
-- Timeline: ${ctx.timeline ?? 'flexible'}
-- Budget flexible: ${ctx.budget_flexible ? 'yes' : 'no'}
-
-Use my proposal template and services from my business OS. Return a complete proposal as JSON with these exact keys:
-- title: short proposal title
-- introduction: 2-3 sentence paragraph about their specific challenge (THE CHALLENGE section)
-- scope: array of 3-5 bullet point strings describing scope of work
-- deliverables: short string summarizing deliverables
-- pricing: number (estimate in USD, no symbols)
-- timeline: string (e.g. "4 weeks")
-- whyUs: 2-3 sentences explaining why you are the right fit for this specific client`,
-        current_page: 'proposals',
+        mode: 'generate_proposal',
+        proposal_id: proposal.id,
+        initiated_by: proposal.initiated_by ?? 'client',
+        business_id: business?.id,
       },
     });
     if (error) throw error;
 
-    let parsed: Record<string, unknown> = {};
-    try {
-      const raw = typeof data?.message === 'string' ? data.message : JSON.stringify(data?.message ?? {});
-      const m = raw.match(/```json\s*([\s\S]*?)```/) || raw.match(/(\{[\s\S]*\})/);
-      parsed = JSON.parse(m ? m[1] : raw);
-    } catch {
-      parsed = {};
-    }
+    // generate_proposal returns a structured ProposalDraft directly
+    const d = data as {
+      title?: string;
+      introduction?: string;
+      services?: string | string[];
+      deliverables?: string;
+      timeline?: string;
+      terms?: string;
+    };
 
     return {
-      title: (parsed.title as string) || proposal.title || `Proposal for ${ctx.name}`,
-      introduction: (parsed.introduction as string) || proposal.introduction || '',
-      services: Array.isArray(parsed.scope)
-        ? (parsed.scope as string[]).join('\n')
-        : (parsed.services as string) || proposal.services || '',
-      deliverables: (parsed.deliverables as string) || proposal.deliverables || '',
-      pricing: parsePricing(parsed.pricing)?.toString() ?? proposal.pricing?.toString() ?? '',
-      timeline: (parsed.timeline as string) || ctx.timeline || proposal.timeline || '',
-      whyUs: (parsed.whyUs as string) || proposal.terms || '',
+      title: d.title || proposal.title || 'Untitled Proposal',
+      introduction: d.introduction || proposal.introduction || '',
+      services: Array.isArray(d.services)
+        ? d.services.join('\n')
+        : d.services || proposal.services || '',
+      deliverables: d.deliverables || proposal.deliverables || '',
+      pricing: proposal.pricing?.toString() ?? '',   // never overwrite with AI price
+      timeline: d.timeline || proposal.timeline || '',
+      whyUs: d.terms || proposal.terms || '',
     };
   }
 
   async function handleDraftWithAI(proposal: Proposal) {
     setDraftingId(proposal.id);
     try {
-      const fields = await runAIDraft(proposal);
-      if (!fields) throw new Error('No draft returned');
+      // Call generate_proposal and capture tone/model metadata
+      const { data: rawData, error: invokeErr } = await supabase.functions.invoke('ai-gateway', {
+        body: {
+          mode: 'generate_proposal',
+          proposal_id: proposal.id,
+          initiated_by: proposal.initiated_by ?? 'client',
+          business_id: business?.id,
+        },
+      });
+      if (invokeErr) throw invokeErr;
+
+      const d = rawData as {
+        title?: string; introduction?: string; services?: string | string[];
+        deliverables?: string; timeline?: string; terms?: string;
+        ai_generation_tone?: string; ai_model_used?: string;
+      };
+
+      const fields: DraftFields = {
+        title: d.title || proposal.title || 'Untitled Proposal',
+        introduction: d.introduction || proposal.introduction || '',
+        services: Array.isArray(d.services) ? d.services.join('\n') : d.services || proposal.services || '',
+        deliverables: d.deliverables || proposal.deliverables || '',
+        pricing: proposal.pricing?.toString() ?? '',
+        timeline: d.timeline || proposal.timeline || '',
+        whyUs: d.terms || proposal.terms || '',
+      };
+
+      if (!fields.title) throw new Error('No draft returned');
 
       // Save draft fields back to the proposal record
       await supabase
@@ -341,6 +373,8 @@ Use my proposal template and services from my business OS. Return a complete pro
           timeline: fields.timeline || null,
           terms: fields.whyUs || null,
           ai_generated: true,
+          ai_generation_tone: d.ai_generation_tone ?? null,
+          ai_model_used: d.ai_model_used ?? null,
           updated_at: new Date().toISOString(),
         })
         .eq('id', proposal.id);
@@ -670,6 +704,16 @@ Use my proposal template and services from my business OS. Return a complete pro
         .update({ status: 'sent', sent_at: new Date().toISOString() })
         .eq('id', proposal.id);
 
+      // Advance pipeline lead to "Proposal Sent"
+      if (proposal.pipeline_lead_id) {
+        supabase.from('pipeline_leads').update({ stage: 'Proposal Sent' }).eq('id', proposal.pipeline_lead_id);
+      } else if (proposal.client_id) {
+        supabase.from('pipeline_leads').update({ stage: 'Proposal Sent' })
+          .eq('business_id', business.id)
+          .eq('contact_id', proposal.client_id)
+          .in('stage', ['Prospect', 'Qualified', 'Contacted']);
+      }
+
       const isResend = proposal.status !== 'draft';
       toast.success(isResend ? 'Proposal resent!' : 'Proposal sent!');
       setSendDialog(null);
@@ -678,6 +722,165 @@ Use my proposal template and services from my business OS. Return a complete pro
       toast.error(err instanceof Error ? err.message : 'Failed to send');
     } finally {
       setSendingEmail(false);
+    }
+  }
+
+  // ── New proposal wizard ────────────────────────────────────────────────────
+
+  function openWizard() {
+    setWizardStep(1);
+    setWizardClientMode(clients.length > 0 ? 'existing' : 'new');
+    setWizardClientId('');
+    setWizardNewName('');
+    setWizardNewEmail('');
+    setWizardStartMode('ai');
+    setWizardDupId('');
+    setWizardContext('');
+    setWizardOpen(true);
+  }
+
+  function wizardResolvedClient() {
+    if (wizardClientMode === 'existing') {
+      const c = clients.find((cl) => cl.id === wizardClientId);
+      return { id: c?.id ?? null, name: c?.name ?? '', email: c?.email ?? '' };
+    }
+    return { id: null, name: wizardNewName.trim(), email: wizardNewEmail.trim() };
+  }
+
+  function handleWizardStep1Next() {
+    if (wizardClientMode === 'existing' && !wizardClientId) {
+      toast.error('Select a client to continue');
+      return;
+    }
+    if (wizardClientMode === 'new' && !wizardNewName.trim()) {
+      toast.error('Enter a name to continue');
+      return;
+    }
+    setWizardStep(2);
+  }
+
+  function handleWizardStep2Next() {
+    const client = wizardResolvedClient();
+    if (wizardStartMode === 'ai') {
+      setWizardStep(3);
+      return;
+    }
+    if (wizardStartMode === 'blank') {
+      setWizardOpen(false);
+      setEditProposal(null);
+      setFormData({
+        title: '',
+        client_id: client.id ?? '',
+        introduction: '',
+        services: '',
+        deliverables: '',
+        pricing: '',
+        timeline: '',
+        terms: '',
+      });
+      setCreateModal(true);
+      return;
+    }
+    if (wizardStartMode === 'duplicate') {
+      if (!wizardDupId) {
+        toast.error('Select a proposal to duplicate');
+        return;
+      }
+      const src = proposals.find((p) => p.id === wizardDupId);
+      if (!src) return;
+      setWizardOpen(false);
+      setEditProposal(null);
+      setFormData({
+        title: `${src.title} (copy)`,
+        client_id: client.id ?? '',
+        introduction: src.introduction ?? '',
+        services: src.services ?? '',
+        deliverables: src.deliverables ?? '',
+        pricing: src.pricing?.toString() ?? '',
+        timeline: src.timeline ?? '',
+        terms: src.terms ?? '',
+      });
+      setCreateModal(true);
+    }
+  }
+
+  async function handleWizardGenerate() {
+    if (!business || !profile) return;
+    setWizardGenerating(true);
+    try {
+      const client = wizardResolvedClient();
+
+      const { data: newProposal, error: insertErr } = await supabase
+        .from('proposals')
+        .insert({
+          business_id: business.id,
+          user_id: profile.id,
+          client_id: client.id,
+          client_name: client.name || null,
+          client_email: client.email || null,
+          title: client.name ? `Proposal for ${client.name}` : 'New Proposal',
+          initiated_by: 'freelancer' as ProposalOrigin,
+          status: 'draft',
+        })
+        .select()
+        .single();
+
+      if (insertErr || !newProposal) throw insertErr ?? new Error('Failed to create proposal');
+
+      const { data: rawData, error: genErr } = await supabase.functions.invoke('ai-gateway', {
+        body: {
+          mode: 'generate_proposal',
+          proposal_id: newProposal.id,
+          initiated_by: 'freelancer',
+          business_id: business.id,
+          extra_context: wizardContext.trim() || undefined,
+        },
+      });
+
+      if (genErr) throw genErr;
+
+      const d = rawData as {
+        title?: string; introduction?: string; services?: string | string[];
+        deliverables?: string; timeline?: string; terms?: string;
+        ai_generation_tone?: string; ai_model_used?: string;
+      };
+
+      const fields: DraftFields = {
+        title: d.title || newProposal.title || 'Untitled Proposal',
+        introduction: d.introduction || '',
+        services: Array.isArray(d.services) ? d.services.join('\n') : d.services || '',
+        deliverables: d.deliverables || '',
+        pricing: '',
+        timeline: d.timeline || '',
+        whyUs: d.terms || '',
+      };
+
+      await supabase
+        .from('proposals')
+        .update({
+          title: fields.title,
+          introduction: fields.introduction || null,
+          services: fields.services || null,
+          deliverables: fields.deliverables || null,
+          timeline: fields.timeline || null,
+          terms: fields.whyUs || null,
+          ai_generated: true,
+          ai_generation_tone: d.ai_generation_tone ?? null,
+          ai_model_used: d.ai_model_used ?? null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', newProposal.id);
+
+      setWizardOpen(false);
+      await loadProposals();
+      setDraftModal({ proposal: { ...newProposal, title: fields.title }, fields });
+      setEditMode(false);
+      setEditFields(null);
+      toast.success('Draft ready — review and send when you\'re happy!');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Generation failed');
+    } finally {
+      setWizardGenerating(false);
     }
   }
 
@@ -783,6 +986,17 @@ Use my proposal template and services from my business OS. Return a complete pro
   async function handleStatusChange(p: Proposal, status: ProposalStatus) {
     try {
       await supabase.from('proposals').update({ status, updated_at: new Date().toISOString() }).eq('id', p.id);
+
+      if (status === 'declined' && business) {
+        if (p.pipeline_lead_id) {
+          supabase.from('pipeline_leads').update({ stage: 'Lost' }).eq('id', p.pipeline_lead_id);
+        } else if (p.client_id) {
+          supabase.from('pipeline_leads').update({ stage: 'Lost' })
+            .eq('business_id', business.id)
+            .eq('contact_id', p.client_id);
+        }
+      }
+
       await loadProposals();
     } catch {
       toast.error('Failed to update status');
@@ -965,7 +1179,7 @@ Use my proposal template and services from my business OS. Return a complete pro
             )}
           </p>
         </div>
-        <Button size="lg" className="glow-accent w-full md:w-auto" onClick={openCreate}>
+        <Button size="lg" className="glow-accent w-full md:w-auto" onClick={openWizard}>
           <Plus className="w-5 h-5 mr-2" />
           New Proposal
         </Button>
@@ -1063,7 +1277,7 @@ Use my proposal template and services from my business OS. Return a complete pro
                 <p className="text-muted-foreground mb-6 max-w-sm text-pretty">
                   Start winning clients with professional proposals.
                 </p>
-                <Button onClick={openCreate} className="glow-accent">
+                <Button onClick={openWizard} className="glow-accent">
                   <Plus className="w-4 h-4 mr-2" />
                   Create Your First Proposal
                 </Button>
@@ -1087,7 +1301,7 @@ Use my proposal template and services from my business OS. Return a complete pro
             const amount = p.total_amount ?? p.pricing;
 
             return (
-              <Card key={p.id} className="transition-colors hover:border-border/80">
+              <Card key={p.id} className="transition-colors hover:border-border/80 cursor-pointer" onClick={() => setDetailProposal(p)}>
                 <CardContent className="p-4">
                   <div className="flex items-start gap-3">
                     {/* Avatar */}
@@ -1140,7 +1354,9 @@ Use my proposal template and services from my business OS. Return a complete pro
                         </div>
 
                         {/* Actions */}
-                        <ActionButtons p={p} />
+                        <div onClick={(e) => e.stopPropagation()}>
+                          <ActionButtons p={p} />
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -1150,6 +1366,238 @@ Use my proposal template and services from my business OS. Return a complete pro
           })}
         </div>
       )}
+
+      {/* ── Detail slide-over ────────────────────────────────────────────── */}
+      <Sheet open={!!detailProposal} onOpenChange={(open) => { if (!open) setDetailProposal(null); }}>
+        {detailProposal && (() => {
+          const p = detailProposal;
+          const clientDisplay = getClientDisplay(p);
+          const amount = p.total_amount ?? p.pricing;
+          const rc = p.request_context ?? {};
+          const scopeLines = p.services ? p.services.split('\n').filter(Boolean) : [];
+          const lineItems: { label: string; qty?: number; unit_price?: number }[] =
+            Array.isArray(p.line_items) ? p.line_items : [];
+
+          const timelineEvents: { label: string; ts: string | null | undefined; done: boolean }[] = [
+            { label: 'Created', ts: p.created_at, done: true },
+            { label: 'Sent', ts: p.sent_at, done: !!p.sent_at || ['sent','viewed','accepted','declined','rejected','expired'].includes(p.status) },
+            { label: 'Viewed', ts: p.viewed_at, done: !!p.viewed_at },
+            { label: 'Responded', ts: p.responded_at, done: !!p.responded_at || ['accepted','declined','rejected'].includes(p.status) },
+          ];
+
+          return (
+            <SheetContent side="right" className="w-full sm:max-w-xl flex flex-col p-0 gap-0 overflow-hidden">
+              <SheetHeader className="px-5 pt-5 pb-4 border-b shrink-0">
+                {/* Client + title */}
+                <div className="flex items-start gap-3">
+                  <div className="w-10 h-10 rounded-full bg-accent/10 flex items-center justify-center shrink-0 text-sm font-semibold text-accent">
+                    {getInitials(clientDisplay)}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-semibold text-base leading-tight">{clientDisplay}</div>
+                    <div className="text-sm text-muted-foreground truncate mt-0.5">{p.title}</div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    {amount ? (
+                      <span className="text-base font-bold text-accent">{fmtPrice(amount)}</span>
+                    ) : null}
+                    <StatusBadge status={p.status} />
+                  </div>
+                </div>
+
+                {/* Origin note */}
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-2">
+                  {p.initiated_by === 'client' ? (
+                    <><UserCheck className="h-3 w-3 text-blue-500" /><span>Requested by {clientDisplay.split(' ')[0]}</span></>
+                  ) : p.initiated_by === 'pipeline' ? (
+                    <><ChevronRight className="h-3 w-3" /><span>From pipeline: {(rc.company as string) ?? clientDisplay}</span></>
+                  ) : (
+                    <><FileText className="h-3 w-3" /><span>You created this</span></>
+                  )}
+                  <span className="mx-1">·</span>
+                  <CalendarClock className="h-3 w-3" />
+                  <span>{format(new Date(p.created_at), 'MMM d, yyyy')}</span>
+                  {p.ai_generated && (
+                    <><span className="mx-1">·</span><Sparkles className="h-3 w-3 text-accent" /><span className="text-accent">AI-drafted</span></>
+                  )}
+                </div>
+              </SheetHeader>
+
+              {/* Scrollable body */}
+              <div className="flex-1 overflow-y-auto px-5 py-5 space-y-6">
+
+                {/* Activity timeline */}
+                <div>
+                  <p className="text-[10px] font-semibold tracking-[0.12em] text-muted-foreground uppercase mb-3">Timeline</p>
+                  <div className="flex items-center gap-0">
+                    {timelineEvents.map((ev, i) => (
+                      <div key={ev.label} className="flex items-center flex-1">
+                        <div className="flex flex-col items-center gap-1 flex-1">
+                          <div className={cn(
+                            'w-6 h-6 rounded-full flex items-center justify-center',
+                            ev.done ? 'bg-accent/15 text-accent' : 'bg-muted text-muted-foreground/30',
+                          )}>
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                          </div>
+                          <span className={cn('text-[10px] font-medium text-center', ev.done ? 'text-foreground' : 'text-muted-foreground/40')}>
+                            {ev.label}
+                          </span>
+                          {ev.ts && (
+                            <span className="text-[9px] text-muted-foreground text-center leading-tight">
+                              {format(new Date(ev.ts), 'MMM d')}
+                            </span>
+                          )}
+                        </div>
+                        {i < timelineEvents.length - 1 && (
+                          <div className={cn('h-px flex-1 mx-1 mb-6', ev.done && timelineEvents[i+1].done ? 'bg-accent/30' : 'bg-border')} />
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <Separator />
+
+                {/* Client request context (client-initiated only) */}
+                {p.initiated_by === 'client' && (rc.problem || rc.service_name || p.description) && (
+                  <div>
+                    <p className="text-[10px] font-semibold tracking-[0.12em] text-muted-foreground uppercase mb-2">Their Request</p>
+                    <div className="rounded-lg bg-muted/40 p-3.5 space-y-2 text-sm">
+                      {rc.service_name && (
+                        <div className="flex gap-2">
+                          <span className="text-muted-foreground w-20 shrink-0">Service</span>
+                          <span className="font-medium">{rc.service_name as string}</span>
+                        </div>
+                      )}
+                      {(rc.problem ?? p.description) && (
+                        <div className="flex gap-2">
+                          <span className="text-muted-foreground w-20 shrink-0">Problem</span>
+                          <span className="leading-relaxed">{(rc.problem ?? p.description) as string}</span>
+                        </div>
+                      )}
+                      {rc.timeline && (
+                        <div className="flex gap-2">
+                          <span className="text-muted-foreground w-20 shrink-0">Timeline</span>
+                          <span>{rc.timeline as string}</span>
+                        </div>
+                      )}
+                      {rc.company && (
+                        <div className="flex gap-2">
+                          <span className="text-muted-foreground w-20 shrink-0">Company</span>
+                          <span>{rc.company as string}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Introduction */}
+                {p.introduction && (
+                  <div>
+                    <p className="text-[10px] font-semibold tracking-[0.12em] text-muted-foreground uppercase mb-2">Introduction</p>
+                    <p className="text-sm leading-relaxed text-foreground/90">{p.introduction}</p>
+                  </div>
+                )}
+
+                {/* Line items (structured) */}
+                {lineItems.length > 0 && (
+                  <div>
+                    <p className="text-[10px] font-semibold tracking-[0.12em] text-muted-foreground uppercase mb-2">Line Items</p>
+                    <div className="rounded-lg border overflow-hidden">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b bg-muted/40">
+                            <th className="px-3 py-2 text-left text-xs text-muted-foreground font-medium">Item</th>
+                            <th className="px-3 py-2 text-right text-xs text-muted-foreground font-medium">Qty</th>
+                            <th className="px-3 py-2 text-right text-xs text-muted-foreground font-medium">Price</th>
+                            <th className="px-3 py-2 text-right text-xs text-muted-foreground font-medium">Total</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {lineItems.map((li, i) => (
+                            <tr key={i} className="border-b last:border-0">
+                              <td className="px-3 py-2">{li.label}</td>
+                              <td className="px-3 py-2 text-right text-muted-foreground">{li.qty ?? 1}</td>
+                              <td className="px-3 py-2 text-right text-muted-foreground">{li.unit_price ? fmtPrice(li.unit_price) : '—'}</td>
+                              <td className="px-3 py-2 text-right font-medium">{li.unit_price ? fmtPrice((li.qty ?? 1) * li.unit_price) : '—'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                        {amount && (
+                          <tfoot>
+                            <tr className="border-t bg-muted/20">
+                              <td colSpan={3} className="px-3 py-2 text-right text-xs text-muted-foreground font-semibold">Total</td>
+                              <td className="px-3 py-2 text-right font-bold text-accent">{fmtPrice(amount)}</td>
+                            </tr>
+                          </tfoot>
+                        )}
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {/* Scope of work (text-based) */}
+                {scopeLines.length > 0 && (
+                  <div>
+                    <p className="text-[10px] font-semibold tracking-[0.12em] text-muted-foreground uppercase mb-2">Scope of Work</p>
+                    <ul className="space-y-1.5">
+                      {scopeLines.map((line, i) => (
+                        <li key={i} className="flex gap-2 text-sm text-foreground/80">
+                          <span className="text-accent shrink-0 mt-0.5">·</span>
+                          <span>{line.replace(/^[-•·]\s*/, '')}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {/* Deliverables + Investment + Timeline */}
+                {(p.deliverables || p.timeline || amount) && (
+                  <div className="rounded-lg border overflow-hidden">
+                    <table className="w-full text-sm">
+                      <tbody>
+                        {p.deliverables && (
+                          <tr className="border-b">
+                            <td className="px-4 py-2.5 text-muted-foreground w-32">Deliverables</td>
+                            <td className="px-4 py-2.5 text-right font-medium">{p.deliverables}</td>
+                          </tr>
+                        )}
+                        {p.timeline && (
+                          <tr className="border-b">
+                            <td className="px-4 py-2.5 text-muted-foreground">Timeline</td>
+                            <td className="px-4 py-2.5 text-right font-medium">{p.timeline}</td>
+                          </tr>
+                        )}
+                        {amount && lineItems.length === 0 && (
+                          <tr>
+                            <td className="px-4 py-2.5 text-muted-foreground">Investment</td>
+                            <td className="px-4 py-2.5 text-right font-bold text-accent">{fmtPrice(amount)}</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                {/* Why us / Terms */}
+                {p.terms && (
+                  <div>
+                    <p className="text-[10px] font-semibold tracking-[0.12em] text-muted-foreground uppercase mb-2">Why Us</p>
+                    <p className="text-sm leading-relaxed text-foreground/90">{p.terms}</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Sticky action bar */}
+              <div className="border-t px-5 py-4 shrink-0 bg-background">
+                <div className="flex gap-2 flex-wrap" onClick={(e) => e.stopPropagation()}>
+                  <ActionButtons p={p} />
+                </div>
+              </div>
+            </SheetContent>
+          );
+        })()}
+      </Sheet>
 
       {/* ── AI Draft Modal (client-initiated) ─────────────────────────────── */}
       <Dialog open={!!draftModal} onOpenChange={(open) => { if (!open) { setDraftModal(null); setEditMode(false); setEditFields(null); } }}>
@@ -1577,6 +2025,210 @@ Use my proposal template and services from my business OS. Return a complete pro
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* ── New Proposal Wizard ─────────────────────────────────────────── */}
+      <Dialog open={wizardOpen} onOpenChange={(open) => { if (!open) setWizardOpen(false); }}>
+        {wizardOpen && (
+          <DialogContent className="max-w-[calc(100%-2rem)] sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>
+                {wizardStep === 1 ? 'Who is this for?' : wizardStep === 2 ? 'How do you want to start?' : 'Add context (optional)'}
+              </DialogTitle>
+              <DialogDescription className="sr-only">New proposal wizard</DialogDescription>
+            </DialogHeader>
+
+            {/* Step progress */}
+            <div className="flex gap-1.5 -mt-1 mb-1">
+              {([1, 2, 3] as const).map((s) => (
+                <div
+                  key={s}
+                  className={cn(
+                    'h-1 flex-1 rounded-full transition-colors',
+                    s < wizardStep ? 'bg-accent' : s === wizardStep ? 'bg-accent/70' : 'bg-muted',
+                    s === 3 && wizardStartMode !== 'ai' && wizardStep < 3 ? 'opacity-30' : '',
+                  )}
+                />
+              ))}
+            </div>
+
+            {/* ── Step 1: Client ── */}
+            {wizardStep === 1 && (
+              <div className="space-y-4 pt-1">
+                {clients.length > 0 && (
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setWizardClientMode('existing')}
+                      className={cn(
+                        'flex-1 py-1.5 px-3 rounded-md border text-sm font-medium transition-colors',
+                        wizardClientMode === 'existing'
+                          ? 'bg-accent text-accent-foreground border-accent'
+                          : 'border-border text-muted-foreground hover:border-accent/50',
+                      )}
+                    >
+                      Existing client
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setWizardClientMode('new')}
+                      className={cn(
+                        'flex-1 py-1.5 px-3 rounded-md border text-sm font-medium transition-colors',
+                        wizardClientMode === 'new'
+                          ? 'bg-accent text-accent-foreground border-accent'
+                          : 'border-border text-muted-foreground hover:border-accent/50',
+                      )}
+                    >
+                      New contact
+                    </button>
+                  </div>
+                )}
+
+                {wizardClientMode === 'existing' ? (
+                  <Select value={wizardClientId} onValueChange={setWizardClientId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a client…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {clients.map((c) => (
+                        <SelectItem key={c.id} value={c.id}>
+                          {c.name}{c.email ? ` — ${c.email}` : ''}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <div className="space-y-3">
+                    <div>
+                      <Label className="text-xs text-muted-foreground mb-1.5 block">Name</Label>
+                      <Input
+                        placeholder="Jane Smith"
+                        value={wizardNewName}
+                        onChange={(e) => setWizardNewName(e.target.value)}
+                        autoFocus
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground mb-1.5 block">
+                        Email <span className="text-muted-foreground/60">(optional — needed to send)</span>
+                      </Label>
+                      <Input
+                        type="email"
+                        placeholder="jane@company.com"
+                        value={wizardNewEmail}
+                        onChange={(e) => setWizardNewEmail(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex justify-between pt-2">
+                  <Button variant="ghost" onClick={() => setWizardOpen(false)}>Cancel</Button>
+                  <Button onClick={handleWizardStep1Next}>Next →</Button>
+                </div>
+              </div>
+            )}
+
+            {/* ── Step 2: Start mode ── */}
+            {wizardStep === 2 && (
+              <div className="space-y-4 pt-1">
+                <div className="space-y-2">
+                  {(
+                    [
+                      {
+                        id: 'ai' as const,
+                        Icon: Sparkles,
+                        label: 'Generate with AI',
+                        desc: 'Get a polished first draft in seconds — recommended',
+                      },
+                      {
+                        id: 'blank' as const,
+                        Icon: FileText,
+                        label: 'Start from blank',
+                        desc: 'Open the form and write from scratch',
+                      },
+                      {
+                        id: 'duplicate' as const,
+                        Icon: Copy,
+                        label: 'Duplicate an existing proposal',
+                        desc: 'Copy a previous proposal as your starting point',
+                      },
+                    ]
+                  ).map(({ id, Icon, label, desc }) => (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => setWizardStartMode(id)}
+                      className={cn(
+                        'w-full flex items-start gap-3 p-3 rounded-lg border text-left transition-colors',
+                        wizardStartMode === id
+                          ? 'border-accent bg-accent/5'
+                          : 'border-border hover:border-accent/40 hover:bg-muted/40',
+                      )}
+                    >
+                      <Icon className={cn('w-4 h-4 mt-0.5 shrink-0', wizardStartMode === id ? 'text-accent' : 'text-muted-foreground')} />
+                      <div>
+                        <div className="text-sm font-medium leading-snug">{label}</div>
+                        <div className="text-xs text-muted-foreground mt-0.5">{desc}</div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+
+                {wizardStartMode === 'duplicate' && (
+                  <Select value={wizardDupId} onValueChange={setWizardDupId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Choose a proposal to copy…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {proposals
+                        .filter((p) => p.initiated_by !== 'client')
+                        .map((p) => (
+                          <SelectItem key={p.id} value={p.id}>{p.title}</SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                )}
+
+                <div className="flex justify-between pt-2">
+                  <Button variant="ghost" onClick={() => setWizardStep(1)}>← Back</Button>
+                  <Button onClick={handleWizardStep2Next}>
+                    {wizardStartMode === 'ai' ? 'Next →' : wizardStartMode === 'blank' ? 'Open form →' : 'Use as template →'}
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* ── Step 3: AI context ── */}
+            {wizardStep === 3 && (
+              <div className="space-y-4 pt-1">
+                <Textarea
+                  placeholder="e.g. they mentioned a tight timeline, or they have a fixed budget of $2k"
+                  rows={5}
+                  value={wizardContext}
+                  onChange={(e) => setWizardContext(e.target.value)}
+                  className="resize-none text-sm"
+                  autoFocus
+                />
+                <p className="text-xs text-muted-foreground">
+                  Optional — leave blank for a general draft. This context helps tailor tone and scope.
+                </p>
+                <div className="flex justify-between pt-2">
+                  <Button variant="ghost" onClick={() => setWizardStep(2)} disabled={wizardGenerating}>
+                    ← Back
+                  </Button>
+                  <Button onClick={handleWizardGenerate} disabled={wizardGenerating} className="glow-accent">
+                    {wizardGenerating ? (
+                      <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Generating…</>
+                    ) : (
+                      <><Sparkles className="w-4 h-4 mr-2" />Generate proposal</>
+                    )}
+                  </Button>
+                </div>
+              </div>
+            )}
+          </DialogContent>
+        )}
+      </Dialog>
     </div>
   );
 }

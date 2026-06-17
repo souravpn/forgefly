@@ -42,7 +42,6 @@ serve(async (req) => {
   }
 
   try {
-    // Authenticated client (freelancer's JWT)
     const authClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_ANON_KEY') ?? '',
@@ -53,7 +52,6 @@ serve(async (req) => {
       }
     );
 
-    // Service role client for writes that bypass RLS
     const adminClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
@@ -83,7 +81,7 @@ serve(async (req) => {
     // Verify engagement belongs to this user's business
     const { data: engagement, error: engError } = await authClient
       .from('engagements')
-      .select('*, businesses!inner(id, user_id), contacts(id, name, company, email)')
+      .select('*, businesses!inner(id, user_id), contacts(id, name, company, email, portal_token)')
       .eq('id', engagementId)
       .eq('businesses.user_id', user.id)
       .single();
@@ -95,9 +93,60 @@ serve(async (req) => {
       );
     }
 
-    // Idempotent: if token already set, return it
+    const siteUrl = Deno.env.get('SITE_URL') || 'https://www.forgefly.io';
+    const contact = engagement.contacts as {
+      id: string; name: string; company: string | null;
+      email: string | null; portal_token: string | null;
+    } | null;
+
+    // ── Contact-based path (new hub architecture) ─────────────────────────────
+    if (contact) {
+      let contactToken = contact.portal_token;
+
+      // Generate token for contact if missing
+      if (!contactToken) {
+        contactToken = generateHumanToken(contact.name, contact.company);
+        const { error: contactUpdateErr } = await adminClient
+          .from('contacts')
+          .update({ portal_token: contactToken })
+          .eq('id', contact.id);
+
+        if (contactUpdateErr) {
+          console.error('Failed to set contact portal_token:', contactUpdateErr);
+          contactToken = null; // fall through to engagement token path
+        }
+      }
+
+      if (contactToken) {
+        // Also ensure engagement has a token + engagement_access row for legacy portal backward compat
+        const clientEmail = contact.email ?? clientEmailOverride ?? null;
+        if (!engagement.portal_token) {
+          const engToken = randomHex(16);
+          await adminClient.from('engagements').update({ portal_token: engToken }).eq('id', engagementId);
+          if (clientEmail) {
+            await adminClient.from('engagement_access').upsert(
+              { engagement_id: engagementId, client_email: clientEmail },
+              { onConflict: 'engagement_id,client_email', ignoreDuplicates: true }
+            );
+          }
+        } else if (clientEmail) {
+          await adminClient.from('engagement_access').upsert(
+            { engagement_id: engagementId, client_email: clientEmail },
+            { onConflict: 'engagement_id,client_email', ignoreDuplicates: true }
+          );
+        }
+
+        const portalUrl = `${siteUrl}/portal/${contactToken}`;
+        console.log(`Portal token (contact): ${contactToken} for engagement ${engagementId}`);
+        return new Response(
+          JSON.stringify({ token: contactToken, portalUrl }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    }
+
+    // ── Engagement-based fallback (no contact, or contact token failed) ────────
     if (engagement.portal_token) {
-      const siteUrl = Deno.env.get('SITE_URL') || 'https://www.forgefly.io';
       const portalUrl = `${siteUrl}/portal/${engagement.portal_token}`;
       return new Response(
         JSON.stringify({ token: engagement.portal_token, portalUrl }),
@@ -105,50 +154,33 @@ serve(async (req) => {
       );
     }
 
-    const contact = engagement.contacts;
     const contactName = contact?.name ?? 'client';
     const company = contact?.company ?? null;
-    // Use contact email if available; fall back to the email passed by the caller
     const clientEmail = contact?.email ?? clientEmailOverride ?? null;
 
     const token = generateHumanToken(contactName, company);
 
-    // Update engagement with token
     const { error: updateError } = await adminClient
       .from('engagements')
       .update({ portal_token: token })
       .eq('id', engagementId);
 
     if (updateError) {
-      console.error('Error updating engagement token:', updateError);
       return new Response(
         JSON.stringify({ error: 'Failed to set portal token' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    // Upsert engagement_access row if we have a client email
     if (clientEmail) {
-      const { error: accessError } = await adminClient
-        .from('engagement_access')
-        .upsert(
-          {
-            engagement_id: engagementId,
-            client_email: clientEmail,
-          },
-          { onConflict: 'engagement_id,client_email', ignoreDuplicates: true }
-        );
-
-      if (accessError) {
-        console.warn('engagement_access upsert warning:', accessError.message);
-      }
+      await adminClient.from('engagement_access').upsert(
+        { engagement_id: engagementId, client_email: clientEmail },
+        { onConflict: 'engagement_id,client_email', ignoreDuplicates: true }
+      );
     }
 
-    const siteUrl = Deno.env.get('SITE_URL') || 'https://www.forgefly.io';
     const portalUrl = `${siteUrl}/portal/${token}`;
-
-    console.log(`Portal token generated: ${token} for engagement ${engagementId}`);
-
+    console.log(`Portal token (engagement): ${token} for engagement ${engagementId}`);
     return new Response(
       JSON.stringify({ token, portalUrl }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

@@ -21,7 +21,7 @@ import {
 } from '@dnd-kit/core';
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Plus, Edit, Trash2, DollarSign, Briefcase, Sparkles, ArrowRight, ChevronRight } from 'lucide-react';
+import { Plus, Edit, Trash2, DollarSign, Briefcase, Sparkles, Link2, ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/db/supabase';
 import { useNavigate } from 'react-router-dom';
@@ -36,6 +36,7 @@ const STAGES = [
   'Proposal Sent',
   'Negotiating',
   'Closed Won',
+  'Lost',
 ] as const;
 
 type Stage = typeof STAGES[number];
@@ -47,6 +48,8 @@ interface Lead {
   stage: Stage;
   value: string;
   service: string;
+  lifecycleStatus: string;
+  portalToken: string | null;
 }
 
 type LeadFormData = {
@@ -69,12 +72,19 @@ const STAGE_CONFIG: Record<Stage, { label: string; color: string; dot: string }>
   'Proposal Sent': { label: 'Proposal Sent',  color: 'bg-violet-500/10 text-violet-600 border-violet-500/20', dot: 'bg-violet-500' },
   'Negotiating':   { label: 'Negotiating',    color: 'bg-amber-500/10 text-amber-600 border-amber-500/20', dot: 'bg-amber-500' },
   'Closed Won':    { label: 'Closed Won',     color: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20', dot: 'bg-emerald-500' },
+  'Lost':          { label: 'Lost',           color: 'bg-rose-500/10 text-rose-600 border-rose-500/20',     dot: 'bg-rose-500' },
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function toStage(s: string): Stage {
   return (STAGES.includes(s as Stage) ? s : 'Prospect') as Stage;
+}
+
+function generatePortalToken(): string {
+  const arr = new Uint8Array(8);
+  crypto.getRandomValues(arr);
+  return Array.from(arr, b => b.toString(16).padStart(2, '0')).join('');
 }
 
 // ─── Lead card (sortable) ─────────────────────────────────────────────────────
@@ -99,11 +109,36 @@ function LeadCard({
     opacity: isDragging ? 0.35 : 1,
   };
 
+  const isEngaged = lead.lifecycleStatus === 'engaged';
+  const portalUrl = lead.portalToken
+    ? `${window.location.origin}/portal/${lead.portalToken}`
+    : null;
+
+  function handleCopyPortalLink(e: React.MouseEvent) {
+    e.stopPropagation();
+    if (!portalUrl) return;
+    navigator.clipboard.writeText(portalUrl);
+    toast.success('Portal link copied');
+  }
+
+  function handleOpenPortal(e: React.MouseEvent) {
+    e.stopPropagation();
+    if (!portalUrl) return;
+    window.open(portalUrl, '_blank', 'noopener noreferrer');
+  }
+
   return (
     <div ref={setNodeRef} style={overlay ? undefined : style} {...attributes} {...listeners}>
       <Card className={`cursor-grab active:cursor-grabbing ${overlay ? 'shadow-xl rotate-1' : 'card-hover'}`}>
         <CardContent className="p-3 space-y-2">
-          <p className="font-medium text-sm leading-tight">{lead.name}</p>
+          <div className="flex items-start justify-between gap-1">
+            <p className="font-medium text-sm leading-tight">{lead.name}</p>
+            {isEngaged && (
+              <span className="shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 border border-emerald-500/20">
+                Client
+              </span>
+            )}
+          </div>
           {lead.service && (
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
               <Briefcase className="w-3 h-3 shrink-0" />
@@ -127,6 +162,28 @@ function LeadCard({
                 <Edit className="w-3 h-3 mr-1" />
                 Edit
               </Button>
+              {portalUrl && (
+                <>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground"
+                    title="Copy portal link"
+                    onClick={handleCopyPortalLink}
+                  >
+                    <Link2 className="w-3 h-3" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground"
+                    title="Open portal"
+                    onClick={handleOpenPortal}
+                  >
+                    <ExternalLink className="w-3 h-3" />
+                  </Button>
+                </>
+              )}
               <Button
                 variant="ghost"
                 size="sm"
@@ -355,19 +412,24 @@ export default function PipelinePage() {
 
     const { data } = await supabase
       .from('pipeline_leads')
-      .select('id, contact_id, stage, value, service_name, contacts(name)')
+      .select('id, contact_id, stage, value, service_name, contacts(name, lifecycle_status, portal_token)')
       .eq('business_id', business.id)
       .order('created_at', { ascending: true });
 
     if (data && data.length > 0) {
-      setLeads(data.map(l => ({
-        _id: l.id,
-        contactId: l.contact_id ?? null,
-        name: (l.contacts as { name: string } | null)?.name ?? 'Unknown',
-        stage: toStage(l.stage),
-        value: l.value ?? '',
-        service: l.service_name ?? '',
-      })));
+      setLeads(data.map(l => {
+        const c = l.contacts as { name: string; lifecycle_status: string; portal_token: string | null } | null;
+        return {
+          _id: l.id,
+          contactId: l.contact_id ?? null,
+          name: c?.name ?? 'Unknown',
+          stage: toStage(l.stage),
+          value: l.value ?? '',
+          service: l.service_name ?? '',
+          lifecycleStatus: c?.lifecycle_status ?? 'prospect',
+          portalToken: c?.portal_token ?? null,
+        };
+      }));
       setLoaded(true);
       return;
     }
@@ -408,6 +470,8 @@ export default function PipelinePage() {
         stage: toStage(item.stage),
         value: item.value ?? '',
         service: item.service ?? '',
+        lifecycleStatus: 'prospect',
+        portalToken: null,
       });
     }
     setLeads(seeded);
@@ -481,12 +545,15 @@ export default function PipelinePage() {
           .from('pipeline_leads')
           .update({ stage: data.stage, value: data.value || null, service_name: data.service || null })
           .eq('id', leadModal.editId);
-        setLeads(prev => prev.map(l => l._id === leadModal.editId ? { ...l, ...data } : l));
+        setLeads(prev => prev.map(l => l._id === leadModal.editId
+          ? { ...l, name: data.name, stage: data.stage, value: data.value, service: data.service }
+          : l));
         toast.success('Lead updated');
       } else {
+        const portalToken = generatePortalToken();
         const { data: contact } = await supabase
           .from('contacts')
-          .insert({ business_id: business.id, name: data.name })
+          .insert({ business_id: business.id, name: data.name, portal_token: portalToken })
           .select('id')
           .single();
         if (!contact) throw new Error('Failed to create contact');
@@ -507,6 +574,7 @@ export default function PipelinePage() {
         setLeads(prev => [...prev, {
           _id: pl.id, contactId: contact.id, name: data.name,
           stage: data.stage, value: data.value, service: data.service,
+          lifecycleStatus: 'prospect', portalToken,
         }]);
         toast.success('Lead added');
       }

@@ -499,6 +499,249 @@ async function handleExtract(
   );
 }
 
+// ─── Generate proposal mode ──────────────────────────────────────────────────
+
+const SITE_URL = Deno.env.get('SITE_URL') ?? 'https://www.forgefly.io';
+
+interface ProposalDraft {
+  title: string;
+  introduction: string;
+  services: string[];
+  deliverables: string;
+  timeline: string;
+  terms: string;
+  ai_generation_tone: 'outbound' | 'response' | 'b2b_tailored';
+  ai_model_used: string;
+}
+
+async function handleGenerateProposal(
+  body: Record<string, unknown>,
+  supabase: ReturnType<typeof createClient>,
+  userId: string,
+): Promise<Response> {
+  const {
+    proposal_id,
+    initiated_by,
+    request_context,
+    company_intel,
+    extra_context,
+    business_id,
+  } = body as {
+    proposal_id?: string;
+    initiated_by: 'freelancer' | 'client' | 'pipeline';
+    request_context?: Record<string, unknown>;
+    company_intel?: Record<string, unknown>;
+    extra_context?: string;
+    business_id?: string;
+  };
+
+  if (!initiated_by) {
+    return new Response(JSON.stringify({ error: 'initiated_by is required' }), {
+      status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+
+  // Fetch business context (services, bio, slug, motion)
+  const { data: business } = await supabase
+    .from('businesses')
+    .select('id, name, bio, slug, extracted_data')
+    .eq(business_id ? 'id' : 'user_id', business_id ?? userId)
+    .eq('status', 'active')
+    .maybeSingle();
+
+  const extracted = business?.extracted_data as Record<string, unknown> | null;
+  const services = extracted?.services as Array<{ name: string; price: string; description?: string }> | null;
+  const motion = (extracted?.business_profile as Record<string, string> | null)?.motion ?? 'b2b';
+  const portfolioUrl = business?.slug ? `${SITE_URL}/p/${business.slug}` : null;
+
+  const servicesBlock = services?.length
+    ? services.map(s => `- ${s.name}${s.price ? ` (${s.price})` : ''}${s.description ? `: ${s.description}` : ''}`).join('\n')
+    : 'Services not specified';
+
+  const bioBlock = business?.bio ?? '';
+  const businessName = business?.name ?? 'the freelancer';
+
+  // Fetch proposal row for client_name / title if proposal_id given
+  let clientName = 'the client';
+  let proposalTitle = '';
+  let resolvedRequestContext = request_context;
+  if (proposal_id) {
+    const { data: p } = await supabase
+      .from('proposals')
+      .select('client_name, title, request_context')
+      .eq('id', proposal_id)
+      .maybeSingle();
+    if (p) {
+      clientName = p.client_name ?? clientName;
+      proposalTitle = p.title ?? '';
+      if (!resolvedRequestContext && p.request_context) {
+        resolvedRequestContext = p.request_context as Record<string, unknown>;
+      }
+    }
+  }
+
+  // ── Branch system prompts ────────────────────────────────────────────────
+
+  let systemPrompt: string;
+  let userContent: string;
+  let tone: ProposalDraft['ai_generation_tone'];
+
+  if (initiated_by === 'client') {
+    tone = 'response';
+    const rc = resolvedRequestContext ?? {};
+
+    systemPrompt = `You are writing a business proposal in response to a client's inbound request.
+The client has already reached out — this is a response, not a cold pitch. They want this.
+
+Tone: reassuring, specific, professional. Acknowledge exactly what they asked for. Show you understood.
+Do NOT oversell. Do NOT use "I hope this finds you well". Do NOT use the word "deliverables" as a heading.
+Lead by confirming you can solve their specific problem. Then scope, timeline, close with a clear next step.
+
+NEVER generate a price. Use [amount] as the investment placeholder — the freelancer will fill this in.
+${portfolioUrl ? `Include this portfolio URL naturally in the terms/next steps: ${portfolioUrl}` : ''}
+
+Return ONLY valid JSON, no markdown fences:
+{
+  "title": string,
+  "introduction": string (2–3 paragraphs acknowledging their brief and confirming fit),
+  "services": [string] (3–5 bullet points describing scope — start each with an action verb),
+  "deliverables": string (short summary of what they receive),
+  "timeline": string (realistic estimate e.g. "3–4 weeks"),
+  "terms": string (2–3 sentences: why you are the right fit + next step for the client)
+}`;
+
+    userContent = `Client: ${clientName}${rc.company ? ` (${rc.company})` : ''}
+Service requested: ${rc.service_name ?? proposalTitle ?? 'general services'}
+Their problem: ${rc.problem ?? 'not specified'}
+Timeline they mentioned: ${rc.timeline ?? 'flexible'}
+Budget flexible: ${rc.budget_flexible ? 'yes' : 'no'}
+Notes: ${rc.notes ?? 'none'}
+
+My business: ${businessName}
+${bioBlock ? `Bio: ${bioBlock}` : ''}
+My services:
+${servicesBlock}
+${extra_context ? `\nAdditional context: ${extra_context}` : ''}`;
+
+  } else if (initiated_by === 'pipeline' && company_intel) {
+    tone = 'b2b_tailored';
+    const intel = company_intel;
+    const matchedServices = services?.filter(s =>
+      (intel.matched_services as string[] | null)?.some(
+        ms => s.name.toLowerCase().includes(ms.toLowerCase())
+      )
+    );
+
+    systemPrompt = `You are writing a B2B proposal for a specific target company you have researched.
+You have intelligence on this company. USE IT. Be specific — name their product, their industry, their apparent need.
+Generic proposals lose to specific ones. Show you did your homework.
+
+Tone: peer-level, direct, researched. No fluff. This person gets pitched constantly.
+Do NOT use "I hope this finds you well". Do NOT use "deliverables" as a heading.
+Lead with something specific about THEM before talking about yourself.
+Only mention services that are a strong match — never list everything.
+
+NEVER generate a price. Use [amount] as the investment placeholder.
+${portfolioUrl ? `Include this portfolio URL naturally in the proposal: ${portfolioUrl}` : ''}
+
+Return ONLY valid JSON, no markdown fences:
+{
+  "title": string,
+  "introduction": string (2–3 paragraphs — lead with something specific about them, then position your solution),
+  "services": [string] (3–5 bullets — matched services only, no unmatched ones),
+  "deliverables": string,
+  "timeline": string,
+  "terms": string (why you specifically, mention their industry or context, include portfolio URL)
+}`;
+
+    userContent = `Target company: ${intel.company_name ?? 'Unknown'}
+What they do: ${intel.description ?? 'not specified'}
+Industry: ${intel.industry ?? 'not specified'}
+Brand approach: ${intel.brand_approach ?? 'not specified'}
+Best contact: ${intel.best_contact_point ?? 'not specified'}
+Matched services: ${(intel.matched_services as string[] | null)?.join(', ') ?? 'not specified'}
+Recent signals: ${(intel.recent_signals as string[] | null)?.join('; ') ?? 'none'}
+
+My business: ${businessName}
+${bioBlock ? `Bio: ${bioBlock}` : ''}
+My matched services:
+${matchedServices?.length ? matchedServices.map(s => `- ${s.name}: ${s.description ?? ''}`).join('\n') : servicesBlock}
+${extra_context ? `\nAdditional context: ${extra_context}` : ''}`;
+
+  } else {
+    // freelancer-initiated (outbound)
+    tone = 'outbound';
+    const isB2B = motion === 'b2b' || motion === 'hybrid';
+
+    systemPrompt = `You are writing an outbound business proposal. The freelancer is initiating contact.
+Tone: confident, specific, peer-level. ${isB2B ? 'Frame around ROI and business outcomes.' : 'Frame around results and outcomes for the client.'}
+Not pitchy. Not humble. Lead with demonstrating you understand the client's situation.
+Then position the solution. Then scope, timeline, investment, CTA.
+Do NOT use "I hope this finds you well". Do NOT use "deliverables" as a section heading.
+Never say "I would like to" or "I am excited to".
+
+NEVER generate a price. Use [amount] as the investment placeholder — the freelancer fills this in.
+${portfolioUrl ? `Include this portfolio URL naturally in the proposal: ${portfolioUrl}` : ''}
+
+Return ONLY valid JSON, no markdown fences:
+{
+  "title": string,
+  "introduction": string (2–3 paragraphs — demonstrate understanding of their situation, then position solution),
+  "services": [string] (3–5 bullet points describing scope — action verbs, specific outcomes),
+  "deliverables": string,
+  "timeline": string,
+  "terms": string (why you specifically, include portfolio URL, clear next step)
+}`;
+
+    userContent = `Client: ${clientName}
+My business: ${businessName}
+${bioBlock ? `Bio: ${bioBlock}` : ''}
+My services:
+${servicesBlock}
+${extra_context ? `\nContext for this proposal: ${extra_context}` : ''}`;
+  }
+
+  // ── Call Sonnet ──────────────────────────────────────────────────────────
+
+  const result = await callAnthropic({
+    model: SONNET,
+    max_tokens: 1200,
+    temperature: 0.5,
+    system: systemPrompt,
+    messages: [{ role: 'user', content: userContent }],
+  });
+
+  const text = result.content[0]?.text ?? '{}';
+  let draft: Omit<ProposalDraft, 'ai_generation_tone' | 'ai_model_used'>;
+  try {
+    draft = JSON.parse(stripFences(text));
+  } catch {
+    return new Response(JSON.stringify({ error: 'Failed to parse AI draft. Please try again.' }), {
+      status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+
+  await logUsage(
+    supabase,
+    userId,
+    business?.id ?? business_id ?? null,
+    SONNET,
+    'generate_proposal',
+    result.usage.input_tokens,
+    result.usage.output_tokens,
+  );
+
+  const response: ProposalDraft = {
+    ...draft,
+    ai_generation_tone: tone,
+    ai_model_used: SONNET,
+  };
+
+  return new Response(JSON.stringify(response), {
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  });
+}
+
 // ─── Chat mode ───────────────────────────────────────────────────────────────
 
 async function fetchUserContext(supabase: ReturnType<typeof createClient>, userId: string) {
@@ -678,6 +921,16 @@ serve(async (req) => {
       );
     }
 
+    if (mode === 'generate_proposal') {
+      if (!userId) {
+        return new Response(
+          JSON.stringify({ error: 'Unauthorized' }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        );
+      }
+      return await handleGenerateProposal(body, supabase, userId);
+    }
+
     if (mode === 'chat') {
       if (!userId) {
         return new Response(
@@ -689,7 +942,7 @@ serve(async (req) => {
     }
 
     return new Response(
-      JSON.stringify({ error: 'mode must be "extract" or "chat"' }),
+      JSON.stringify({ error: 'mode must be "extract", "classify", "generate_proposal", or "chat"' }),
       { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
     );
   } catch (error) {

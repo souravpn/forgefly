@@ -32,32 +32,46 @@ serve(async (req) => {
       })
     }
 
-    // Insert proposal request
-    const { data: request, error: insertErr } = await supabase
-      .from('proposal_requests')
-      .insert({
-        business_id,
-        name,
-        company: company || null,
-        email,
-        service_name: service_name || null,
-        problem: problem || null,
-        timeline: timeline || null,
-        budget_flexible: budget_flexible ?? false,
-        notes: notes || null,
-        status: 'new',
-      })
-      .select()
-      .single()
-
-    if (insertErr) throw insertErr
-
-    // Get freelancer info for the nudge + email
+    // Get freelancer info first — needed for user_id (RLS) and nudge/email
     const { data: business } = await supabase
       .from('businesses')
       .select('user_id, extracted_data')
       .eq('id', business_id)
       .single()
+
+    if (!business) {
+      return new Response(JSON.stringify({ error: 'Business not found' }), {
+        status: 404,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+
+    const proposalTitle = service_name ? `${service_name} request` : 'Proposal request'
+
+    // Insert directly into proposals with initiated_by='client'
+    const { data: request, error: insertErr } = await supabase
+      .from('proposals')
+      .insert({
+        business_id,
+        user_id: business.user_id,
+        client_name: name,
+        client_email: email,
+        title: proposalTitle,
+        initiated_by: 'client',
+        status: 'draft',
+        request_context: {
+          company: company || null,
+          service_name: service_name || null,
+          problem: problem || null,
+          timeline: timeline || null,
+          budget_flexible: budget_flexible ?? false,
+          notes: notes || null,
+        },
+      })
+      .select()
+      .single()
+
+    if (insertErr) throw insertErr
 
     if (business) {
       const { data: profile } = await supabase
@@ -73,7 +87,7 @@ serve(async (req) => {
         type: 'new_request',
         title: 'New proposal request',
         body: `${name}${company ? ` from ${company}` : ''} wants to work with you${service_name ? ` on ${service_name}` : ''}.`,
-        action_url: '/dashboard/requests',
+        action_url: '/dashboard/proposals',
       })
 
       // Send email to freelancer
@@ -83,7 +97,7 @@ serve(async (req) => {
           clientName: name,
           clientCompany: company ?? '',
           serviceName: service_name ?? '',
-          dashboardUrl: `${SITE_URL}/dashboard/requests`,
+          dashboardUrl: `${SITE_URL}/dashboard/proposals`,
         })
 
         await fetch(RESEND_API_URL, {

@@ -21,7 +21,6 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
-    // Verify caller is authenticated
     const authClient = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_ANON_KEY")!,
@@ -34,18 +33,142 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { engagementId, action } = await req.json() as {
+    const body = await req.json() as {
       engagementId?: string;
-      action?: "approve" | "request_changes";
+      proposalId?: string;
+      action?: "approve" | "request_changes" | "track_viewed";
     };
+    const { engagementId, proposalId, action } = body;
 
-    if (!engagementId || !action) {
-      return new Response(JSON.stringify({ error: "engagementId and action are required" }), {
+    if (!action) {
+      return new Response(JSON.stringify({ error: "action is required" }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Verify caller has access to this engagement via engagement_access
+    // ── New path: proposalId-based (contact hub) ──────────────────────────────
+    if (proposalId) {
+      const { data: proposal, error: propErr } = await admin
+        .from("proposals")
+        .select("id, title, status, client_email, client_name, business_id, total_amount, viewed_at")
+        .eq("id", proposalId)
+        .maybeSingle();
+
+      if (propErr || !proposal) {
+        return new Response(JSON.stringify({ error: "Proposal not found" }), {
+          status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Validate: caller's email must match proposal.client_email
+      if (proposal.client_email !== user.email) {
+        return new Response(JSON.stringify({ error: "Access denied" }), {
+          status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Load business for email notification
+      const { data: business } = await admin
+        .from("businesses")
+        .select("id, name, user_id, contact_email, extracted_data")
+        .eq("id", proposal.business_id)
+        .maybeSingle();
+
+      if (action === "track_viewed") {
+        if (proposal.status === "sent" && !proposal.viewed_at) {
+          await admin
+            .from("proposals")
+            .update({ viewed_at: new Date().toISOString(), status: "viewed" })
+            .eq("id", proposalId);
+        }
+        return new Response(JSON.stringify({ success: true }), {
+          status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      if (action === "approve") {
+        // 1. Update proposal status
+        await admin
+          .from("proposals")
+          .update({ status: "accepted", responded_at: new Date().toISOString() })
+          .eq("id", proposalId);
+
+        // 2. Find contact by business_id + client_email
+        const { data: contact } = await admin
+          .from("contacts")
+          .select("id")
+          .eq("business_id", proposal.business_id)
+          .eq("email", proposal.client_email)
+          .maybeSingle();
+
+        if (contact) {
+          // 3. Advance pipeline lead stage
+          await admin
+            .from("pipeline_leads")
+            .update({ stage: "Negotiating" })
+            .eq("business_id", proposal.business_id)
+            .eq("contact_id", contact.id)
+            .not("stage", "in", '("Closed Won","Lost")');
+
+          // 4. Set contact lifecycle_status to engaged
+          await admin
+            .from("contacts")
+            .update({ lifecycle_status: "engaged" })
+            .eq("id", contact.id);
+        }
+
+        // 5. Notify freelancer by email
+        if (business && RESEND_API_KEY) {
+          const { data: freelancerUser } = await admin.auth.admin.getUserById(business.user_id);
+          const freelancerEmail = business.contact_email ?? freelancerUser?.user?.email;
+
+          if (freelancerEmail) {
+            const siteUrl = Deno.env.get("SITE_URL") ?? "https://www.forgefly.io";
+            await fetch("https://api.resend.com/emails", {
+              method: "POST",
+              headers: {
+                "Authorization": `Bearer ${RESEND_API_KEY}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                from: "Forgefly <hello@forgefly.io>",
+                to: [freelancerEmail],
+                subject: `✅ Proposal approved — ${proposal.title || "your proposal"}`,
+                html: `
+                  <div style="font-family:sans-serif;max-width:560px;margin:0 auto;padding:32px;background:#0f0f0f;color:#e5e5e5;border-radius:12px">
+                    <h2 style="color:#10b981;margin-top:0">Proposal approved 🎉</h2>
+                    <p><strong>${proposal.client_email}</strong> approved <strong>${proposal.title || "your proposal"}</strong>.</p>
+                    <p style="margin-top:24px">
+                      <a href="${siteUrl}/dashboard/proposals" style="background:#10b981;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:600">
+                        View in dashboard →
+                      </a>
+                    </p>
+                    <p style="color:#666;font-size:12px;margin-top:32px">Powered by Forgefly</p>
+                  </div>
+                `,
+              }),
+            });
+          }
+        }
+
+        return new Response(JSON.stringify({ success: true }), {
+          status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      return new Response(JSON.stringify({ error: "Unknown action" }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // ── Legacy path: engagementId-based ───────────────────────────────────────
+
+    if (!engagementId) {
+      return new Response(JSON.stringify({ error: "engagementId or proposalId is required" }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const { data: accessRow } = await admin
       .from("engagement_access")
       .select("id, client_email")
@@ -59,7 +182,6 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Load engagement + business + freelancer profile
     const { data: engagement, error: engErr } = await admin
       .from("engagements")
       .select("*, businesses!inner(id, name, user_id, contact_email, extracted_data)")
@@ -77,14 +199,23 @@ Deno.serve(async (req) => {
       contact_email: string | null; extracted_data: Record<string, unknown> | null;
     };
 
-    // 1. Update engagement status
-    const newEngagementStatus = action === "approve" ? "active" : "proposal_sent";
-    await admin
-      .from("engagements")
-      .update({ status: newEngagementStatus })
-      .eq("id", engagementId);
+    if (action === "track_viewed") {
+      await admin
+        .from("proposals")
+        .update({ viewed_at: new Date().toISOString(), status: "viewed" })
+        .eq("business_id", business.id)
+        .eq("client_email", accessRow.client_email)
+        .eq("status", "sent")
+        .is("viewed_at", null);
 
-    // 2. Update linked proposal (match by business + contact + sent status)
+      return new Response(JSON.stringify({ success: true }), {
+        status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const newEngagementStatus = action === "approve" ? "active" : "proposal_sent";
+    await admin.from("engagements").update({ status: newEngagementStatus }).eq("id", engagementId);
+
     if (action === "approve" && engagement.contact_id) {
       await admin
         .from("proposals")
@@ -92,29 +223,24 @@ Deno.serve(async (req) => {
         .eq("user_id", business.user_id)
         .eq("client_id", engagement.contact_id)
         .eq("status", "sent");
-    }
 
-    // 3. Advance pipeline lead to Closed Won on approval
-    if (action === "approve" && engagement.contact_id) {
       await admin
         .from("pipeline_leads")
-        .update({ stage: "Closed Won" })
+        .update({ stage: "Negotiating" })
         .eq("business_id", business.id)
         .eq("contact_id", engagement.contact_id)
-        .neq("stage", "Closed Won");
+        .not("stage", "in", '("Closed Won","Lost")');
     }
 
-    // 4. Notify the freelancer by email
     if (action === "approve" && RESEND_API_KEY) {
-      // Get freelancer's email from their auth profile
       const { data: freelancerUser } = await admin.auth.admin.getUserById(business.user_id);
       const freelancerEmail = business.contact_email ?? freelancerUser?.user?.email;
 
       if (freelancerEmail) {
         const clientEmail = accessRow.client_email ?? user.email ?? "your client";
         const serviceName = engagement.service_name ?? "your proposal";
-        const businessName = business.name;
-        const portalUrl = `${Deno.env.get("SITE_URL") ?? "https://www.forgefly.io"}/portal/${engagement.portal_token}`;
+        const siteUrl = Deno.env.get("SITE_URL") ?? "https://www.forgefly.io";
+        const portalUrl = `${siteUrl}/portal/${engagement.portal_token}`;
 
         await fetch("https://api.resend.com/emails", {
           method: "POST",
@@ -123,13 +249,13 @@ Deno.serve(async (req) => {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            from: `Forgefly <hello@forgefly.io>`,
+            from: "Forgefly <hello@forgefly.io>",
             to: [freelancerEmail],
             subject: `✅ Proposal approved — ${serviceName}`,
             html: `
               <div style="font-family:sans-serif;max-width:560px;margin:0 auto;padding:32px;background:#0f0f0f;color:#e5e5e5;border-radius:12px">
                 <h2 style="color:#10b981;margin-top:0">Proposal approved 🎉</h2>
-                <p><strong>${clientEmail}</strong> approved <strong>${serviceName}</strong> on your ${businessName} portal.</p>
+                <p><strong>${clientEmail}</strong> approved <strong>${serviceName}</strong> on your ${business.name} portal.</p>
                 <p style="margin-top:24px">
                   <a href="${portalUrl}" style="background:#10b981;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:600">
                     View portal →
