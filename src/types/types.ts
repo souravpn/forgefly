@@ -77,11 +77,29 @@ export interface Project {
   value: number | null;
   deadline: string | null;
   progress: number;
+  hour_budget: number | null;
   client_visible_status: 'not_started' | 'in_progress' | 'review' | 'complete' | null;
   client_visible_note: string | null;
   created_at: string;
   updated_at: string;
   client?: Client;
+}
+
+export interface TimeEntry {
+  id: string;
+  business_id: string;
+  user_id: string;
+  project_id: string | null;
+  client_id: string | null;
+  date: string;
+  hours: number;
+  note: string | null;
+  timer_started_at: string | null;
+  timer_stopped_at: string | null;
+  created_at: string;
+  updated_at: string;
+  project?: { id: string; name: string };
+  client?: { id: string; name: string };
 }
 
 export interface Invoice {

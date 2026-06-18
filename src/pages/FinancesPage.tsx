@@ -16,8 +16,7 @@ import {
   AlertTriangle, Clock, BarChart3, FileDown, DollarSign, ScanLine, Loader2,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { Slider } from '@/components/ui/slider';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, TooltipProps } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, TooltipProps } from 'recharts';
 import type {
   Transaction,
   MileageLog,
@@ -38,6 +37,10 @@ import {
   deleteContractorPayment,
 } from '@/services/financeService';
 import { supabase } from '@/db/supabase';
+import { useBusiness } from '@/contexts/CurrentBusinessContext';
+import { getTimeEntries, getProjectTimeSummaries } from '@/services/timeService';
+import { getProjects } from '@/services/projectService';
+import LogTimeDialog from '@/components/common/LogTimeDialog';
 
 // ─── Cashflow chart tooltip ───────────────────────────────────────────────────
 
@@ -105,11 +108,261 @@ function buildContractorSummaries(rows: ContractorPayment[]): ContractorSummary[
   return Array.from(map.values()).sort((a, b) => b.ytd - a.ytd);
 }
 
+// ─── P&L helpers ─────────────────────────────────────────────────────────────
+
+const MONTH_LABELS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+interface MonthlyBar { month: string; income: number; expenses: number; }
+
+function buildMonthlyBars(transactions: Transaction[], year: number): MonthlyBar[] {
+  const data = MONTH_LABELS.map(m => ({ month: m, income: 0, expenses: 0 }));
+  for (const t of transactions) {
+    if (t.tax_year !== year) continue;
+    const idx = new Date(t.transaction_date + 'T12:00:00').getMonth();
+    if (t.type === 'income') data[idx].income += t.amount;
+    else data[idx].expenses += t.amount;
+  }
+  return data;
+}
+
+interface CatRow { name: string; amount: number; pct: number; isMeals: boolean; }
+
+function buildCategoryBreakdown(expenses: Transaction[]): CatRow[] {
+  const map = new Map<string, { amount: number; isMeals: boolean }>();
+  let total = 0;
+  for (const e of expenses) {
+    const name = e.expense_category?.name ?? 'Uncategorized';
+    const isMeals = name === 'Meals with clients';
+    const cur = map.get(name);
+    if (cur) cur.amount += e.amount;
+    else map.set(name, { amount: e.amount, isMeals });
+    total += e.amount;
+  }
+  return Array.from(map.entries())
+    .map(([name, { amount, isMeals }]) => ({ name, amount, pct: total > 0 ? (amount / total) * 100 : 0, isMeals }))
+    .sort((a, b) => b.amount - a.amount)
+    .slice(0, 6);
+}
+
+interface NineteenNinetyNineRow { label: string; ytd: number; }
+
+function build1099Rows(income: Transaction[], contactNames: Record<string, string>): NineteenNinetyNineRow[] {
+  const map = new Map<string, number>();
+  for (const t of income) {
+    const key = t.client_id ?? `desc:${t.description}`;
+    const name = t.client_id
+      ? (contactNames[t.client_id] ?? t.description?.split('—')[1]?.trim() ?? 'Unknown')
+      : (t.description?.split('—')[1]?.trim() ?? 'Unknown');
+    map.set(key, (map.get(key) ?? 0) + t.amount);
+    // Store name alongside
+    if (!contactNames[key]) contactNames[key] = name;
+  }
+  return Array.from(map.entries())
+    .map(([key, ytd]) => ({ label: contactNames[key] ?? key, ytd }))
+    .filter(r => r.ytd > 0)
+    .sort((a, b) => b.ytd - a.ytd);
+}
+
+function groupIncomeByMonth(income: Transaction[]): [string, Transaction[]][] {
+  const map = new Map<string, Transaction[]>();
+  for (const t of income) {
+    const key = t.transaction_date.slice(0, 7);
+    if (!map.has(key)) map.set(key, []);
+    map.get(key)!.push(t);
+  }
+  return Array.from(map.entries()).sort(([a], [b]) => b.localeCompare(a));
+}
+
+function monthLabel(yyyyMm: string): string {
+  const [y, m] = yyyyMm.split('-');
+  const d = new Date(Number(y), Number(m) - 1, 1);
+  return d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+}
+
+// ─── Tax engine ──────────────────────────────────────────────────────────────
+
+type FilingStatus = 'single' | 'mfj' | 'mfs' | 'hoh';
+
+const FILING_STATUS_LABELS: Record<FilingStatus, string> = {
+  single: 'Single',
+  mfj: 'Married Filing Jointly',
+  mfs: 'Married Filing Separately',
+  hoh: 'Head of Household',
+};
+
+const STD_DEDUCTIONS: Record<FilingStatus, number> = {
+  single: 14600,
+  mfj: 29200,
+  mfs: 14600,
+  hoh: 21900,
+};
+
+// [upperBound, rate] — rate applies from previous cap to upperBound
+const BRACKETS: Record<FilingStatus, [number, number][]> = {
+  single: [[11600,0.10],[47150,0.12],[100525,0.22],[191950,0.24],[243725,0.32],[609350,0.35],[Infinity,0.37]],
+  mfj:    [[23200,0.10],[94300,0.12],[201050,0.22],[383900,0.24],[487450,0.32],[731200,0.35],[Infinity,0.37]],
+  mfs:    [[11600,0.10],[47150,0.12],[100525,0.22],[191950,0.24],[243725,0.32],[365600,0.35],[Infinity,0.37]],
+  hoh:    [[16550,0.10],[63100,0.12],[100500,0.22],[191950,0.24],[243700,0.32],[609350,0.35],[Infinity,0.37]],
+};
+
+function calcBracketTax(income: number, status: FilingStatus): number {
+  if (income <= 0) return 0;
+  let tax = 0, prev = 0;
+  for (const [cap, rate] of BRACKETS[status]) {
+    if (income <= prev) break;
+    tax += (Math.min(income, cap) - prev) * rate;
+    prev = cap;
+  }
+  return tax;
+}
+
+function marginalRate(taxableIncome: number, status: FilingStatus): number {
+  let prev = 0, mr = BRACKETS[status][0][1];
+  for (const [cap, rate] of BRACKETS[status]) {
+    mr = rate;
+    if (taxableIncome <= cap) break;
+    prev = cap;
+  }
+  return mr;
+}
+
+interface TaxCalc {
+  totalDeductibleExpenses: number;
+  homeOfficeDeduction: number;
+  netProfit: number;
+  seTax: number;
+  seDeduction: number;
+  standardDeduction: number;
+  taxableIncome: number;
+  estimatedIncomeTax: number;
+  totalTax: number;
+  effectiveRate: number;
+  safeHarbor: number;
+  quarterlyPayment: number;
+  sepIraMax: number;
+  sepIraSavings: number;
+}
+
+function computeTax(
+  grossIncome: number,
+  expenseTotal: number,
+  mealsTotal: number,
+  mileageDeduction: number,
+  sqft: number,
+  status: FilingStatus,
+  priorYearLiability: number,
+): TaxCalc {
+  const homeOfficeDeduction = Math.min(sqft, 300) * 5;
+  const deductible = (expenseTotal - mealsTotal) + mealsTotal * 0.5 + mileageDeduction + homeOfficeDeduction;
+  const netProfit = Math.max(0, grossIncome - deductible);
+  const seAdj = netProfit * 0.9235;
+  const seTax = seAdj * 0.153;
+  const seDeduction = seTax * 0.5;
+  const stdDed = STD_DEDUCTIONS[status];
+  const taxableIncome = Math.max(0, netProfit - seDeduction - stdDed);
+  const incomeTax = calcBracketTax(taxableIncome, status);
+  const totalTax = seTax + incomeTax;
+  const effectiveRate = grossIncome > 0 ? (totalTax / grossIncome) * 100 : 0;
+  const safeHarbor = priorYearLiability > 0
+    ? Math.min(totalTax * 0.90, priorYearLiability)
+    : totalTax * 0.90;
+  const sepIraMax = Math.min(netProfit * 0.25, 69000);
+  const mr = marginalRate(taxableIncome, status);
+  return {
+    totalDeductibleExpenses: deductible,
+    homeOfficeDeduction,
+    netProfit,
+    seTax,
+    seDeduction,
+    standardDeduction: stdDed,
+    taxableIncome,
+    estimatedIncomeTax: incomeTax,
+    totalTax,
+    effectiveRate,
+    safeHarbor,
+    quarterlyPayment: safeHarbor / 4,
+    sepIraMax,
+    sepIraSavings: sepIraMax * mr,
+  };
+}
+
+function quarterlyDueDates(year: number): { label: string; date: Date; quarter: string }[] {
+  return [
+    { label: 'Q1', quarter: `Jan–Mar ${year}`,   date: new Date(year, 3, 15) },
+    { label: 'Q2', quarter: `Apr–May ${year}`,   date: new Date(year, 5, 15) },
+    { label: 'Q3', quarter: `Jun–Aug ${year}`,   date: new Date(year, 8, 15) },
+    { label: 'Q4', quarter: `Sep–Dec ${year}`,   date: new Date(year + 1, 0, 15) },
+  ];
+}
+
+// ─── CSV helpers ─────────────────────────────────────────────────────────────
+
+function toCsv(rows: string[][]): string {
+  return rows.map(r =>
+    r.map(cell => {
+      const s = String(cell ?? '');
+      return s.includes(',') || s.includes('"') || s.includes('\n')
+        ? `"${s.replace(/"/g, '""')}"`
+        : s;
+    }).join(',')
+  ).join('\n');
+}
+
+function downloadCsv(content: string, filename: string) {
+  const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
+}
+
+function buildIncomeCsv(transactions: import('@/types/types').Transaction[]): string {
+  const header = ['Date', 'Amount', 'Client', 'Description', 'Invoice #'];
+  const rows = transactions
+    .filter(t => t.type === 'income')
+    .map(t => [
+      t.transaction_date ?? t.created_at?.slice(0, 10) ?? '',
+      String(t.amount),
+      t.client_id ?? '',
+      t.description ?? '',
+      t.invoice_id ?? '',
+    ]);
+  return toCsv([header, ...rows]);
+}
+
+function buildExpenseCsv(transactions: import('@/types/types').Transaction[]): string {
+  const header = ['Date', 'Vendor', 'Amount', 'Category', 'Description', 'Recurring'];
+  const rows = transactions
+    .filter(t => t.type === 'expense')
+    .map(t => [
+      t.transaction_date ?? '',
+      t.vendor ?? '',
+      String(t.amount),
+      (t.expense_category as { name?: string } | null)?.name ?? '',
+      t.description ?? '',
+      t.is_recurring ? 'Yes' : 'No',
+    ]);
+  return toCsv([header, ...rows]);
+}
+
+function buildMileageCsv(logs: import('@/types/types').MileageLog[]): string {
+  const header = ['Date', 'Miles', 'Purpose', 'IRS Rate', 'Deduction'];
+  const rows = logs.map(m => [
+    m.trip_date,
+    String(m.miles),
+    m.purpose,
+    String(m.irs_rate),
+    String(m.deductible_amount),
+  ]);
+  return toCsv([header, ...rows]);
+}
+
 // ─── FinancesPage ─────────────────────────────────────────────────────────────
 
 export default function FinancesPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const activeTab = searchParams.get('tab') ?? 'overview';
+  const { business } = useBusiness();
 
   function setTab(tab: string) {
     setSearchParams({ tab });
@@ -165,10 +418,32 @@ export default function FinancesPage() {
   const [savingContractor, setSavingContractor] = useState(false);
   const [deleteContractorId, setDeleteContractorId] = useState<string | null>(null);
 
-  // ── Overview simulator state ──
-  const [newClients, setNewClients] = useState([3]);
-  const [avgProjectValue, setAvgProjectValue] = useState([2500]);
-  const [monthlyExpenses, setMonthlyExpenses] = useState([3000]);
+
+  // ── Overview / Income P&L state ──
+  const [selectedYear, setSelectedYear] = useState(CURRENT_YEAR);
+  const [allTransactions, setAllTransactions] = useState<Transaction[]>([]);
+  const [prevYearTransactions, setPrevYearTransactions] = useState<Transaction[]>([]);
+  const [unpaidInvoiceTotal, setUnpaidInvoiceTotal] = useState(0);
+  const [unpaidInvoiceCount, setUnpaidInvoiceCount] = useState(0);
+  const [contactNameMap, setContactNameMap] = useState<Record<string, string>>({});
+  const [loadingOverview, setLoadingOverview] = useState(false);
+
+  // ── Tax settings state ──
+  const [filingStatus, setFilingStatus] = useState<FilingStatus>('single');
+  const [homeOfficeSqft, setHomeOfficeSqft] = useState('');
+  const [priorYearLiability, setPriorYearLiability] = useState('');
+  const [savingTaxSettings, setSavingTaxSettings] = useState(false);
+
+  // ── Time tracking state ──
+  const [timeEntries, setTimeEntries] = useState<import('@/types/types').TimeEntry[]>([]);
+  const [timeSummaries, setTimeSummaries] = useState<import('@/services/timeService').ProjectTimeSummary[]>([]);
+  const [loadingTime, setLoadingTime] = useState(false);
+  const [logTimeOpen, setLogTimeOpen] = useState(false);
+  const [allProjects, setAllProjects] = useState<import('@/types/types').Project[]>([]);
+
+  // ── Export state ──
+  const [accountantEmail, setAccountantEmail] = useState('');
+  const [sendingToAccountant, setSendingToAccountant] = useState(false);
 
   const loadExpensesData = useCallback(async () => {
     setLoading(true);
@@ -193,6 +468,214 @@ export default function FinancesPage() {
   useEffect(() => {
     if (activeTab === 'expenses') loadExpensesData();
   }, [activeTab, loadExpensesData]);
+
+  const loadOverviewData = useCallback(async () => {
+    setLoadingOverview(true);
+    try {
+      const [curr, prev, invResult] = await Promise.all([
+        getTransactions(selectedYear),
+        getTransactions(selectedYear - 1),
+        supabase
+          .from('invoices')
+          .select('amount')
+          .in('payment_status', ['unpaid', 'processing']),
+      ]);
+      setAllTransactions(curr);
+      setPrevYearTransactions(prev);
+
+      const invRows = (invResult.data ?? []) as { amount: number }[];
+      setUnpaidInvoiceTotal(invRows.reduce((s, r) => s + r.amount, 0));
+      setUnpaidInvoiceCount(invRows.length);
+
+      // Resolve contact names for 1099 tracker
+      const clientIds = [...new Set(curr.filter(t => t.client_id).map(t => t.client_id!))] ;
+      if (clientIds.length > 0) {
+        const { data: contacts } = await supabase
+          .from('contacts')
+          .select('id, name')
+          .in('id', clientIds);
+        if (contacts) {
+          setContactNameMap(Object.fromEntries(contacts.map(c => [c.id, c.name])));
+        }
+      }
+    } catch {
+      toast.error('Failed to load overview data');
+    } finally {
+      setLoadingOverview(false);
+    }
+  }, [selectedYear]);
+
+  useEffect(() => {
+    if (activeTab === 'overview' || activeTab === 'income' || activeTab === 'tax' || activeTab === 'export') loadOverviewData();
+  }, [activeTab, selectedYear, loadOverviewData]);
+
+  useEffect(() => {
+    if (activeTab === 'tax' || activeTab === 'export') loadExpensesData();
+  }, [activeTab, loadExpensesData]);
+
+  // Load tax settings from business extracted_data
+  useEffect(() => {
+    if (!business?.extracted_data) return;
+    const ts = (business.extracted_data as Record<string, unknown>).tax_settings as Record<string, unknown> | undefined;
+    if (!ts) return;
+    if (ts.filing_status) setFilingStatus(ts.filing_status as FilingStatus);
+    if (ts.home_office_sqft != null) setHomeOfficeSqft(String(ts.home_office_sqft));
+    if (ts.prior_year_liability != null) setPriorYearLiability(String(ts.prior_year_liability));
+  }, [business]);
+
+  async function saveTaxSettings() {
+    if (!business) return;
+    setSavingTaxSettings(true);
+    try {
+      const existing = (business.extracted_data ?? {}) as Record<string, unknown>;
+      await supabase
+        .from('businesses')
+        .update({
+          extracted_data: {
+            ...existing,
+            tax_settings: {
+              filing_status: filingStatus,
+              home_office_sqft: parseFloat(homeOfficeSqft) || 0,
+              prior_year_liability: parseFloat(priorYearLiability) || 0,
+            },
+          },
+        })
+        .eq('id', business.id);
+      toast.success('Tax settings saved');
+    } catch {
+      toast.error('Failed to save settings');
+    } finally {
+      setSavingTaxSettings(false);
+    }
+  }
+
+  const loadTimeData = useCallback(async () => {
+    setLoadingTime(true);
+    try {
+      const [entries, summaries, projs] = await Promise.all([
+        getTimeEntries(selectedYear),
+        getProjectTimeSummaries(selectedYear),
+        getProjects(),
+      ]);
+      setTimeEntries(entries);
+      setTimeSummaries(summaries);
+      setAllProjects(projs);
+    } catch {
+      toast.error('Failed to load time entries');
+    } finally {
+      setLoadingTime(false);
+    }
+  }, [selectedYear]);
+
+  useEffect(() => {
+    if (activeTab === 'time') loadTimeData();
+  }, [activeTab, loadTimeData]);
+
+  // ── Export helpers ──
+  function openPrintReport() {
+    const year = selectedYear;
+    const bizName = business?.name ?? 'My Business';
+    const incRows = allTransactions.filter(t => t.type === 'income');
+    const expRows = allTransactions.filter(t => t.type === 'expense');
+    const gross = incRows.reduce((s, t) => s + t.amount, 0);
+    const totalExp = expRows.reduce((s, t) => s + t.amount, 0);
+    const net = gross - totalExp;
+    const mileTotal = mileageLogs.reduce((s, m) => s + m.deductible_amount, 0);
+
+    const incomeTable = incRows.map(t =>
+      `<tr><td>${t.transaction_date ?? ''}</td><td>${t.description ?? ''}</td><td style="text-align:right">$${t.amount.toLocaleString()}</td></tr>`
+    ).join('');
+
+    const expTable = expRows.map(t =>
+      `<tr><td>${t.transaction_date ?? ''}</td><td>${(t.expense_category as { name?: string } | null)?.name ?? ''}</td><td>${t.vendor ?? ''}</td><td>${t.description ?? ''}</td><td style="text-align:right">$${t.amount.toLocaleString()}</td></tr>`
+    ).join('');
+
+    const mileTable = mileageLogs.map(m =>
+      `<tr><td>${m.trip_date}</td><td>${m.miles} mi</td><td>${m.purpose}</td><td style="text-align:right">$${m.deductible_amount.toFixed(2)}</td></tr>`
+    ).join('');
+
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
+<title>${year} Financial Report — ${bizName}</title>
+<style>
+body{font-family:system-ui,sans-serif;color:#111;padding:40px;max-width:900px;margin:0 auto}
+h1{font-size:24px;margin-bottom:4px}
+h2{font-size:16px;margin:28px 0 8px;border-bottom:1px solid #e5e7eb;padding-bottom:4px}
+.kpi{display:flex;gap:40px;margin:16px 0;padding:16px;background:#f9fafb;border-radius:8px}
+.kpi div{text-align:center}.kpi .label{font-size:12px;color:#6b7280}.kpi .value{font-size:20px;font-weight:700;margin-top:4px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{background:#f3f4f6;text-align:left;padding:6px 8px;font-size:12px;color:#374151}
+td{padding:5px 8px;border-bottom:1px solid #f3f4f6}
+.footer{margin-top:40px;font-size:11px;color:#9ca3af;border-top:1px solid #e5e7eb;padding-top:16px;text-align:center}
+@media print{body{padding:20px}.footer{position:fixed;bottom:0;width:100%}}
+</style></head><body>
+<h1>${year} Financial Report</h1>
+<p style="color:#6b7280;margin:0">${bizName} · Generated ${new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'})}</p>
+<div class="kpi">
+  <div><div class="label">Gross Income</div><div class="value">$${gross.toLocaleString()}</div></div>
+  <div><div class="label">Total Expenses</div><div class="value">$${totalExp.toLocaleString()}</div></div>
+  <div><div class="label">Net Profit</div><div class="value">$${net.toLocaleString()}</div></div>
+  <div><div class="label">Mileage Deduction</div><div class="value">$${mileTotal.toFixed(0)}</div></div>
+</div>
+<h2>Income (${incRows.length} transactions)</h2>
+<table><thead><tr><th>Date</th><th>Description</th><th style="text-align:right">Amount</th></tr></thead>
+<tbody>${incomeTable || '<tr><td colspan="3" style="color:#9ca3af">No income transactions</td></tr>'}</tbody></table>
+<h2>Expenses (${expRows.length} transactions)</h2>
+<table><thead><tr><th>Date</th><th>Category</th><th>Vendor</th><th>Description</th><th style="text-align:right">Amount</th></tr></thead>
+<tbody>${expTable || '<tr><td colspan="5" style="color:#9ca3af">No expense transactions</td></tr>'}</tbody></table>
+<h2>Mileage Log (${mileageLogs.length} trips)</h2>
+<table><thead><tr><th>Date</th><th>Miles</th><th>Purpose</th><th style="text-align:right">Deduction</th></tr></thead>
+<tbody>${mileTable || '<tr><td colspan="4" style="color:#9ca3af">No mileage logs</td></tr>'}</tbody></table>
+<div class="footer">Generated by Forgefly · For informational purposes only · Consult a qualified tax professional before filing.</div>
+<script>window.onload=()=>{window.print()}</script>
+</body></html>`;
+
+    const w = window.open('', '_blank');
+    if (w) { w.document.write(html); w.document.close(); }
+  }
+
+  async function handleSendToAccountant() {
+    if (!accountantEmail || !business) return;
+    setSendingToAccountant(true);
+    try {
+      const year = selectedYear;
+      const incomeCsv = buildIncomeCsv(allTransactions);
+      const expenseCsv = buildExpenseCsv(allTransactions);
+      const mileageCsv = buildMileageCsv(mileageLogs);
+
+      const toBase64 = (s: string) => btoa(unescape(encodeURIComponent(s)));
+
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-email`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session?.access_token}`,
+        },
+        body: JSON.stringify({
+          type: 'accountant_export',
+          to: accountantEmail,
+          data: {
+            businessName: business.name ?? 'My Business',
+            year,
+            freelancerName: business.name ?? 'Your client',
+            downloadNote: '',
+          },
+          attachments: [
+            { filename: `${year}_income.csv`,  content: toBase64(incomeCsv) },
+            { filename: `${year}_expenses.csv`, content: toBase64(expenseCsv) },
+            { filename: `${year}_mileage.csv`,  content: toBase64(mileageCsv) },
+          ],
+        }),
+      });
+      if (!res.ok) throw new Error('Send failed');
+      toast.success(`Financial records sent to ${accountantEmail}`);
+      setAccountantEmail('');
+    } catch {
+      toast.error('Failed to send to accountant');
+    } finally {
+      setSendingToAccountant(false);
+    }
+  }
 
   // ── Receipt scanning ──
   const CATEGORY_SLUG_TO_NAME: Record<string, string> = {
@@ -427,25 +910,35 @@ export default function FinancesPage() {
   const selectedCategory = expenseCategories.find(c => c.id === expenseForm.expense_category_id);
   const isMealCategory = selectedCategory?.name === 'Meals with clients';
 
-  // ── Overview chart data ──
-  const baseCashflow = [
-    { month: 'Jan', income: 7500, expenses: 3000 },
-    { month: 'Feb', income: 8200, expenses: 3100 },
-    { month: 'Mar', income: 7800, expenses: 2900 },
-    { month: 'Apr', income: 9100, expenses: 3200 },
-    { month: 'May', income: 8700, expenses: 3000 },
-    { month: 'Jun', income: 9500, expenses: 3100 },
-  ];
+  // ── P&L computed ──
+  const incomeTransactions = allTransactions.filter(t => t.type === 'income');
+  const expTransactions    = allTransactions.filter(t => t.type === 'expense');
+  const grossIncome        = incomeTransactions.reduce((s, t) => s + t.amount, 0);
+  const plTotalExpenses    = expTransactions.reduce((s, t) => s + t.amount, 0);
+  const netProfit          = grossIncome - plTotalExpenses;
+  const prevGrossIncome    = prevYearTransactions.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0);
+  const yoyPct             = prevGrossIncome > 0 ? ((grossIncome - prevGrossIncome) / prevGrossIncome) * 100 : null;
+  const profitMarginPct    = grossIncome > 0 ? (netProfit / grossIncome) * 100 : 0;
+  const monthlyBars        = buildMonthlyBars(allTransactions, selectedYear);
+  const categoryBreakdown  = buildCategoryBreakdown(expTransactions);
+  const incomeByMonth      = groupIncomeByMonth(incomeTransactions);
+  const tracker1099        = build1099Rows(incomeTransactions, { ...contactNameMap });
+  const availableYears     = Array.from({ length: 5 }, (_, i) => CURRENT_YEAR - i);
 
-  const projectedCashflow = baseCashflow.map((d, i) => {
-    const projected = newClients[0] * avgProjectValue[0] + i * 200;
-    return {
-      ...d,
-      projectedIncome: projected,
-      projectedExpenses: monthlyExpenses[0],
-      projectedProfit: projected - monthlyExpenses[0],
-    };
-  });
+  // ── Tax computed ──
+  const mealsExpenses = expenses.filter(e => e.expense_category?.name === 'Meals with clients').reduce((s, e) => s + e.amount, 0);
+  const taxCalc = computeTax(
+    grossIncome,
+    plTotalExpenses,
+    mealsExpenses,
+    totalMileageDeduction,
+    parseFloat(homeOfficeSqft) || 0,
+    filingStatus,
+    parseFloat(priorYearLiability) || 0,
+  );
+  const qDates = quarterlyDueDates(selectedYear);
+  const today_ = new Date();
+  today_.setHours(0, 0, 0, 0);
 
   return (
     <div className="space-y-6">
@@ -466,97 +959,291 @@ export default function FinancesPage() {
 
         {/* ─── Overview ──────────────────────────────────────────────────────── */}
         <TabsContent value="overview" className="mt-6 space-y-6">
-          <div className="grid gap-6 md:grid-cols-3">
+
+          {/* Year selector */}
+          <div className="flex items-center gap-3">
+            <Select value={String(selectedYear)} onValueChange={v => setSelectedYear(Number(v))}>
+              <SelectTrigger className="w-32">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {availableYears.map(y => (
+                  <SelectItem key={y} value={String(y)}>{y}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {loadingOverview && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />}
+          </div>
+
+          {/* KPI cards */}
+          <div className="grid gap-4 md:grid-cols-3">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">This Month</CardTitle>
-                <DollarSign className="w-4 h-4 text-muted-foreground" />
+                <CardTitle className="text-sm font-medium text-muted-foreground">Gross Income</CardTitle>
+                <TrendingUp className="w-4 h-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-3xl font-bold">$9,500</div>
-                <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
-                  <TrendingUp className="w-3 h-3 text-success" />
-                  <span className="text-success">+15.3%</span> from last month
+                <div className="text-3xl font-bold">{fmt(grossIncome)}</div>
+                {yoyPct !== null && (
+                  <p className="text-xs mt-1 flex items-center gap-1">
+                    {yoyPct >= 0
+                      ? <><TrendingUp className="w-3 h-3 text-emerald-500" /><span className="text-emerald-500">+{yoyPct.toFixed(1)}%</span></>
+                      : <><TrendingDown className="w-3 h-3 text-destructive" /><span className="text-destructive">{yoyPct.toFixed(1)}%</span></>
+                    }
+                    <span className="text-muted-foreground">vs {selectedYear - 1}</span>
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">Total Expenses</CardTitle>
+                <Receipt className="w-4 h-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-3xl font-bold">{fmt(plTotalExpenses)}</div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {expTransactions.length} transactions
                 </p>
               </CardContent>
             </Card>
             <Card>
               <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">Outstanding</CardTitle>
+                <CardTitle className="text-sm font-medium text-muted-foreground">Net Profit</CardTitle>
                 <DollarSign className="w-4 h-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-3xl font-bold">$6,500</div>
-                <p className="text-xs text-muted-foreground mt-1">4 pending invoices</p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">Net Profit</CardTitle>
-                <TrendingUp className="w-4 h-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-3xl font-bold">$6,400</div>
-                <p className="text-xs text-muted-foreground mt-1">67% profit margin</p>
+                <div className={`text-3xl font-bold ${netProfit < 0 ? 'text-destructive' : ''}`}>
+                  {fmt(netProfit)}
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {profitMarginPct.toFixed(0)}% margin
+                </p>
               </CardContent>
             </Card>
           </div>
 
+          {/* Monthly bar chart */}
           <Card>
             <CardHeader>
-              <CardTitle>Cashflow Simulator</CardTitle>
-              <CardDescription>Adjust variables to forecast your financial future</CardDescription>
+              <CardTitle>Monthly Income vs Expenses</CardTitle>
+              <CardDescription>{selectedYear}</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="grid gap-6 md:grid-cols-3">
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <label className="text-sm font-medium">New Clients/Month</label>
-                    <span className="text-sm text-muted-foreground">{newClients[0]}</span>
-                  </div>
-                  <Slider value={newClients} onValueChange={setNewClients} min={1} max={10} step={1} />
-                </div>
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <label className="text-sm font-medium">Avg Project Value</label>
-                    <span className="text-sm text-muted-foreground">${avgProjectValue[0]}</span>
-                  </div>
-                  <Slider value={avgProjectValue} onValueChange={setAvgProjectValue} min={500} max={10000} step={100} />
-                </div>
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <label className="text-sm font-medium">Monthly Expenses</label>
-                    <span className="text-sm text-muted-foreground">${monthlyExpenses[0]}</span>
-                  </div>
-                  <Slider value={monthlyExpenses} onValueChange={setMonthlyExpenses} min={1000} max={10000} step={100} />
-                </div>
-              </div>
-              <div className="w-full h-[300px]">
+            <CardContent>
+              <div className="w-full h-[280px]">
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={projectedCashflow}>
+                  <BarChart data={monthlyBars} barGap={4} barCategoryGap="28%">
                     <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-                    <XAxis dataKey="month" stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} />
-                    <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} tickFormatter={v => `$${v}`} />
+                    <XAxis dataKey="month" stroke="hsl(var(--muted-foreground))" fontSize={11} tickLine={false} axisLine={false} />
+                    <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} tickLine={false} axisLine={false} tickFormatter={v => `$${(v/1000).toFixed(0)}k`} />
                     <Tooltip content={<CustomTooltip />} />
-                    <Legend wrapperStyle={{ paddingTop: '20px' }} iconType="circle" />
-                    <Line type="monotone" dataKey="income" stroke="hsl(var(--muted-foreground))" strokeWidth={2} strokeDasharray="5 5" name="Actual Income" dot={false} />
-                    <Line type="monotone" dataKey="projectedIncome" stroke="hsl(var(--chart-1))" strokeWidth={2} name="Projected Income" dot={false} />
-                    <Line type="monotone" dataKey="projectedExpenses" stroke="hsl(var(--chart-2))" strokeWidth={2} name="Projected Expenses" dot={false} />
-                    <Line type="monotone" dataKey="projectedProfit" stroke="hsl(var(--chart-3))" strokeWidth={2} name="Projected Profit" dot={false} />
-                  </LineChart>
+                    <Legend wrapperStyle={{ paddingTop: '16px' }} iconType="circle" iconSize={8} />
+                    <Bar dataKey="income" name="Income" fill="hsl(var(--chart-1))" radius={[3,3,0,0]} />
+                    <Bar dataKey="expenses" name="Expenses" fill="hsl(var(--chart-2))" radius={[3,3,0,0]} />
+                  </BarChart>
                 </ResponsiveContainer>
               </div>
             </CardContent>
           </Card>
+
+          {/* Bottom row: category breakdown + unpaid invoices */}
+          <div className="grid gap-4 md:grid-cols-2">
+
+            {/* Top expense categories */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Top Expense Categories</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {categoryBreakdown.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No expenses recorded yet.</p>
+                ) : (
+                  <div className="space-y-3">
+                    {categoryBreakdown.map(cat => (
+                      <div key={cat.name}>
+                        <div className="flex items-center justify-between text-sm mb-1">
+                          <span className="flex items-center gap-1.5">
+                            {cat.name}
+                            {cat.isMeals && <span className="text-[10px] text-amber-600 bg-amber-500/10 px-1.5 py-0.5 rounded">50% deductible</span>}
+                          </span>
+                          <span className="text-muted-foreground">{fmt(cat.isMeals ? cat.amount * 0.5 : cat.amount)}</span>
+                        </div>
+                        <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                          <div className="h-full rounded-full bg-primary" style={{ width: `${cat.pct}%` }} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Unpaid invoices */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Outstanding Invoices</CardTitle>
+                <CardDescription>Cash flow impact</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {unpaidInvoiceCount === 0 ? (
+                  <p className="text-sm text-muted-foreground">No outstanding invoices.</p>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-muted-foreground">Total outstanding</span>
+                      <span className="font-semibold text-amber-500">{fmt(unpaidInvoiceTotal)}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-muted-foreground">Pending invoices</span>
+                      <span className="font-semibold">{unpaidInvoiceCount}</span>
+                    </div>
+                    <div className="h-px bg-border" />
+                    <p className="text-xs text-muted-foreground">
+                      Collecting {fmt(unpaidInvoiceTotal)} would bring your net profit to{' '}
+                      <span className="font-medium text-foreground">{fmt(netProfit + unpaidInvoiceTotal)}</span>.
+                    </p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
 
         {/* ─── Income ────────────────────────────────────────────────────────── */}
-        <TabsContent value="income" className="mt-6">
+        <TabsContent value="income" className="mt-6 space-y-6">
+
+          {/* Year selector */}
+          <div className="flex items-center gap-3">
+            <Select value={String(selectedYear)} onValueChange={v => setSelectedYear(Number(v))}>
+              <SelectTrigger className="w-32">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {availableYears.map(y => (
+                  <SelectItem key={y} value={String(y)}>{y}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {loadingOverview && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />}
+          </div>
+
+          {/* KPI summary */}
+          <div className="grid gap-4 md:grid-cols-3">
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">Total Income</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-3xl font-bold">{fmt(grossIncome)}</div>
+                <p className="text-xs text-muted-foreground mt-1">{incomeTransactions.length} transactions</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">Services</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-3xl font-bold">
+                  {fmt(incomeTransactions.filter(t => t.income_category === 'services').reduce((s, t) => s + t.amount, 0))}
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">Invoice payments</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">Other Income</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-3xl font-bold">
+                  {fmt(incomeTransactions.filter(t => t.income_category !== 'services').reduce((s, t) => s + t.amount, 0))}
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">Licensing, products, etc.</p>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Income transactions by month */}
           <Card>
-            <CardContent className="py-16 text-center text-muted-foreground">
-              <TrendingUp className="w-10 h-10 mx-auto mb-3 opacity-30" />
-              <p className="font-medium">Income analytics coming soon</p>
-              <p className="text-sm mt-1">P&amp;L dashboard, 1099 tracker, and income breakdown by client.</p>
+            <CardHeader>
+              <CardTitle>Income by Month</CardTitle>
+              <CardDescription>{selectedYear}</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {loadingOverview ? (
+                <p className="text-sm text-muted-foreground">Loading…</p>
+              ) : incomeByMonth.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No income recorded yet for {selectedYear}.</p>
+              ) : (
+                <div className="space-y-6">
+                  {incomeByMonth.map(([yyyyMm, txns]) => {
+                    const monthTotal = txns.reduce((s, t) => s + t.amount, 0);
+                    return (
+                      <div key={yyyyMm}>
+                        <div className="flex items-center justify-between mb-2">
+                          <h4 className="text-sm font-semibold">{monthLabel(yyyyMm)}</h4>
+                          <span className="text-sm font-semibold text-emerald-500">{fmt(monthTotal)}</span>
+                        </div>
+                        <div className="space-y-1.5">
+                          {txns.map(t => (
+                            <div key={t.id} className="flex items-center justify-between p-2.5 rounded-lg bg-muted/50 gap-3">
+                              <div className="min-w-0 flex-1">
+                                <p className="text-sm truncate">{t.description ?? 'Income'}</p>
+                                <p className="text-xs text-muted-foreground">{t.transaction_date} · {t.income_category ?? 'services'}</p>
+                              </div>
+                              <span className="text-sm font-medium shrink-0">{fmt(t.amount)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* 1099 tracker */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-amber-500" />
+                1099-NEC Tracker
+              </CardTitle>
+              <CardDescription>Clients you've paid $600+ may require a 1099-NEC filing.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {tracker1099.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No clients have crossed $600 this year.</p>
+              ) : (
+                <div className="space-y-2">
+                  {tracker1099.map(row => (
+                    <div key={row.label} className="flex items-center justify-between p-3 rounded-lg bg-muted/50 gap-3">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium truncate">{row.label}</p>
+                        {row.ytd >= 600 && (
+                          <p className="text-xs text-amber-600 flex items-center gap-1 mt-0.5">
+                            <AlertTriangle className="w-3 h-3" />
+                            Crossed $600 — may require 1099-NEC
+                          </p>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className={`text-sm font-semibold ${row.ytd >= 600 ? 'text-amber-500' : ''}`}>
+                          {fmt(row.ytd)}
+                        </span>
+                        {row.ytd >= 600 && (
+                          <Badge variant="outline" className="text-xs border-amber-500/40 text-amber-600 bg-amber-500/10">
+                            1099
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                  <p className="text-xs text-muted-foreground pt-1">
+                    These are estimates based on the information you've provided. Consult a qualified tax professional for advice specific to your situation.
+                  </p>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -721,34 +1408,413 @@ export default function FinancesPage() {
         </TabsContent>
 
         {/* ─── Time ──────────────────────────────────────────────────────────── */}
-        <TabsContent value="time" className="mt-6">
+        <TabsContent value="time" className="mt-6 space-y-5">
+          {/* Header row */}
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div className="flex items-center gap-3">
+              <Select value={String(selectedYear)} onValueChange={v => setSelectedYear(Number(v))}>
+                <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {availableYears.map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              {loadingTime && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />}
+            </div>
+            <Button size="sm" onClick={() => setLogTimeOpen(true)}>
+              <Plus className="w-4 h-4 mr-1.5" />Log time
+            </Button>
+          </div>
+
+          {/* Summary KPIs */}
+          {(() => {
+            const totalHrs = timeEntries.reduce((s, e) => s + e.hours, 0);
+            const projectCount = new Set(timeEntries.filter(e => e.project_id).map(e => e.project_id)).size;
+            const clientCount = new Set(timeEntries.filter(e => e.client_id).map(e => e.client_id)).size;
+            return (
+              <div className="grid gap-4 sm:grid-cols-3">
+                <Card>
+                  <CardContent className="p-4">
+                    <p className="text-sm text-muted-foreground">Total hours</p>
+                    <p className="text-2xl font-bold tabular-nums mt-1">{totalHrs.toFixed(1)}</p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="p-4">
+                    <p className="text-sm text-muted-foreground">Projects</p>
+                    <p className="text-2xl font-bold tabular-nums mt-1">{projectCount}</p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="p-4">
+                    <p className="text-sm text-muted-foreground">Clients</p>
+                    <p className="text-2xl font-bold tabular-nums mt-1">{clientCount}</p>
+                  </CardContent>
+                </Card>
+              </div>
+            );
+          })()}
+
+          {/* Project breakdown */}
           <Card>
-            <CardContent className="py-16 text-center text-muted-foreground">
-              <Clock className="w-10 h-10 mx-auto mb-3 opacity-30" />
-              <p className="font-medium">Time tracking coming soon</p>
-              <p className="text-sm mt-1">Log hours per project, track effective rate, and run a live timer.</p>
+            <CardHeader>
+              <CardTitle className="text-base">Project Breakdown</CardTitle>
+              <CardDescription className="text-xs">
+                Hours are included in year-end tax export for home office substantiation.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {loadingTime ? (
+                <div className="py-10 flex justify-center"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
+              ) : timeSummaries.length === 0 ? (
+                <div className="py-10 text-center text-muted-foreground text-sm">
+                  No time logged for {selectedYear}. Use the Log time button to start.
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  <div className="grid grid-cols-4 gap-2 px-2 pb-2 text-xs text-muted-foreground font-medium border-b">
+                    <span className="col-span-2">Project</span>
+                    <span className="text-right">Hours</span>
+                    <span className="text-right">Eff. rate</span>
+                  </div>
+                  {timeSummaries.map(s => (
+                    <div key={s.projectId} className="grid grid-cols-4 gap-2 px-2 py-2 rounded hover:bg-muted/40 text-sm">
+                      <div className="col-span-2 min-w-0">
+                        <p className="font-medium truncate">{s.projectName}</p>
+                        {s.clientName && <p className="text-xs text-muted-foreground truncate">{s.clientName}</p>}
+                      </div>
+                      <span className="text-right tabular-nums self-center">{s.totalHours.toFixed(1)}</span>
+                      <span className="text-right tabular-nums self-center">
+                        {s.effectiveRate != null ? `$${Math.round(s.effectiveRate)}/hr` : '—'}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
+
+          {/* Recent entries */}
+          {timeEntries.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Recent Entries</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-1">
+                {timeEntries.slice(0, 20).map(e => (
+                  <div key={e.id} className="flex items-center justify-between gap-3 py-2 border-b last:border-0 text-sm">
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium truncate">{e.project?.name ?? 'No project'}</p>
+                      {e.note && <p className="text-xs text-muted-foreground truncate">{e.note}</p>}
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="tabular-nums font-medium">{e.hours.toFixed(2)} hrs</p>
+                      <p className="text-xs text-muted-foreground">{new Date(e.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</p>
+                    </div>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          )}
+
+          <LogTimeDialog
+            open={logTimeOpen}
+            onOpenChange={setLogTimeOpen}
+            projects={allProjects}
+            onSaved={() => { toast.success('Time logged'); loadTimeData(); }}
+          />
         </TabsContent>
 
         {/* ─── Tax ───────────────────────────────────────────────────────────── */}
-        <TabsContent value="tax" className="mt-6">
+        <TabsContent value="tax" className="mt-6 space-y-5">
+
+          {/* Disclaimer — non-negotiable */}
+          <div className="rounded-lg border border-amber-500/30 bg-amber-500/8 px-4 py-3 text-sm text-amber-700 dark:text-amber-400">
+            <AlertTriangle className="w-3.5 h-3.5 inline mr-1.5 -mt-0.5" />
+            These are estimates based on the information you've entered. Tax law is complex and varies by situation. Consult a qualified tax professional before making financial decisions based on these figures.
+          </div>
+
+          {/* Year selector */}
+          <div className="flex items-center gap-3">
+            <Select value={String(selectedYear)} onValueChange={v => setSelectedYear(Number(v))}>
+              <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {availableYears.map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            {(loadingOverview || loading) && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />}
+          </div>
+
+          {/* Tax settings */}
           <Card>
-            <CardContent className="py-16 text-center text-muted-foreground">
-              <DollarSign className="w-10 h-10 mx-auto mb-3 opacity-30" />
-              <p className="font-medium">Tax estimates coming soon</p>
-              <p className="text-sm mt-1">Quarterly payment estimates, SE tax, home office deduction, and SEP-IRA opportunity.</p>
+            <CardHeader>
+              <CardTitle className="text-base">Tax Settings</CardTitle>
+              <CardDescription>Used for estimate calculations only. Never stored with a tax authority.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid gap-4 sm:grid-cols-3">
+                <div className="space-y-1.5">
+                  <Label>Filing status</Label>
+                  <Select value={filingStatus} onValueChange={v => setFilingStatus(v as FilingStatus)}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {(Object.keys(FILING_STATUS_LABELS) as FilingStatus[]).map(s => (
+                        <SelectItem key={s} value={s}>{FILING_STATUS_LABELS[s]}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Home office sq ft</Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    max="300"
+                    placeholder="0"
+                    value={homeOfficeSqft}
+                    onChange={e => setHomeOfficeSqft(e.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground">IRS simplified method · $5/sqft · max 300 sqft</p>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Prior year tax liability</Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    placeholder="0"
+                    value={priorYearLiability}
+                    onChange={e => setPriorYearLiability(e.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground">Used for safe harbor calculation</p>
+                </div>
+              </div>
+              <div className="flex justify-end">
+                <Button size="sm" variant="outline" onClick={saveTaxSettings} disabled={savingTaxSettings}>
+                  {savingTaxSettings ? <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />Saving…</> : 'Save settings'}
+                </Button>
+              </div>
             </CardContent>
           </Card>
+
+          {/* Tax breakdown */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Estimated Tax Breakdown — {selectedYear}</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2 text-sm">
+                {[
+                  { label: 'Gross income',                value: grossIncome,                      indent: false, muted: false },
+                  { label: 'Total deductible expenses',   value: -taxCalc.totalDeductibleExpenses,  indent: true,  muted: true  },
+                  { label: '— Home office deduction',     value: -taxCalc.homeOfficeDeduction,      indent: true,  muted: true, show: taxCalc.homeOfficeDeduction > 0 },
+                  { label: 'Net profit (Schedule C)',     value: taxCalc.netProfit,                 indent: false, muted: false, bold: true },
+                  { label: 'SE tax deduction (½ SE tax)', value: -taxCalc.seDeduction,              indent: true,  muted: true  },
+                  { label: `Standard deduction (${FILING_STATUS_LABELS[filingStatus]})`, value: -taxCalc.standardDeduction, indent: true, muted: true },
+                  { label: 'Taxable income',              value: taxCalc.taxableIncome,             indent: false, muted: false, bold: true },
+                ].filter(r => r.show !== false).map((row, i) => (
+                  <div key={i} className={`flex items-center justify-between py-1.5 border-b border-border/50 last:border-0 ${row.indent ? 'pl-4' : ''}`}>
+                    <span className={row.muted ? 'text-muted-foreground' : row.bold ? 'font-semibold' : ''}>{row.label}</span>
+                    <span className={`tabular-nums ${row.muted ? 'text-muted-foreground' : row.bold ? 'font-semibold' : ''} ${row.value < 0 ? 'text-muted-foreground' : ''}`}>
+                      {row.value < 0 ? `(${fmt(-row.value)})` : fmt(row.value)}
+                    </span>
+                  </div>
+                ))}
+
+                <div className="pt-2 space-y-2">
+                  <div className="flex items-center justify-between py-1.5 border-b border-border/50">
+                    <span className="text-muted-foreground pl-4">Self-employment tax (15.3%)</span>
+                    <span className="tabular-nums text-muted-foreground">{fmt(taxCalc.seTax)}</span>
+                  </div>
+                  <div className="flex items-center justify-between py-1.5 border-b border-border/50">
+                    <span className="text-muted-foreground pl-4">Estimated income tax ({FILING_STATUS_LABELS[filingStatus]})</span>
+                    <span className="tabular-nums text-muted-foreground">{fmt(taxCalc.estimatedIncomeTax)}</span>
+                  </div>
+                  <div className="flex items-center justify-between py-2 rounded-lg bg-muted/50 px-3 mt-1">
+                    <span className="font-semibold">Total estimated tax</span>
+                    <div className="text-right">
+                      <span className="font-bold text-lg tabular-nums">{fmt(taxCalc.totalTax)}</span>
+                      <p className="text-xs text-muted-foreground">{taxCalc.effectiveRate.toFixed(1)}% effective rate on gross income</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Quarterly payments */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Quarterly Estimated Payments</CardTitle>
+              <CardDescription>
+                Safe harbor amount: {fmt(taxCalc.safeHarbor)} · {fmt(taxCalc.quarterlyPayment)}/quarter
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2">
+                {qDates.map(({ label, quarter, date }) => {
+                  const isPast = date < today_;
+                  const daysUntil = Math.ceil((date.getTime() - today_.getTime()) / (1000 * 60 * 60 * 24));
+                  const isDueSoon = !isPast && daysUntil <= 30;
+                  return (
+                    <div key={label} className="flex items-center justify-between p-3 rounded-lg bg-muted/50 gap-3">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium">{label}</span>
+                          <span className="text-xs text-muted-foreground">{quarter}</span>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          Due {date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-3 shrink-0">
+                        <span className="font-semibold text-sm tabular-nums">{fmt(taxCalc.quarterlyPayment)}</span>
+                        <Badge variant="outline" className={
+                          isPast
+                            ? 'text-muted-foreground border-muted-foreground/30'
+                            : isDueSoon
+                              ? 'text-amber-600 border-amber-500/40 bg-amber-500/10'
+                              : 'text-emerald-600 border-emerald-500/40 bg-emerald-500/10'
+                        }>
+                          {isPast ? 'Past' : isDueSoon ? `Due in ${daysUntil}d` : 'Upcoming'}
+                        </Badge>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              <p className="text-xs text-muted-foreground mt-3">
+                Pay via IRS Direct Pay or EFTPS. Underpayment penalty applies if you pay less than the safe harbor amount.
+              </p>
+            </CardContent>
+          </Card>
+
+          {/* SEP-IRA opportunity */}
+          {taxCalc.sepIraMax > 0 && (
+            <Card className="border-emerald-500/20 bg-emerald-500/5">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <TrendingUp className="w-4 h-4 text-emerald-500" />
+                  SEP-IRA Opportunity
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <p className="text-sm">
+                  You could contribute up to{' '}
+                  <span className="font-semibold text-emerald-600">{fmt(taxCalc.sepIraMax)}</span>{' '}
+                  to a SEP-IRA this year and reduce your estimated tax bill by approximately{' '}
+                  <span className="font-semibold text-emerald-600">{fmt(taxCalc.sepIraSavings)}</span>.
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Maximum is 25% of net profit, capped at $69,000 (2024). Contributions are tax-deductible.{' '}
+                  <a
+                    href="https://www.irs.gov/retirement-plans/sep-plan-faqs"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline hover:no-underline"
+                  >
+                    Learn more at IRS.gov →
+                  </a>
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  These are estimates. Consult a qualified tax professional for advice specific to your situation.
+                </p>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
 
         {/* ─── Export ────────────────────────────────────────────────────────── */}
-        <TabsContent value="export" className="mt-6">
+        <TabsContent value="export" className="mt-6 space-y-5">
+          <div className="flex items-center gap-3">
+            <Select value={String(selectedYear)} onValueChange={v => setSelectedYear(Number(v))}>
+              <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {availableYears.map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            {(loadingOverview || loading) && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />}
+          </div>
+
+          {/* PDF report */}
           <Card>
-            <CardContent className="py-16 text-center text-muted-foreground">
-              <FileDown className="w-10 h-10 mx-auto mb-3 opacity-30" />
-              <p className="font-medium">Year-end export coming soon</p>
-              <p className="text-sm mt-1">PDF package + CSV exports. Send directly to your accountant.</p>
+            <CardHeader>
+              <CardTitle className="text-base">Year-End Report</CardTitle>
+              <CardDescription>
+                Print-ready summary: income, expenses, and mileage. Use your browser's Print → Save as PDF.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button onClick={openPrintReport} className="gap-2">
+                <FileDown className="w-4 h-4" />Generate &amp; Print PDF
+              </Button>
+              <p className="text-xs text-muted-foreground mt-3">
+                Opens a formatted report in a new tab. Use <kbd className="bg-muted px-1.5 py-0.5 rounded text-xs">⌘P</kbd> / <kbd className="bg-muted px-1.5 py-0.5 rounded text-xs">Ctrl+P</kbd> → Save as PDF.
+                Footer: "Generated by Forgefly. For informational purposes only. Consult a qualified tax professional before filing."
+              </p>
+            </CardContent>
+          </Card>
+
+          {/* CSV exports */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">CSV Exports</CardTitle>
+              <CardDescription>Download individual files for your accountant or tax software.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => downloadCsv(buildIncomeCsv(allTransactions), `${selectedYear}_income.csv`)}
+                >
+                  <FileDown className="w-4 h-4 mr-1.5" />Income ({allTransactions.filter(t => t.type === 'income').length} rows)
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => downloadCsv(buildExpenseCsv(allTransactions), `${selectedYear}_expenses.csv`)}
+                >
+                  <FileDown className="w-4 h-4 mr-1.5" />Expenses ({allTransactions.filter(t => t.type === 'expense').length} rows)
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => downloadCsv(buildMileageCsv(mileageLogs), `${selectedYear}_mileage.csv`)}
+                >
+                  <FileDown className="w-4 h-4 mr-1.5" />Mileage ({mileageLogs.length} trips)
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Send to accountant */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Send to Accountant</CardTitle>
+              <CardDescription>
+                All three CSV files will be attached. Your accountant doesn't need a Forgefly account.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex gap-2 max-w-md">
+                <Input
+                  type="email"
+                  placeholder="accountant@example.com"
+                  value={accountantEmail}
+                  onChange={e => setAccountantEmail(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') handleSendToAccountant(); }}
+                />
+                <Button
+                  onClick={handleSendToAccountant}
+                  disabled={!accountantEmail || sendingToAccountant}
+                >
+                  {sendingToAccountant
+                    ? <><Loader2 className="w-4 h-4 mr-1.5 animate-spin" />Sending…</>
+                    : 'Send'}
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Sends income, expense, and mileage CSVs from <strong>hello@forgefly.io</strong> on your behalf.
+              </p>
             </CardContent>
           </Card>
         </TabsContent>

@@ -7,7 +7,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { Plus, Edit, Trash2, Calendar, DollarSign, User, Briefcase, Search } from 'lucide-react';
+import { Progress } from '@/components/ui/progress';
+import { Plus, Edit, Trash2, Calendar, DollarSign, User, Clock, Search, Briefcase } from 'lucide-react';
 import { toast } from 'sonner';
 import { DndContext, DragEndEvent, DragOverlay, DragStartEvent, PointerSensor, useSensor, useSensors, useDroppable } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
@@ -16,8 +17,10 @@ import { CSS } from '@dnd-kit/utilities';
 import type { Project, ProjectStatus, Client } from '@/types/types';
 import { getProjects, createProject, updateProject, updateProjectStatus, deleteProject, subscribeToProjects } from '@/services/projectService';
 import { getClients } from '@/services/clientService';
+import { getTimeEntriesByProject } from '@/services/timeService';
 import { supabase } from '@/db/supabase';
 import { useBusiness } from '@/contexts/CurrentBusinessContext';
+import LogTimeDialog from '@/components/common/LogTimeDialog';
 
 const SITE_URL = import.meta.env.VITE_SITE_URL ?? 'https://www.forgefly.io';
 
@@ -28,7 +31,15 @@ const COLUMNS: { id: ProjectStatus; title: string }[] = [
   { id: 'completed', title: 'Done' },
 ];
 
-function ProjectCard({ project, onEdit, onDelete }: { project: Project; onEdit: (project: Project) => void; onDelete: (project: Project) => void }) {
+interface ProjectCardProps {
+  project: Project;
+  onEdit: (project: Project) => void;
+  onDelete: (project: Project) => void;
+  onLogTime: (project: Project) => void;
+  totalHours: number;
+}
+
+function ProjectCard({ project, onEdit, onDelete, onLogTime, totalHours }: ProjectCardProps) {
   const {
     attributes,
     listeners,
@@ -43,6 +54,13 @@ function ProjectCard({ project, onEdit, onDelete }: { project: Project; onEdit: 
     transition,
     opacity: isDragging ? 0.5 : 1,
   };
+
+  const effectiveRate = project.value && totalHours > 0
+    ? project.value / totalHours
+    : null;
+  const budgetPct = project.hour_budget && totalHours > 0
+    ? Math.min((totalHours / project.hour_budget) * 100, 100)
+    : null;
 
   return (
     <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
@@ -77,15 +95,50 @@ function ProjectCard({ project, onEdit, onDelete }: { project: Project; onEdit: 
             )}
           </div>
 
+          {/* Profitability card — shows when hours logged */}
+          {totalHours > 0 && (
+            <div className="rounded-md bg-muted/50 px-3 py-2 text-xs space-y-1.5">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Hours logged</span>
+                <span className="font-medium tabular-nums">{totalHours.toFixed(1)} hrs</span>
+              </div>
+              {effectiveRate !== null && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Effective rate</span>
+                  <span className="font-medium tabular-nums">${effectiveRate.toFixed(0)}/hr</span>
+                </div>
+              )}
+              {budgetPct !== null && project.hour_budget && (
+                <div className="space-y-1">
+                  <div className="flex justify-between text-muted-foreground">
+                    <span>Budget</span>
+                    <span className={budgetPct >= 95 ? 'text-destructive' : budgetPct >= 80 ? 'text-amber-500' : ''}>
+                      {totalHours.toFixed(1)} / {project.hour_budget} hrs
+                    </span>
+                  </div>
+                  <Progress
+                    value={budgetPct}
+                    className={`h-1.5 ${budgetPct >= 95 ? '[&>div]:bg-destructive' : budgetPct >= 80 ? '[&>div]:bg-amber-500' : ''}`}
+                  />
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="flex gap-2 pt-2 border-t border-border">
             <Button
               variant="outline"
               size="sm"
+              onClick={(e) => { e.stopPropagation(); onLogTime(project); }}
+              title="Log time"
+            >
+              <Clock className="w-4 h-4" />
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
               className="flex-1"
-              onClick={(e) => {
-                e.stopPropagation();
-                onEdit(project);
-              }}
+              onClick={(e) => { e.stopPropagation(); onEdit(project); }}
             >
               <Edit className="w-4 h-4 mr-2" />
               Edit
@@ -93,10 +146,7 @@ function ProjectCard({ project, onEdit, onDelete }: { project: Project; onEdit: 
             <Button
               variant="outline"
               size="sm"
-              onClick={(e) => {
-                e.stopPropagation();
-                onDelete(project);
-              }}
+              onClick={(e) => { e.stopPropagation(); onDelete(project); }}
             >
               <Trash2 className="w-4 h-4" />
             </Button>
@@ -138,6 +188,8 @@ export default function ProjectsPage() {
     client_visible_note: '',
   });
   const [submitting, setSubmitting] = useState(false);
+  const [logTimeProject, setLogTimeProject] = useState<Project | null>(null);
+  const [projectHours, setProjectHours] = useState<Record<string, number>>({});
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -159,6 +211,16 @@ export default function ProjectsPage() {
     };
   }, []);
 
+  async function loadProjectHours(projectIds: string[]) {
+    const results = await Promise.all(
+      projectIds.map(id => getTimeEntriesByProject(id).then(entries => ({
+        id,
+        total: entries.reduce((s, e) => s + e.hours, 0),
+      })))
+    );
+    setProjectHours(Object.fromEntries(results.map(r => [r.id, r.total])));
+  }
+
   async function loadData() {
     try {
       const [projectsData, clientsData] = await Promise.all([
@@ -167,6 +229,9 @@ export default function ProjectsPage() {
       ]);
       setProjects(projectsData);
       setClients(clientsData);
+      if (projectsData.length > 0) {
+        loadProjectHours(projectsData.map(p => p.id));
+      }
     } catch (error) {
       console.error('Error loading data:', error);
       toast.error('Failed to load data');
@@ -432,6 +497,8 @@ export default function ProjectsPage() {
                               project={project}
                               onEdit={openEditModal}
                               onDelete={openDeleteDialog}
+                              onLogTime={p => setLogTimeProject(p)}
+                              totalHours={projectHours[project.id] ?? 0}
                             />
                           ))
                         )}
@@ -615,6 +682,24 @@ export default function ProjectsPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <LogTimeDialog
+        open={logTimeProject !== null}
+        onOpenChange={open => { if (!open) setLogTimeProject(null); }}
+        projects={projects}
+        defaultProjectId={logTimeProject?.id}
+        onSaved={() => {
+          if (logTimeProject) {
+            getTimeEntriesByProject(logTimeProject.id).then(entries => {
+              setProjectHours(prev => ({
+                ...prev,
+                [logTimeProject.id]: entries.reduce((s, e) => s + e.hours, 0),
+              }));
+            });
+          }
+          toast.success('Time logged');
+        }}
+      />
     </div>
   );
 }

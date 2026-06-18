@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/contexts/AuthContext";
@@ -78,6 +79,12 @@ export default function SettingsPage() {
   const [notifTimezone, setNotifTimezone] = useState('');
   const [notifLoading, setNotifLoading] = useState(false);
 
+  // Tax / Finances settings
+  const [taxFilingStatus, setTaxFilingStatus] = useState<'single' | 'mfj' | 'mfs' | 'hoh'>('single');
+  const [taxHomeOfficeSqft, setTaxHomeOfficeSqft] = useState('');
+  const [taxPriorYearLiability, setTaxPriorYearLiability] = useState('');
+  const [savingTax, setSavingTax] = useState(false);
+
   // Delete business
   const [bizDeleteOpen, setBizDeleteOpen] = useState(false);
   const [bizDeleteConfirm, setBizDeleteConfirm] = useState('');
@@ -119,6 +126,14 @@ export default function SettingsPage() {
       // Load saved timezone, fall back to browser timezone
       const saved = (business.extracted_data as Record<string, unknown> | null)?.timezone as string | undefined;
       setNotifTimezone(saved ?? Intl.DateTimeFormat().resolvedOptions().timeZone);
+
+      // Load tax settings
+      const ts = (business.extracted_data as Record<string, unknown> | null)?.tax_settings as Record<string, unknown> | undefined;
+      if (ts) {
+        if (ts.filing_status) setTaxFilingStatus(ts.filing_status as 'single' | 'mfj' | 'mfs' | 'hoh');
+        if (ts.home_office_sqft != null) setTaxHomeOfficeSqft(String(ts.home_office_sqft));
+        if (ts.prior_year_liability != null) setTaxPriorYearLiability(String(ts.prior_year_liability));
+      }
     }
   }, [business, profile]);
 
@@ -288,6 +303,31 @@ export default function SettingsPage() {
     setNotifLoading(false);
   };
 
+  const handleSaveTaxSettings = async () => {
+    if (!business) return;
+    setSavingTax(true);
+    const existing = (business.extracted_data as Record<string, unknown>) ?? {};
+    const { error } = await supabase
+      .from('businesses')
+      .update({
+        extracted_data: {
+          ...existing,
+          tax_settings: {
+            filing_status: taxFilingStatus,
+            home_office_sqft: parseFloat(taxHomeOfficeSqft) || 0,
+            prior_year_liability: parseFloat(taxPriorYearLiability) || 0,
+          },
+        },
+      })
+      .eq('id', business.id);
+    if (error) {
+      toast.error('Failed to save tax settings');
+    } else {
+      toast.success('Tax settings saved');
+    }
+    setSavingTax(false);
+  };
+
   const handleSaveBusinessProfile = async () => {
     if (!user || !businessProfile) return;
 
@@ -380,6 +420,7 @@ export default function SettingsPage() {
           <TabsTrigger value="business">Business Profile</TabsTrigger>
           <TabsTrigger value="account">Account</TabsTrigger>
           <TabsTrigger value="payments">Payments</TabsTrigger>
+          <TabsTrigger value="finances">Finances</TabsTrigger>
           <TabsTrigger value="client-portal">Client Portal</TabsTrigger>
           <TabsTrigger value="ai-history">AI History</TabsTrigger>
         </TabsList>
@@ -952,6 +993,67 @@ export default function SettingsPage() {
               </CardContent>
             </Card>
           </div>
+        </TabsContent>
+
+        <TabsContent value="finances" className="mt-6 space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Tax Estimate Settings</CardTitle>
+              <CardDescription>
+                Used only for estimates in the Finances → Tax tab. Never filed or sent anywhere.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              <div className="rounded-lg border border-amber-500/30 bg-amber-500/8 px-4 py-3 text-sm text-amber-700 dark:text-amber-400">
+                <AlertTriangle className="w-3.5 h-3.5 inline mr-1.5 -mt-0.5" />
+                These figures are used for rough estimates only. Consult a qualified tax professional before making financial decisions.
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-3">
+                <div className="space-y-1.5">
+                  <Label>Filing status</Label>
+                  <Select value={taxFilingStatus} onValueChange={v => setTaxFilingStatus(v as typeof taxFilingStatus)}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="single">Single</SelectItem>
+                      <SelectItem value="mfj">Married Filing Jointly</SelectItem>
+                      <SelectItem value="mfs">Married Filing Separately</SelectItem>
+                      <SelectItem value="hoh">Head of Household</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Home office sq ft</Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    max="300"
+                    placeholder="0"
+                    value={taxHomeOfficeSqft}
+                    onChange={e => setTaxHomeOfficeSqft(e.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground">IRS simplified method · $5/sqft · max 300 sqft</p>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Prior year tax liability</Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    placeholder="0"
+                    value={taxPriorYearLiability}
+                    onChange={e => setTaxPriorYearLiability(e.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground">Used for safe harbor calculation</p>
+                </div>
+              </div>
+
+              <div className="flex justify-end">
+                <Button onClick={handleSaveTaxSettings} disabled={savingTax}>
+                  {savingTax ? <><Loader2 className="w-4 h-4 mr-1.5 animate-spin" />Saving…</> : 'Save Tax Settings'}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
 
         <TabsContent value="client-portal" className="mt-6">

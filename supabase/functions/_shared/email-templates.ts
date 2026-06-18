@@ -731,3 +731,46 @@ export function getDailyDigestEmailTemplate(data: {
 
   return { subject, html }
 }
+
+// ─── Accountant export email ──────────────────────────────────────────────────
+
+export function getAccountantExportEmailTemplate(params: {
+  businessName: string;
+  year: number;
+  freelancerName: string;
+  downloadNote: string;
+}): { subject: string; html: string } {
+  const { businessName, year, freelancerName, downloadNote } = params;
+  const subject = `${year} Financial Records — ${businessName}`;
+  const html = `<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>${subject}</title>
+<style>${emailStyles}</style>
+</head>
+<body>
+  <div class="container">
+    <div class="header"><h1 class="logo">Forgefly</h1></div>
+    <div class="content-box">
+      <h2 style="color:#F9FAFB;font-size:20px;margin-bottom:8px;">${year} Financial Records</h2>
+      <p class="content">Hi,</p>
+      <p class="content">
+        ${freelancerName} has shared their ${year} financial records from Forgefly.
+        The CSV exports are attached to this email and include:
+      </p>
+      <ul style="color:#D1D5DB;line-height:1.8;padding-left:20px;">
+        <li>Income transactions</li>
+        <li>Expense transactions</li>
+        <li>Mileage log</li>
+      </ul>
+      ${downloadNote ? `<p class="content" style="background:#1a2942;border-radius:8px;padding:12px 16px;">${downloadNote}</p>` : ''}
+      <p style="font-size:12px;color:#6B7280;margin-top:24px;border-top:1px solid #1F2937;padding-top:16px;">
+        Sent via Forgefly · For informational purposes only · Consult a qualified tax professional before filing.
+      </p>
+    </div>
+  </div>
+</body>
+</html>`
+  return { subject, html }
+}
+

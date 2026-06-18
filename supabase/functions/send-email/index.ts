@@ -1,6 +1,6 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'jsr:@supabase/supabase-js@2';
-import { getWelcomeEmailTemplate, getProposalEmailTemplate, getInvoiceEmailTemplate, getClientMessageTemplate, getPortalInviteEmailTemplate, getDeletionOtpEmailTemplate } from '../_shared/email-templates.ts';
+import { getWelcomeEmailTemplate, getProposalEmailTemplate, getInvoiceEmailTemplate, getClientMessageTemplate, getPortalInviteEmailTemplate, getDeletionOtpEmailTemplate, getAccountantExportEmailTemplate } from '../_shared/email-templates.ts';
 
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY');
 const RESEND_API_URL = 'https://api.resend.com/emails';
@@ -65,7 +65,7 @@ serve(async (req) => {
       );
     }
 
-    const { type, to, cc, reply_to, data } = await req.json();
+    const { type, to, cc, reply_to, data, attachments } = await req.json();
 
     if (!RESEND_API_KEY) {
       console.error('RESEND_API_KEY not configured');
@@ -149,6 +149,19 @@ serve(async (req) => {
         html = getDeletionOtpEmailTemplate({ code: data.code, expiresMinutes: data.expiresMinutes ?? 10 });
         break;
 
+      case 'accountant_export': {
+        const tmpl = getAccountantExportEmailTemplate({
+          businessName: data.businessName,
+          year: data.year,
+          freelancerName: data.freelancerName,
+          downloadNote: data.downloadNote ?? '',
+        });
+        subject = tmpl.subject;
+        html = tmpl.html;
+        from = `${data.freelancerName || 'Forgefly'} <hello@forgefly.io>`;
+        break;
+      }
+
       default:
         return new Response(
           JSON.stringify({ error: 'Invalid email type' }),
@@ -170,6 +183,8 @@ serve(async (req) => {
         ...(reply_to ? { reply_to: [reply_to] } : {}),
         subject,
         html,
+        // attachments: [{ filename, content (base64) }]
+        ...(attachments?.length ? { attachments } : {}),
       }),
     });
 

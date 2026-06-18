@@ -60,6 +60,10 @@ const NUDGE_PROMPTS: Record<string, (ctx: Record<string, string>) => string> = {
     `Proposal "${c.title}" has been sitting as a draft for ${c.daysSitting} days. Write a nudge to send it.`,
   new_request: (c) =>
     `${c.clientName} from ${c.company || 'unknown'} submitted a proposal request ${c.hoursAgo} hours ago. Write an urgent nudge.`,
+  project_complete_insight: (c) =>
+    `Freelancer just completed project "${c.name}" which took ${c.hours} hours at an effective rate of $${c.rate}/hr. ` +
+    `Their last 3 completed projects averaged ${c.avgHours} hours and $${c.avgRate}/hr. ` +
+    `Write a 2-sentence max insight comparing this project to their baseline. Be specific about the numbers. No fluff.`,
 }
 
 const FALLBACK_COPY: Record<string, (ctx: Record<string, string>) => { title: string; body: string }> = {
@@ -79,6 +83,27 @@ const FALLBACK_COPY: Record<string, (ctx: Record<string, string>) => { title: st
     title: `New proposal request`,
     body: `${c.clientName} wants to work with you. Review now.`,
   }),
+  project_complete_insight: (c) => ({
+    title: `Project insight: ${c.name}`,
+    body: `${c.hours} hrs · $${c.rate}/hr effective rate. Compare to your ${c.avgHours} hr avg.`,
+  }),
+}
+
+// ─── Quarterly tax due dates ─────────────────────────────────────────────────
+
+interface QuarterlyDate {
+  label: string   // "Q1 2026"
+  quarter: string // "Jan–Mar income"
+  date: Date
+}
+
+function quarterlyDueDates(year: number): QuarterlyDate[] {
+  return [
+    { label: `Q1 ${year}`, quarter: 'Jan–Mar income', date: new Date(year, 3, 15) },   // Apr 15
+    { label: `Q2 ${year}`, quarter: 'Apr–May income', date: new Date(year, 5, 15) },   // Jun 15
+    { label: `Q3 ${year}`, quarter: 'Jun–Aug income', date: new Date(year, 8, 15) },   // Sep 15
+    { label: `Q4 ${year}`, quarter: 'Sep–Dec income', date: new Date(year + 1, 0, 15) }, // Jan 15 next year
+  ]
 }
 
 // ─── Nudge settings helpers ──────────────────────────────────────────────────
@@ -244,6 +269,7 @@ serve(async (req) => {
 
       // ── 4. New proposal requests (not actioned in 24h) ────────────────────
       if (isEnabled(settings, 'new_request')) {
+
         const requestCutoff = new Date(now)
         requestCutoff.setHours(requestCutoff.getHours() - 24)
 
@@ -280,6 +306,152 @@ serve(async (req) => {
             action_url: '/dashboard/requests',
           })
           nudgesCreated.push(`new_request:${req.id}`)
+        }
+      }
+
+      // ── 5. Quarterly tax payment reminders ────────────────────────────────
+      if (isEnabled(settings, 'quarterly_tax_reminder')) {
+        const year = now.getFullYear()
+        // Check current year's 4 quarters + Q4 of prior year (due Jan 15 this year)
+        const allDates = [
+          ...quarterlyDueDates(year - 1).filter(q => q.label === `Q4 ${year - 1}`),
+          ...quarterlyDueDates(year),
+        ]
+
+        for (const q of allDates) {
+          const daysUntil = Math.ceil((q.date.getTime() - now.getTime()) / 86400000)
+
+          // Only fire at the three trigger windows
+          const window =
+            daysUntil >= 28 && daysUntil <= 30 ? '30d' :
+            daysUntil >= 6  && daysUntil <= 8  ? '7d'  :
+            daysUntil >= -1 && daysUntil <= 1  ? 'due' :
+            null
+
+          if (!window) continue
+
+          // Dedup: one nudge per quarter per window within the last 5 days
+          const dedupSince = new Date(now.getTime() - 5 * 86400000).toISOString()
+          const { count: existingCount } = await supabase
+            .from('nudges')
+            .select('id', { count: 'exact', head: true })
+            .eq('business_id', bizId)
+            .eq('type', 'quarterly_tax_reminder')
+            .ilike('title', `%${q.label}%`)
+            .gte('created_at', dedupSince)
+
+          if ((existingCount ?? 0) > 0) continue
+
+          const dueStr = q.date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+          let title: string
+          let body: string
+
+          if (window === '30d') {
+            title = `${q.label} estimated tax due in 30 days`
+            body = `${q.quarter} — payment due ${dueStr}. Review your estimate in Finances.`
+          } else if (window === '7d') {
+            title = `${q.label} estimated tax due in 7 days`
+            body = `${q.quarter} — payment due ${dueStr}. Pay via IRS Direct Pay or EFTPS.`
+          } else {
+            title = `${q.label} estimated tax due today`
+            body = `${q.quarter} — payment due ${dueStr}. Avoid underpayment penalties.`
+          }
+
+          await supabase.from('nudges').insert({
+            user_id: userId, business_id: bizId,
+            type: 'quarterly_tax_reminder',
+            title,
+            body,
+            action_url: '/dashboard/finances?tab=tax',
+          })
+          nudgesCreated.push(`quarterly_tax_reminder:${q.label}:${window}`)
+        }
+      }
+
+      // ── 6. Post-project AI insight (fires when project completed in last 24h, ≥3 baseline) ──
+      if (isEnabled(settings, 'project_complete_insight')) {
+        const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString()
+
+        const { data: recentlyCompleted } = await supabase
+          .from('projects')
+          .select('id, name, value')
+          .eq('user_id', userId)
+          .eq('status', 'completed')
+          .gte('updated_at', yesterday)
+
+        for (const proj of recentlyCompleted ?? []) {
+          // Dedup: one insight per project (ever)
+          const { count: alreadyFired } = await supabase
+            .from('nudges')
+            .select('id', { count: 'exact', head: true })
+            .eq('business_id', bizId)
+            .eq('type', 'project_complete_insight')
+            .ilike('title', `%${proj.name}%`)
+
+          if ((alreadyFired ?? 0) > 0) continue
+
+          // Fetch time entries for this project
+          const { data: projEntries } = await supabase
+            .from('time_entries')
+            .select('hours')
+            .eq('project_id', proj.id)
+            .eq('business_id', bizId)
+
+          const thisHours = (projEntries ?? []).reduce((s: number, e: { hours: number }) => s + e.hours, 0)
+          if (thisHours === 0) continue // no time logged — skip
+
+          const thisRate = proj.value && thisHours > 0 ? Math.round(proj.value / thisHours) : null
+
+          // Fetch last 3 completed projects (not this one) with time data
+          const { data: pastProjects } = await supabase
+            .from('projects')
+            .select('id, value')
+            .eq('user_id', userId)
+            .eq('status', 'completed')
+            .neq('id', proj.id)
+            .order('updated_at', { ascending: false })
+            .limit(3)
+
+          if (!pastProjects || pastProjects.length < 3) continue // need ≥3 for baseline
+
+          // Sum hours for each past project
+          const pastData = await Promise.all(
+            pastProjects.map(async (p: { id: string; value: number | null }) => {
+              const { data: ents } = await supabase
+                .from('time_entries')
+                .select('hours')
+                .eq('project_id', p.id)
+                .eq('business_id', bizId)
+              const h = (ents ?? []).reduce((s: number, e: { hours: number }) => s + e.hours, 0)
+              const r = p.value && h > 0 ? p.value / h : null
+              return { hours: h, rate: r }
+            })
+          )
+          const withHours = pastData.filter(p => p.hours > 0)
+          if (withHours.length === 0) continue
+
+          const avgHours = Math.round(withHours.reduce((s, p) => s + p.hours, 0) / withHours.length)
+          const ratesWithData = withHours.filter(p => p.rate != null)
+          const avgRate = ratesWithData.length > 0
+            ? Math.round(ratesWithData.reduce((s, p) => s + (p.rate ?? 0), 0) / ratesWithData.length)
+            : null
+
+          const copy = await generateNudgeCopy('project_complete_insight', {
+            name: proj.name as string,
+            hours: thisHours.toFixed(1),
+            rate: String(thisRate ?? '?'),
+            avgHours: String(avgHours),
+            avgRate: String(avgRate ?? '?'),
+          })
+
+          await supabase.from('nudges').insert({
+            user_id: userId, business_id: bizId,
+            type: 'project_complete_insight',
+            title: copy.title,
+            body: copy.body,
+            action_url: '/dashboard/projects',
+          })
+          nudgesCreated.push(`project_complete_insight:${proj.id}`)
         }
       }
     }
