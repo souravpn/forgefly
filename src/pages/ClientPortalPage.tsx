@@ -480,6 +480,8 @@ function ContactHub({
   const [projects, setProjects] = useState<PortalProject[]>([]);
   const [portalFiles, setPortalFiles] = useState<PortalFileItem[]>([]);
   const [unreadCount, setUnreadCount] = useState(contact.unread_count);
+  const [uploadingPortalFile, setUploadingPortalFile] = useState(false);
+  const portalFileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Profile completion prompt — fires only on truly first visit (portal_last_seen was null at load time)
@@ -811,6 +813,41 @@ function ContactHub({
     } catch (err: unknown) {
       toast.error((err as Error).message || "Payment failed");
       setActionLoading(null);
+    }
+  }
+
+  async function handlePortalFileUpload(file: File) {
+    if (file.size > 20 * 1024 * 1024) {
+      toast.error("File must be under 20 MB");
+      return;
+    }
+    setUploadingPortalFile(true);
+    try {
+      // Read as base64
+      const arrayBuffer = await file.arrayBuffer();
+      const uint8 = new Uint8Array(arrayBuffer);
+      let binary = "";
+      for (let i = 0; i < uint8.length; i++) binary += String.fromCharCode(uint8[i]);
+      const fileBase64 = btoa(binary);
+
+      const { data, error } = await supabase.functions.invoke("upload-portal-file", {
+        body: {
+          portal_token: token,
+          fileBase64,
+          fileName: file.name,
+          mimeType: file.type || "application/octet-stream",
+          fileSize: file.size,
+        },
+      });
+
+      if (error) throw error;
+      setPortalFiles((prev) => [data as PortalFileItem, ...prev]);
+      toast.success("File uploaded");
+    } catch {
+      toast.error("Failed to upload file");
+    } finally {
+      setUploadingPortalFile(false);
+      if (portalFileInputRef.current) portalFileInputRef.current.value = "";
     }
   }
 
@@ -1398,9 +1435,43 @@ function ContactHub({
 
         {/* Files */}
         {tab === "files" && (
-          <div className="space-y-2">
+          <div className="space-y-3">
+            {/* Upload button */}
+            <button
+              type="button"
+              disabled={uploadingPortalFile}
+              onClick={() => portalFileInputRef.current?.click()}
+              className="w-full flex items-center justify-center gap-2 rounded-xl py-3 text-sm font-medium transition-opacity hover:opacity-80 disabled:opacity-50"
+              style={{
+                background: `rgba(${hexToRgb(accent)}, 0.12)`,
+                border: `1px dashed ${accent}`,
+                color: accent,
+              }}
+            >
+              {uploadingPortalFile ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Uploading…
+                </>
+              ) : (
+                <>
+                  <Send className="w-4 h-4" style={{ transform: "rotate(-45deg)" }} />
+                  Upload a file
+                </>
+              )}
+            </button>
+            <input
+              ref={portalFileInputRef}
+              type="file"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) handlePortalFileUpload(file);
+              }}
+            />
+
             {portalFiles.length === 0 ? (
-              <div className="text-center py-16" style={{ color: "var(--p-text4)" }}>
+              <div className="text-center py-12" style={{ color: "var(--p-text4)" }}>
                 <Folder className="w-8 h-8 mx-auto mb-3 opacity-40" />
                 <p className="text-sm">No files shared yet.</p>
               </div>
@@ -1429,6 +1500,7 @@ function ContactHub({
                       {f.file_name}
                     </p>
                     <p className="text-xs mt-0.5" style={{ color: "var(--p-text3)" }}>
+                      {f.uploaded_by === "client" ? "You · " : `${businessName} · `}
                       {formatFileSize(f.file_size)}
                       {f.file_size ? " · " : ""}
                       {new Date(f.created_at).toLocaleDateString("en-US", {

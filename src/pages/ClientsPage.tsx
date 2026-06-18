@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -6,7 +6,8 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { Plus, Search, Mail, Phone, Building2, Edit, Trash2, User, Users, UserPlus, Crown, Send, Link } from 'lucide-react';
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { Plus, Search, Mail, Phone, Building2, Edit, Trash2, User, Users, UserPlus, Crown, Send, Link, Paperclip, Upload, Download, Loader2, FileText } from 'lucide-react';
 import { toast } from 'sonner';
 import type { Client } from '@/types/types';
 import { getClients, createClient, updateClient, deleteClient, uploadAvatar, subscribeToClients } from '@/services/clientService';
@@ -14,6 +15,14 @@ import { useAuth } from '@/contexts/AuthContext';
 // @ts-ignore
 import { supabase } from '@/db/supabase';
 import { Badge } from '@/components/ui/badge';
+import {
+  getContactIdByEmail,
+  getPortalFiles,
+  uploadPortalFile,
+  deletePortalFile,
+  formatFileSize,
+  type PortalFileItem,
+} from '@/services/portalFileService';
 
 export default function ClientsPage() {
   const { isAgency, profile, user } = useAuth();
@@ -40,6 +49,14 @@ export default function ClientsPage() {
   const [submitting, setSubmitting] = useState(false);
   // email → portal_token map from contacts table
   const [portalTokenMap, setPortalTokenMap] = useState<Record<string, string>>({});
+
+  // ── Files Sheet ──
+  const [filesClient, setFilesClient] = useState<Client | null>(null);
+  const [filesContactId, setFilesContactId] = useState<string | null>(null);
+  const [clientFiles, setClientFiles] = useState<PortalFileItem[]>([]);
+  const [loadingFiles, setLoadingFiles] = useState(false);
+  const [uploadingFile, setUploadingFile] = useState(false);
+  const filesInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     loadClients();
@@ -222,6 +239,67 @@ export default function ClientsPage() {
     }
   }
 
+  // ── Files Sheet handlers ──
+  async function openFilesSheet(client: Client) {
+    setFilesClient(client);
+    setClientFiles([]);
+    setFilesContactId(null);
+    setLoadingFiles(true);
+    try {
+      if (!client.email) {
+        toast.error('This client has no email — add an email to enable file sharing');
+        setLoadingFiles(false);
+        return;
+      }
+      const contactId = await getContactIdByEmail(client.email);
+      if (!contactId) {
+        // No matching contact in the business-scoped table yet — sheet opens empty
+        setFilesContactId(null);
+        setClientFiles([]);
+        return;
+      }
+      setFilesContactId(contactId);
+      const files = await getPortalFiles(contactId);
+      setClientFiles(files);
+    } catch {
+      toast.error('Failed to load files');
+    } finally {
+      setLoadingFiles(false);
+    }
+  }
+
+  async function handleFileUpload(file: File) {
+    if (!filesContactId) {
+      toast.error('No portal contact found for this client');
+      return;
+    }
+    if (file.size > 20 * 1024 * 1024) {
+      toast.error('File must be under 20 MB');
+      return;
+    }
+    setUploadingFile(true);
+    try {
+      const newFile = await uploadPortalFile(filesContactId, file);
+      setClientFiles(prev => [newFile, ...prev]);
+      toast.success('File uploaded');
+    } catch {
+      toast.error('Failed to upload file');
+    } finally {
+      setUploadingFile(false);
+      if (filesInputRef.current) filesInputRef.current.value = '';
+    }
+  }
+
+  async function handleDeleteFile(id: string, storagePath: string) {
+    try {
+      await deletePortalFile(id, storagePath);
+      setClientFiles(prev => prev.filter(f => f.id !== id));
+      toast.success('File deleted');
+    } catch {
+      toast.error('Failed to delete file');
+    }
+  }
+
   const filteredClients = clients.filter(client =>
     client.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     client.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -361,6 +439,14 @@ export default function ClientsPage() {
                       Portal link
                     </Button>
                   )}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    title="Files"
+                    onClick={() => openFilesSheet(client)}
+                  >
+                    <Paperclip className="w-4 h-4" />
+                  </Button>
                   <Button
                     variant="outline"
                     size="sm"
@@ -606,6 +692,105 @@ export default function ClientsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* ─── Files Sheet ───────────────────────────────────────────────────── */}
+      <Sheet open={!!filesClient} onOpenChange={open => { if (!open) setFilesClient(null); }}>
+        {filesClient && (
+          <SheetContent className="w-full sm:max-w-md flex flex-col gap-0 p-0">
+            <SheetHeader className="px-6 pt-6 pb-4 border-b">
+              <div className="flex items-center justify-between">
+                <SheetTitle className="flex items-center gap-2">
+                  <Paperclip className="w-4 h-4" />
+                  Files — {filesClient.name}
+                </SheetTitle>
+                <Button
+                  size="sm"
+                  disabled={uploadingFile || !filesContactId}
+                  onClick={() => filesInputRef.current?.click()}
+                  className="gap-1.5"
+                >
+                  {uploadingFile
+                    ? <><Loader2 className="w-3.5 h-3.5 animate-spin" />Uploading…</>
+                    : <><Upload className="w-3.5 h-3.5" />Upload file</>
+                  }
+                </Button>
+              </div>
+              {!filesContactId && !loadingFiles && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  {filesClient.email
+                    ? 'No portal contact found. Generate a portal link first to enable file sharing.'
+                    : 'Add an email to this client to enable file sharing.'}
+                </p>
+              )}
+            </SheetHeader>
+
+            <input
+              ref={filesInputRef}
+              type="file"
+              className="hidden"
+              onChange={e => {
+                const file = e.target.files?.[0];
+                if (file) handleFileUpload(file);
+              }}
+            />
+
+            <div className="flex-1 overflow-y-auto px-6 py-4 space-y-2">
+              {loadingFiles ? (
+                <div className="flex items-center justify-center py-16">
+                  <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : clientFiles.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-16 text-center text-muted-foreground">
+                  <Paperclip className="w-8 h-8 mb-3 opacity-30" />
+                  <p className="text-sm font-medium">No files yet</p>
+                  <p className="text-xs mt-1">Upload files to share with this client.</p>
+                </div>
+              ) : (
+                clientFiles.map(f => (
+                  <div
+                    key={f.id}
+                    className="flex items-center gap-3 rounded-lg border p-3 bg-card hover:bg-muted/40 transition-colors"
+                  >
+                    <div className="w-9 h-9 rounded-md bg-primary/10 flex items-center justify-center shrink-0">
+                      <FileText className="w-4 h-4 text-primary" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{f.file_name}</p>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <span className="text-xs text-muted-foreground">
+                          {formatFileSize(f.file_size)}
+                          {f.file_size ? ' · ' : ''}
+                          {new Date(f.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                        </span>
+                        <Badge variant={f.uploaded_by === 'client' ? 'secondary' : 'outline'} className="text-[10px] px-1.5 py-0 h-4">
+                          {f.uploaded_by === 'client' ? 'From client' : 'Uploaded by you'}
+                        </Badge>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <Button variant="ghost" size="sm" asChild className="h-7 w-7 p-0">
+                        <a href={f.file_url} target="_blank" rel="noopener noreferrer" download={f.file_name}>
+                          <Download className="w-3.5 h-3.5" />
+                        </a>
+                      </Button>
+                      {f.uploaded_by === 'freelancer' && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 w-7 p-0 text-destructive hover:text-destructive"
+                          onClick={() => handleDeleteFile(f.id, f.storage_path)}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </SheetContent>
+        )}
+      </Sheet>
     </div>
   );
 }
