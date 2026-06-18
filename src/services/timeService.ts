@@ -22,6 +22,7 @@ async function resolveBusinessId(userId: string): Promise<string> {
 const SELECT = `
   id, business_id, user_id, project_id, client_id,
   date, hours, note,
+  source, external_id, synced_at,
   timer_started_at, timer_stopped_at,
   created_at, updated_at,
   project:projects(id, name),

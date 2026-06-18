@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
@@ -14,6 +15,7 @@ import { Switch } from '@/components/ui/switch';
 import {
   Plus, Trash2, Car, Users, Receipt, TrendingUp, TrendingDown,
   AlertTriangle, Clock, BarChart3, FileDown, DollarSign, ScanLine, Loader2,
+  Link2, Unplug, RefreshCw, X,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, TooltipProps } from 'recharts';
@@ -74,6 +76,16 @@ function fmt(n: number) {
 
 function today() {
   return new Date().toISOString().split('T')[0];
+}
+
+function fmtSyncAgo(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(diff / 60_000);
+  if (mins < 2) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.floor(hrs / 24)}d ago`;
 }
 
 // ─── Contractor summary (group by contractor_name for the current year) ───────
@@ -362,7 +374,14 @@ function buildMileageCsv(logs: import('@/types/types').MileageLog[]): string {
 export default function FinancesPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const activeTab = searchParams.get('tab') ?? 'overview';
-  const { business } = useBusiness();
+  const { business, refetch: refetchBusiness } = useBusiness();
+
+  // Toggl connection state — derived early so effects can reference them
+  const togglExtracted = (business?.extracted_data as Record<string, unknown> | null);
+  const togglWorkspaceName = togglExtracted?.toggl_workspace_name as string | undefined;
+  const togglLastSyncedAt = togglExtracted?.toggl_last_synced_at as string | undefined;
+  const togglUnmappedProjects = (togglExtracted?.toggl_unmapped_projects as string[] | undefined) ?? [];
+  const togglConnected = !!togglWorkspaceName;
 
   function setTab(tab: string) {
     setSearchParams({ tab });
@@ -440,6 +459,20 @@ export default function FinancesPage() {
   const [loadingTime, setLoadingTime] = useState(false);
   const [logTimeOpen, setLogTimeOpen] = useState(false);
   const [allProjects, setAllProjects] = useState<import('@/types/types').Project[]>([]);
+
+  // ── Toggl state ──
+  const [togglConnectOpen, setTogglConnectOpen] = useState(false);
+  const [togglTokenInput, setTogglTokenInput] = useState('');
+  const [togglConnecting, setTogglConnecting] = useState(false);
+  const [togglDisconnecting, setTogglDisconnecting] = useState(false);
+  const [togglMappingOpen, setTogglMappingOpen] = useState(false);
+  const [togglProjects, setTogglProjects] = useState<{ id: number; name: string }[]>([]);
+  // key = toggl project name, value = forgefly project id | '__skip__' | '' (unmapped)
+  const [togglMappings, setTogglMappings] = useState<Record<string, string>>({});
+  const [loadingMappings, setLoadingMappings] = useState(false);
+  const [savingMappings, setSavingMappings] = useState(false);
+  const [togglSyncing, setTogglSyncing] = useState(false);
+  const [togglBannerDismissed, setTogglBannerDismissed] = useState(false);
 
   // ── Export state ──
   const [accountantEmail, setAccountantEmail] = useState('');
@@ -571,6 +604,11 @@ export default function FinancesPage() {
     if (activeTab === 'time') loadTimeData();
   }, [activeTab, loadTimeData]);
 
+  // Re-show banner when unmapped list is refreshed after a sync
+  useEffect(() => {
+    if (togglUnmappedProjects.length > 0) setTogglBannerDismissed(false);
+  }, [togglUnmappedProjects.length]);
+
   // ── Export helpers ──
   function openPrintReport() {
     const year = selectedYear;
@@ -674,6 +712,134 @@ td{padding:5px 8px;border-bottom:1px solid #f3f4f6}
       toast.error('Failed to send to accountant');
     } finally {
       setSendingToAccountant(false);
+    }
+  }
+
+  // ── Toggl connect / disconnect ──
+  async function handleTogglConnect() {
+    const token = togglTokenInput.trim();
+    if (!token) return;
+    setTogglConnecting(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('connect-toggl', {
+        body: { action: 'connect', token },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      toast.success(`Connected to Toggl — ${data.workspace_name}`);
+      setTogglConnectOpen(false);
+      setTogglTokenInput('');
+      refetchBusiness();
+      if (data.toggl_projects?.length > 0) {
+        handleOpenMappings(data.toggl_projects);
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to connect Toggl');
+    } finally {
+      setTogglConnecting(false);
+    }
+  }
+
+  async function handleTogglDisconnect() {
+    setTogglDisconnecting(true);
+    try {
+      const { error } = await supabase.functions.invoke('connect-toggl', {
+        body: { action: 'disconnect' },
+      });
+      if (error) throw error;
+      toast.success('Toggl disconnected');
+      refetchBusiness();
+    } catch {
+      toast.error('Failed to disconnect Toggl');
+    } finally {
+      setTogglDisconnecting(false);
+    }
+  }
+
+  async function handleSyncNow() {
+    setTogglSyncing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('sync-toggl-entries');
+      if (error) throw error;
+      const n = (data as { synced?: number })?.synced ?? 0;
+      toast.success(n > 0 ? `Synced ${n} entr${n === 1 ? 'y' : 'ies'} from Toggl` : 'Toggl is up to date');
+      refetchBusiness();
+      loadTimeData();
+    } catch {
+      toast.error('Sync failed — check your Toggl connection');
+    } finally {
+      setTogglSyncing(false);
+    }
+  }
+
+  // ── Toggl project mapping ──
+  async function handleOpenMappings(initialProjects?: { id: number; name: string }[]) {
+    setTogglMappingOpen(true);
+    setLoadingMappings(true);
+    try {
+      let projects = initialProjects;
+      if (!projects) {
+        const { data, error } = await supabase.functions.invoke('connect-toggl', {
+          body: { action: 'fetch_projects' },
+        });
+        if (error) throw error;
+        projects = data?.toggl_projects ?? [];
+      }
+      setTogglProjects(projects ?? []);
+
+      // Load any existing mappings from DB
+      if (business) {
+        const { data: mapRows } = await supabase
+          .from('toggl_project_map')
+          .select('toggl_project_name, forgefly_project_id')
+          .eq('business_id', business.id);
+        if (mapRows) {
+          const map: Record<string, string> = {};
+          for (const row of mapRows) {
+            map[row.toggl_project_name] = row.forgefly_project_id ?? '__skip__';
+          }
+          setTogglMappings(map);
+        }
+      }
+
+      // Ensure Forgefly project list is loaded
+      if (allProjects.length === 0) {
+        const projs = await import('@/services/projectService').then(m => m.getProjects());
+        setAllProjects(projs);
+      }
+    } catch {
+      toast.error('Failed to load Toggl projects');
+      setTogglMappingOpen(false);
+    } finally {
+      setLoadingMappings(false);
+    }
+  }
+
+  async function handleSaveMappings() {
+    if (!business) return;
+    setSavingMappings(true);
+    try {
+      const rows = togglProjects
+        .filter(p => togglMappings[p.name] !== undefined && togglMappings[p.name] !== '')
+        .map(p => ({
+          business_id: business.id,
+          toggl_project_name: p.name,
+          forgefly_project_id: togglMappings[p.name] === '__skip__' ? null : togglMappings[p.name],
+        }));
+
+      if (rows.length > 0) {
+        const { error } = await supabase
+          .from('toggl_project_map')
+          .upsert(rows, { onConflict: 'business_id,toggl_project_name' });
+        if (error) throw error;
+      }
+
+      toast.success('Mappings saved');
+      setTogglMappingOpen(false);
+    } catch {
+      toast.error('Failed to save mappings');
+    } finally {
+      setSavingMappings(false);
     }
   }
 
@@ -1420,10 +1586,98 @@ td{padding:5px 8px;border-bottom:1px solid #f3f4f6}
               </Select>
               {loadingTime && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />}
             </div>
-            <Button size="sm" onClick={() => setLogTimeOpen(true)}>
-              <Plus className="w-4 h-4 mr-1.5" />Log time
-            </Button>
+            <div className="flex items-center gap-2">
+              {togglConnected ? (
+                <div className="flex items-center gap-2 flex-wrap justify-end">
+                  <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+                    {togglWorkspaceName}
+                    {togglLastSyncedAt && (
+                      <span className="text-xs text-muted-foreground/70">
+                        · {fmtSyncAgo(togglLastSyncedAt)}
+                      </span>
+                    )}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 gap-1.5 text-xs"
+                    disabled={togglSyncing}
+                    onClick={handleSyncNow}
+                  >
+                    <RefreshCw className={`w-3 h-3 ${togglSyncing ? 'animate-spin' : ''}`} />
+                    {togglSyncing ? 'Syncing…' : 'Sync now'}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 text-xs text-muted-foreground"
+                    onClick={() => handleOpenMappings()}
+                  >
+                    Manage mappings
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 gap-1.5 text-muted-foreground hover:text-destructive text-xs"
+                    disabled={togglDisconnecting}
+                    onClick={handleTogglDisconnect}
+                  >
+                    {togglDisconnecting
+                      ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      : <Unplug className="w-3.5 h-3.5" />
+                    }
+                    Disconnect
+                  </Button>
+                </div>
+              ) : (
+                <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setTogglConnectOpen(true)}>
+                  <Link2 className="w-3.5 h-3.5" />
+                  Connect Toggl
+                </Button>
+              )}
+              <Button size="sm" onClick={() => setLogTimeOpen(true)}>
+                <Plus className="w-4 h-4 mr-1.5" />Log time
+              </Button>
+            </div>
           </div>
+
+          {/* Unmapped Toggl projects banner */}
+          {togglConnected && togglUnmappedProjects.length > 0 && !togglBannerDismissed && (
+            <div className="flex items-start justify-between gap-3 rounded-lg border border-amber-500/30 bg-amber-500/8 px-4 py-3">
+              <div className="flex items-start gap-2.5 min-w-0">
+                <AlertTriangle className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-amber-700 dark:text-amber-400">
+                    {togglUnmappedProjects.length === 1
+                      ? '1 Toggl project needs mapping'
+                      : `${togglUnmappedProjects.length} Toggl projects need mapping`}
+                  </p>
+                  <p className="text-xs text-amber-600/80 dark:text-amber-500/80 mt-0.5 truncate">
+                    {togglUnmappedProjects.join(' · ')}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs border-amber-500/40 text-amber-700 hover:bg-amber-500/10 dark:text-amber-400"
+                  onClick={() => handleOpenMappings()}
+                >
+                  Map now
+                </Button>
+                <button
+                  type="button"
+                  className="text-amber-500/60 hover:text-amber-500 transition-colors"
+                  onClick={() => setTogglBannerDismissed(true)}
+                  aria-label="Dismiss"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Summary KPIs */}
           {(() => {
@@ -1506,9 +1760,17 @@ td{padding:5px 8px;border-bottom:1px solid #f3f4f6}
                       <p className="font-medium truncate">{e.project?.name ?? 'No project'}</p>
                       {e.note && <p className="text-xs text-muted-foreground truncate">{e.note}</p>}
                     </div>
-                    <div className="text-right shrink-0">
-                      <p className="tabular-nums font-medium">{e.hours.toFixed(2)} hrs</p>
-                      <p className="text-xs text-muted-foreground">{new Date(e.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</p>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {e.source === 'toggl' && (
+                        <span
+                          title="Synced from Toggl"
+                          className="w-1.5 h-1.5 rounded-full bg-orange-400 opacity-70 shrink-0"
+                        />
+                      )}
+                      <div className="text-right">
+                        <p className="tabular-nums font-medium">{e.hours.toFixed(2)} hrs</p>
+                        <p className="text-xs text-muted-foreground">{new Date(e.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</p>
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -1819,6 +2081,142 @@ td{padding:5px 8px;border-bottom:1px solid #f3f4f6}
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* ─── Toggl Project Mapping Sheet ──────────────────────────────────── */}
+      <Sheet open={togglMappingOpen} onOpenChange={open => { if (!open) setTogglMappingOpen(false); }}>
+        {togglMappingOpen && (
+          <SheetContent side="right" className="w-full sm:max-w-lg flex flex-col">
+            <SheetHeader>
+              <SheetTitle>Map Toggl projects</SheetTitle>
+              <SheetDescription>
+                Choose which Forgefly project each Toggl project maps to. Unmapped projects are skipped during sync.
+              </SheetDescription>
+            </SheetHeader>
+
+            <div className="flex-1 overflow-y-auto py-4">
+              {loadingMappings ? (
+                <div className="flex items-center justify-center py-16">
+                  <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+                </div>
+              ) : togglProjects.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-8 text-center">
+                  No active projects found in your Toggl workspace.
+                </p>
+              ) : (
+                <div className="space-y-1">
+                  {/* Column headers */}
+                  <div className="grid grid-cols-2 gap-3 px-1 pb-2 text-xs font-medium text-muted-foreground border-b">
+                    <span>Toggl project</span>
+                    <span>Maps to</span>
+                  </div>
+                  {togglProjects.map(tp => {
+                    const currentVal = togglMappings[tp.name] ?? '';
+                    const isMapped = currentVal !== '' && currentVal !== '__skip__';
+                    const isSkipped = currentVal === '__skip__';
+                    return (
+                      <div key={tp.id} className="grid grid-cols-2 gap-3 items-center py-2 px-1 rounded hover:bg-muted/40">
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium truncate">{tp.name}</p>
+                          {isSkipped && (
+                            <p className="text-xs text-muted-foreground">Won't import</p>
+                          )}
+                          {isMapped && (
+                            <p className="text-xs text-emerald-600">Mapped</p>
+                          )}
+                        </div>
+                        <Select
+                          value={currentVal}
+                          onValueChange={val => setTogglMappings(prev => ({ ...prev, [tp.name]: val }))}
+                        >
+                          <SelectTrigger className="h-8 text-sm">
+                            <SelectValue placeholder="Choose project…" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="__skip__">
+                              <span className="text-muted-foreground">Don't import</span>
+                            </SelectItem>
+                            <div className="h-px bg-border my-1" />
+                            {allProjects
+                              .filter(p => p.status !== 'archived')
+                              .map(p => (
+                                <SelectItem key={p.id} value={p.id}>
+                                  {p.name}
+                                </SelectItem>
+                              ))
+                            }
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            <SheetFooter className="pt-4 border-t">
+              <div className="flex items-center justify-between w-full gap-3">
+                <p className="text-xs text-muted-foreground">
+                  {Object.values(togglMappings).filter(v => v !== '' && v !== '__skip__').length} of {togglProjects.length} mapped
+                </p>
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" onClick={() => setTogglMappingOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button size="sm" onClick={handleSaveMappings} disabled={savingMappings || loadingMappings}>
+                    {savingMappings
+                      ? <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />Saving…</>
+                      : 'Save mappings'
+                    }
+                  </Button>
+                </div>
+              </div>
+            </SheetFooter>
+          </SheetContent>
+        )}
+      </Sheet>
+
+      {/* ─── Toggl Connect Dialog ─────────────────────────────────────────── */}
+      <Dialog open={togglConnectOpen} onOpenChange={open => {
+        setTogglConnectOpen(open);
+        if (!open) setTogglTokenInput('');
+      }}>
+        {togglConnectOpen && (
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle>Connect Toggl</DialogTitle>
+              <DialogDescription>
+                Paste your Toggl API token to sync time entries automatically. Find it in Toggl{' '}
+                <strong>Profile Settings → API Token</strong>.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-2">
+              <div className="space-y-1.5">
+                <Label>API Token</Label>
+                <Input
+                  type="password"
+                  placeholder="Your Toggl API token"
+                  value={togglTokenInput}
+                  onChange={e => setTogglTokenInput(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') handleTogglConnect(); }}
+                  autoFocus
+                />
+                <p className="text-xs text-muted-foreground">
+                  Your token is stored securely server-side and never exposed to the browser again after this step.
+                </p>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setTogglConnectOpen(false)}>Cancel</Button>
+              <Button onClick={handleTogglConnect} disabled={togglConnecting || !togglTokenInput.trim()}>
+                {togglConnecting
+                  ? <><Loader2 className="w-4 h-4 mr-1.5 animate-spin" />Connecting…</>
+                  : 'Connect'
+                }
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        )}
+      </Dialog>
 
       {/* ─── Add Expense Dialog ────────────────────────────────────────────── */}
       <Dialog open={expenseDialogOpen} onOpenChange={open => {

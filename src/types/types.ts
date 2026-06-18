@@ -94,6 +94,9 @@ export interface TimeEntry {
   date: string;
   hours: number;
   note: string | null;
+  source: 'native' | 'toggl';
+  external_id: string | null;
+  synced_at: string | null;
   timer_started_at: string | null;
   timer_stopped_at: string | null;
   created_at: string;
@@ -325,20 +328,6 @@ export interface MileageLog {
   deductible_amount: number;
   tax_year: number;
   created_at: string;
-}
-
-export interface TimeEntry {
-  id: string;
-  business_id: string;
-  project_id: string;
-  client_id: string | null;
-  entry_date: string;
-  hours: number;
-  note: string | null;
-  timer_started_at: string | null;
-  tax_year: number;
-  created_at: string;
-  project?: Project;
 }
 
 export interface ContractorPayment {
