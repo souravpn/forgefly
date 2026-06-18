@@ -64,6 +64,9 @@ const NUDGE_PROMPTS: Record<string, (ctx: Record<string, string>) => string> = {
     `Freelancer just completed project "${c.name}" which took ${c.hours} hours at an effective rate of $${c.rate}/hr. ` +
     `Their last 3 completed projects averaged ${c.avgHours} hours and $${c.avgRate}/hr. ` +
     `Write a 2-sentence max insight comparing this project to their baseline. Be specific about the numbers. No fluff.`,
+  contractor_threshold: (c) =>
+    `Contractor ${c.name} has been paid $${c.ytd} YTD in ${c.year}. They've crossed the $600 IRS threshold. ` +
+    `Write a short nudge to collect their W-9 and remind the freelancer they may need to file a 1099-NEC.`,
 }
 
 const FALLBACK_COPY: Record<string, (ctx: Record<string, string>) => { title: string; body: string }> = {
@@ -86,6 +89,10 @@ const FALLBACK_COPY: Record<string, (ctx: Record<string, string>) => { title: st
   project_complete_insight: (c) => ({
     title: `Project insight: ${c.name}`,
     body: `${c.hours} hrs · $${c.rate}/hr effective rate. Compare to your ${c.avgHours} hr avg.`,
+  }),
+  contractor_threshold: (c) => ({
+    title: `1099-NEC may be required: ${c.name}`,
+    body: `$${c.ytd} paid YTD in ${c.year}. Collect their W-9 if you haven't already. This is not tax advice.`,
   }),
 }
 
@@ -452,6 +459,61 @@ serve(async (req) => {
             action_url: '/dashboard/projects',
           })
           nudgesCreated.push(`project_complete_insight:${proj.id}`)
+        }
+      }
+
+      // ── 7. Contractor 1099-NEC threshold nudge ─────────────────────────────
+      if (isEnabled(settings, 'contractor_threshold')) {
+        const currentYear = now.getFullYear()
+
+        // Find contractors who just crossed $600 this year (threshold_flag = true, w9 not on file)
+        const { data: flaggedContractors } = await supabase
+          .from('contractor_payments')
+          .select('contractor_name, ytd_total, w9_on_file, tax_year')
+          .eq('business_id', bizId)
+          .eq('tax_year', currentYear)
+          .eq('threshold_flag', true)
+
+        if (flaggedContractors) {
+          // Deduplicate by contractor name — one row per contractor
+          const byName = new Map<string, { ytd: number; w9: boolean }>()
+          for (const row of flaggedContractors as { contractor_name: string; ytd_total: number; w9_on_file: boolean; tax_year: number }[]) {
+            const existing = byName.get(row.contractor_name)
+            if (!existing || row.ytd_total > existing.ytd) {
+              byName.set(row.contractor_name, { ytd: row.ytd_total, w9: row.w9_on_file })
+            }
+          }
+
+          for (const [name, { ytd, w9 }] of byName) {
+            // Skip if W-9 already on file
+            if (w9) continue
+
+            // Dedup: one nudge per contractor per year
+            const { count: alreadyFired } = await supabase
+              .from('nudges')
+              .select('id', { count: 'exact', head: true })
+              .eq('business_id', bizId)
+              .eq('type', 'contractor_threshold')
+              .ilike('title', `%${name}%`)
+              .gte('created_at', `${currentYear}-01-01`)
+
+            if ((alreadyFired ?? 0) > 0) continue
+
+            const copy = await generateNudgeCopy('contractor_threshold', {
+              name,
+              ytd: ytd.toFixed(2),
+              year: String(currentYear),
+            })
+
+            await supabase.from('nudges').insert({
+              user_id: userId, business_id: bizId,
+              type: 'contractor_threshold',
+              title: copy.title,
+              body: copy.body,
+              action_url: '/dashboard/finances?tab=expenses',
+            })
+            nudgesCreated.push(`contractor_threshold:${name}`)
+          }
         }
       }
     }

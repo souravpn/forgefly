@@ -46,39 +46,100 @@ interface NudgeItem {
 
 function getNudgeItems(map: ConfidenceMap): NudgeItem[] {
   const items: NudgeItem[] = [];
+
+  // pricing
   if (map.pricing === 'low') items.push({
     priority: 1,
     title: 'Add pricing to your services',
-    desc: "Your services were extracted but no prices were found. Clients can't request a proposal without knowing your rates.",
+    desc: "No prices were found. Clients can't request a proposal without knowing your rates.",
     action: 'Add prices',
     route: '/dashboard/services',
     color: 'warning',
   });
-  if (map.location === 'low') items.push({
+  else if (map.pricing === 'medium') items.push({
+    priority: 1,
+    title: 'Confirm your service pricing',
+    desc: 'We estimated your rates but aren\'t confident. Lock them in so proposals are accurate.',
+    action: 'Review pricing',
+    route: '/dashboard/services',
+    color: 'warning',
+  });
+
+  // services
+  if (map.services === 'low') items.push({
     priority: 2,
+    title: 'Describe what you offer',
+    desc: 'Your services section is incomplete. Tell us what you do so clients know what to ask for.',
+    action: 'Add services',
+    route: '/dashboard/services',
+    color: 'warning',
+  });
+  else if (map.services === 'medium') items.push({
+    priority: 2,
+    title: 'Sharpen your service descriptions',
+    desc: 'We pulled in some services, but more detail helps Forgefly write better proposals for you.',
+    action: 'Refine services',
+    route: '/dashboard/services',
+    color: 'info',
+  });
+
+  // location
+  if (map.location === 'low') items.push({
+    priority: 3,
     title: 'Tell us your location',
-    desc: 'We estimated "Remote" — your public portfolio will be more trustworthy with a real city or region.',
+    desc: 'We defaulted to "Remote" — a real city or region makes your portfolio more trustworthy.',
     action: 'Add location',
     route: '/dashboard/settings',
     color: 'warning',
   });
-  if (map.brand === 'low') items.push({
+  else if (map.location === 'medium') items.push({
     priority: 3,
-    title: 'Refine your brand colors',
-    desc: 'We generated a color palette — but if you have brand colors in mind, update them in Brand Kit.',
-    action: 'Open Brand Kit',
-    route: '/dashboard/brand',
+    title: 'Confirm your location',
+    desc: 'We estimated a location — verify it\'s correct in Settings.',
+    action: 'Check location',
+    route: '/dashboard/settings',
     color: 'info',
   });
+
+  // niche
   if (map.niche === 'low') items.push({
     priority: 4,
     title: 'Describe your ideal client',
-    desc: 'Knowing your niche helps Forgefly generate better proposals and nudges.',
+    desc: 'Knowing your niche helps Forgefly write better proposals and generate smarter nudges.',
     action: 'Refine in command bar',
     isCommandBar: true,
     color: 'info',
   });
-  return items.slice(0, 3);
+  else if (map.niche === 'medium') items.push({
+    priority: 4,
+    title: 'Sharpen your ideal client profile',
+    desc: 'We have a rough sense of who you work with. More specifics unlock better AI suggestions.',
+    action: 'Refine in command bar',
+    isCommandBar: true,
+    color: 'info',
+  });
+
+  // brand
+  if (map.brand === 'low') items.push({
+    priority: 5,
+    title: 'Set up your brand kit',
+    desc: 'No brand colors found. Add them in Brand Kit so your portal and proposals look on-brand.',
+    action: 'Open Brand Kit',
+    route: '/dashboard/brand',
+    color: 'info',
+  });
+  else if (map.brand === 'medium') items.push({
+    priority: 5,
+    title: 'Refine your brand colors',
+    desc: 'We generated a palette — if you have your own brand colors, update them in Brand Kit.',
+    action: 'Open Brand Kit',
+    route: '/dashboard/brand',
+    color: 'info',
+  });
+
+  return items
+    .sort((a, b) => a.priority - b.priority)
+    .slice(0, 3);
 }
 import {
   LineChart,
