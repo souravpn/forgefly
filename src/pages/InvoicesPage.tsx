@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -17,6 +18,7 @@ import { getClients } from '@/services/clientService';
 import { getProjects } from '@/services/projectService';
 
 export default function InvoicesPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -38,6 +40,14 @@ export default function InvoicesPage() {
   });
   const [submitting, setSubmitting] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Auto-open create modal when navigated with ?action=new
+  useEffect(() => {
+    if (searchParams.get('action') === 'new') {
+      setIsCreateModalOpen(true);
+      setSearchParams({}, { replace: true });
+    }
+  }, []);
 
   useEffect(() => {
     loadData();

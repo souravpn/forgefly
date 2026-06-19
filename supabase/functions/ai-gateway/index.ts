@@ -374,25 +374,37 @@ async function handleExtract(
 
   await logUsage(supabase, userId, business_id ?? null, HAIKU, 'classifier', 150, 80);
 
-  const { prompt_type, complexity, token_estimate, sections_needed } = classification;
+  let { prompt_type, complexity, token_estimate, sections_needed } = classification;
   const isDiff = prompt_type === 'additive' || prompt_type === 'revision';
 
-  // Guard: classifier found no business sections — prompt is not a business update
+  // Guard: classifier found no business sections — prompt is not a business update.
+  // Only fire when there IS prior business context (business_id or non-empty current_data).
+  // Fresh seed calls with no context should always extract — never return not_applicable.
+  const hasPriorContext = !!(
+    business_id ||
+    (current_data && Object.keys(current_data as object).length > 0)
+  );
+
   if (sections_needed.length === 0 && !isDiff) {
-    return new Response(
-      JSON.stringify({
-        extracted_data: current_data ?? {},
-        is_diff: false,
-        prompt_type: 'scoped',
-        sections_updated: [],
-        classification,
-        confidence_map: confidenceMap,
-        completeness_score: completenessScore,
-        not_applicable: true,
-        message: "That doesn't look like a business update. Try asking the AI Copilot instead.",
-      }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
-    );
+    if (hasPriorContext) {
+      return new Response(
+        JSON.stringify({
+          extracted_data: current_data ?? {},
+          is_diff: false,
+          prompt_type: 'scoped',
+          sections_updated: [],
+          classification,
+          confidence_map: confidenceMap,
+          completeness_score: completenessScore,
+          not_applicable: true,
+          message: "That doesn't look like a business update. Try asking the AI Copilot instead.",
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
+    }
+    // No prior context — treat as a fresh seed and extract everything
+    sections_needed = [...STRUCTURAL_SECTIONS, ...CREATIVE_SECTIONS];
+    prompt_type = 'seed';
   }
 
   // Step 2: Tier selection
@@ -941,8 +953,53 @@ serve(async (req) => {
       return await handleChat(body, supabase, userId);
     }
 
+    if (mode === 'nudge') {
+      const ctx = (body as { context?: Record<string, unknown> }).context ?? {};
+      const system = `You are a business coach for a freelancer. Given their current business state, respond with ONE specific, actionable nudge they should act on right now. Be direct, brief, and encouraging. Respond with valid JSON only — no markdown, no prose outside the JSON.
+
+Priority order for nudge selection:
+1. Tax urgency (large received amount, no set-aside reminder)
+2. Overdue client action (overdue invoice or stalled viewed proposal)
+3. Pipeline stall (no new leads or proposals in 14+ days)
+4. Financial insight (positive trend or milestone)
+5. Visibility (portfolio not yet shared)
+
+Return this shape exactly:
+{
+  "title": "action-oriented title, max 8 words",
+  "description": "one sentence explaining why this matters right now",
+  "action": "button label max 3 words or null",
+  "route": "/dashboard/... or null"
+}`;
+
+      const contextLines = Object.entries(ctx)
+        .map(([k, v]) => `${k}: ${v}`)
+        .join('\n');
+
+      const res = await callAnthropic({
+        model: HAIKU,
+        max_tokens: 200,
+        temperature: 0.4,
+        system,
+        messages: [{ role: 'user', content: `Business context:\n${contextLines}` }],
+      });
+
+      const raw = res.content[0]?.text?.trim() ?? '{}';
+      let nudge: Record<string, unknown> = {};
+      try {
+        const jsonMatch = raw.match(/\{[\s\S]*\}/);
+        nudge = jsonMatch ? JSON.parse(jsonMatch[0]) : {};
+      } catch { /* return empty */ }
+
+      await logUsage(supabase, userId, null, HAIKU, 'nudge', res.usage.input_tokens, res.usage.output_tokens);
+
+      return new Response(JSON.stringify({ nudge }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     return new Response(
-      JSON.stringify({ error: 'mode must be "extract", "classify", "generate_proposal", or "chat"' }),
+      JSON.stringify({ error: 'mode must be "extract", "classify", "generate_proposal", "chat", or "nudge"' }),
       { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
     );
   } catch (error) {

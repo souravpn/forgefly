@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -26,6 +27,7 @@ import {
 
 export default function ClientsPage() {
   const { isAgency, profile, user } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -57,6 +59,14 @@ export default function ClientsPage() {
   const [loadingFiles, setLoadingFiles] = useState(false);
   const [uploadingFile, setUploadingFile] = useState(false);
   const filesInputRef = useRef<HTMLInputElement>(null);
+
+  // Auto-open create modal when navigated with ?action=new
+  useEffect(() => {
+    if (searchParams.get('action') === 'new') {
+      setIsCreateModalOpen(true);
+      setSearchParams({}, { replace: true });
+    }
+  }, []);
 
   useEffect(() => {
     loadClients();

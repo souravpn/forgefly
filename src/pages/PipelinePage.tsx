@@ -24,7 +24,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { Plus, Edit, Trash2, DollarSign, Briefcase, Sparkles, Link2, ExternalLink, ChevronRight } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/db/supabase';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useBusiness } from '@/contexts/CurrentBusinessContext';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -390,6 +390,7 @@ function LeadModal({
 
 export default function PipelinePage() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { business, extractedData, isLoading: bizLoading } = useBusiness();
 
   const [leads, setLeads] = useState<Lead[]>([]);
@@ -404,6 +405,14 @@ export default function PipelinePage() {
   }>({ open: false, initial: EMPTY_FORM, editId: null });
 
   const [deleteTarget, setDeleteTarget] = useState<Lead | null>(null);
+
+  // Auto-open "new lead" modal when navigated with ?action=new
+  useEffect(() => {
+    if (searchParams.get('action') === 'new') {
+      setLeadModal({ open: true, initial: EMPTY_FORM, editId: null });
+      setSearchParams({}, { replace: true });
+    }
+  }, []);
 
   // ── Load from pipeline_leads table, seed from extracted_data if empty ────
 
@@ -577,6 +586,10 @@ export default function PipelinePage() {
           lifecycleStatus: 'prospect', portalToken,
         }]);
         toast.success('Lead added');
+        // Milestone beacon: fire-and-forget
+        if (!business.onboarding_milestones?.prospect_added) {
+          supabase.functions.invoke('mark-milestone', { body: { milestone: 'prospect_added' } });
+        }
       }
       setLeadModal({ open: false, initial: EMPTY_FORM, editId: null });
     } catch {

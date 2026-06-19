@@ -23,7 +23,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/db/supabase';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useBusiness } from '@/contexts/CurrentBusinessContext';
 import type { Package } from '@/types/types';
 import {
@@ -251,6 +251,7 @@ function ServiceModal({
 
 export default function PackagesPage() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { business, extractedData, isLoading: bizLoading } = useBusiness();
 
   // Services from the services table (migrated from extracted_data)
@@ -308,6 +309,25 @@ export default function PackagesPage() {
   }
 
   // ── Load services from table, seed from extracted_data if empty ───────────
+
+  // Auto-open create modal when navigated with ?action=new
+  useEffect(() => {
+    if (searchParams.get('action') === 'new') {
+      setServiceModal({ open: true, initial: EMPTY_FORM, editId: null });
+      setSearchParams({}, { replace: true });
+    }
+  }, []);
+
+  // Dwell beacon: mark services_reviewed after 10s on page
+  useEffect(() => {
+    if (!business) return;
+    const milestones = business.onboarding_milestones;
+    if (milestones?.services_reviewed) return;
+    const t = setTimeout(() => {
+      supabase.functions.invoke('mark-milestone', { body: { milestone: 'services_reviewed' } });
+    }, 10_000);
+    return () => clearTimeout(t);
+  }, [business]);
 
   useEffect(() => {
     if (!business || svcsLoaded) return;

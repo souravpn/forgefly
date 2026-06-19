@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -168,6 +169,7 @@ function DroppableColumn({ id, children }: { id: string; children: React.ReactNo
 
 export default function ProjectsPage() {
   const { business } = useBusiness();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [projects, setProjects] = useState<Project[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
@@ -198,6 +200,14 @@ export default function ProjectsPage() {
       },
     })
   );
+
+  // Auto-open create modal when navigated with ?action=new
+  useEffect(() => {
+    if (searchParams.get('action') === 'new') {
+      setIsCreateModalOpen(true);
+      setSearchParams({}, { replace: true });
+    }
+  }, []);
 
   useEffect(() => {
     loadData();

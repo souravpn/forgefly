@@ -272,6 +272,25 @@ function LivePreview({
   );
 }
 
+// ─── Copy link button ─────────────────────────────────────────────────────────
+
+function CopyLinkButton({ url, onCopied }: { url: string; onCopied?: () => void }) {
+  const [copied, setCopied] = useState(false);
+  function handleClick() {
+    navigator.clipboard.writeText(url).then(() => {
+      setCopied(true);
+      onCopied?.();
+      setTimeout(() => setCopied(false), 1500);
+    });
+  }
+  return (
+    <Button size="sm" variant="outline" className="shrink-0 text-xs h-7 px-2.5 gap-1" onClick={handleClick}>
+      {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+      {copied ? 'Copied' : 'Copy'}
+    </Button>
+  );
+}
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function BrandKitPage() {
@@ -823,7 +842,14 @@ export default function BrandKitPage() {
                     </Button>
                   </div>
                 </div>
-                <p className="text-[11px] text-muted-foreground mt-4 font-mono">{`${window.location.origin}/p/${portfolioSlug}`}</p>
+                <div className="flex items-center gap-2 mt-4">
+                  <p className="text-[11px] text-muted-foreground font-mono flex-1 truncate">{`${window.location.origin}/p/${portfolioSlug}`}</p>
+                  <CopyLinkButton url={`${window.location.origin}/p/${portfolioSlug}`} onCopied={() => {
+                    if (!business?.onboarding_milestones?.portfolio_shared) {
+                      supabase.functions.invoke('mark-milestone', { body: { milestone: 'portfolio_shared' } });
+                    }
+                  }} />
+                </div>
               </CardContent>
             </Card>
           )}

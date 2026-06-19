@@ -23,7 +23,7 @@ import {
   XCircle,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import {
   AlertDialog,
@@ -163,6 +163,7 @@ export default function ProposalsPage() {
   const { business } = useBusiness();
   const { profile } = useAuth();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const [proposals, setProposals] = useState<Proposal[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
@@ -223,6 +224,14 @@ export default function ProposalsPage() {
   const [sendingFollowUp, setSendingFollowUp] = useState(false);
 
   // ── Load ───────────────────────────────────────────────────────────────────
+
+  // Auto-open new proposal wizard when navigated with ?action=new
+  useEffect(() => {
+    if (searchParams.get('action') === 'new') {
+      setWizardOpen(true);
+      setSearchParams({}, { replace: true });
+    }
+  }, []);
 
   useEffect(() => {
     if (!business) return;
@@ -716,6 +725,10 @@ export default function ProposalsPage() {
 
       const isResend = proposal.status !== 'draft';
       toast.success(isResend ? 'Proposal resent!' : 'Proposal sent!');
+      // Milestone beacon: fire-and-forget
+      if (!isResend && business && !business.onboarding_milestones?.proposal_sent) {
+        supabase.functions.invoke('mark-milestone', { body: { milestone: 'proposal_sent' } });
+      }
       setSendDialog(null);
       await loadProposals();
     } catch (err) {

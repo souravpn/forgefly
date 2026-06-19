@@ -3,6 +3,14 @@ import { useAuth } from '@/contexts/AuthContext'
 import { supabase } from '@/db/supabase'
 import type { ExtractedData } from '@/pages/GeneratedPortalPage'
 
+export interface OnboardingMilestones {
+  business_created: boolean
+  services_reviewed: boolean
+  portfolio_shared: boolean
+  prospect_added: boolean
+  proposal_sent: boolean
+}
+
 export interface Business {
   id: string
   user_id: string
@@ -16,6 +24,8 @@ export interface Business {
   seed_prompt: string | null
   confidence_map: Record<string, string> | null
   completeness_score: number | null
+  onboarding_seen: boolean | null
+  onboarding_milestones: OnboardingMilestones | null
   status: 'active' | 'archived'
   created_at: string
   updated_at: string
