@@ -774,3 +774,104 @@ export function getAccountantExportEmailTemplate(params: {
   return { subject, html }
 }
 
+export function getReviewRequestEmailTemplate(data: {
+  clientName: string;
+  businessName: string;
+  primaryColor: string;
+  reviewUrl: string;
+  replyTo: string;
+}): { subject: string; html: string } {
+  const subject = `How did ${data.businessName} do?`;
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${subject}</title>
+</head>
+<body style="margin:0;padding:0;background:#f9fafb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+  <div style="max-width:560px;margin:0 auto;padding:40px 16px;">
+    <div style="background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
+      <!-- Header -->
+      <div style="padding:32px 32px 24px;text-align:center;border-bottom:1px solid #f0f0f0;">
+        <div style="width:48px;height:48px;border-radius:12px;background:${data.primaryColor};margin:0 auto 12px;display:flex;align-items:center;justify-content:center;">
+          <span style="color:#fff;font-size:20px;font-weight:700;line-height:48px;display:block;">★</span>
+        </div>
+        <p style="margin:0;font-size:14px;color:#6b7280;">A quick question from</p>
+        <h1 style="margin:4px 0 0;font-size:22px;font-weight:700;color:#111827;">${data.businessName}</h1>
+      </div>
+      <!-- Body -->
+      <div style="padding:32px;">
+        <p style="margin:0 0 8px;font-size:16px;color:#374151;">Hi ${data.clientName},</p>
+        <p style="margin:0 0 24px;font-size:16px;line-height:1.6;color:#6b7280;">
+          Thank you for working with us. We'd love to hear how your experience went — it only takes 30 seconds.
+        </p>
+        <div style="text-align:center;margin:32px 0;">
+          <a href="${data.reviewUrl}"
+             style="display:inline-block;padding:14px 36px;background:${data.primaryColor};color:#fff;text-decoration:none;border-radius:10px;font-size:16px;font-weight:600;">
+            Leave a review
+          </a>
+        </div>
+        <p style="margin:24px 0 0;font-size:13px;color:#9ca3af;text-align:center;">
+          This link expires in 30 days. You can reply to this email to reach ${data.businessName} directly.
+        </p>
+      </div>
+      <!-- Footer -->
+      <div style="padding:20px 32px;border-top:1px solid #f0f0f0;text-align:center;">
+        <p style="margin:0;font-size:12px;color:#9ca3af;">
+          Powered by <a href="https://forgefly.io" style="color:${data.primaryColor};text-decoration:none;">Forgefly</a>
+        </p>
+      </div>
+    </div>
+  </div>
+</body>
+</html>`;
+  return { subject, html };
+}
+
+export function getReviewReceivedEmailTemplate(data: {
+  freelancerName: string;
+  clientName: string;
+  rating: number;
+  comment?: string | null;
+  dashboardUrl: string;
+}): { subject: string; html: string } {
+  const stars = '★'.repeat(data.rating) + '☆'.repeat(5 - data.rating);
+  const subject = `${stars} ${data.clientName} left you a ${data.rating}-star review`;
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${subject}</title>
+</head>
+<body style="margin:0;padding:0;background:#0A1428;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+  <div style="max-width:560px;margin:0 auto;padding:40px 16px;">
+    <div style="background:#111e35;border-radius:16px;overflow:hidden;border:1px solid rgba(16,185,129,0.2);">
+      <div style="padding:32px;border-bottom:1px solid rgba(255,255,255,0.06);">
+        <p style="margin:0 0 4px;font-size:13px;color:#10B981;text-transform:uppercase;letter-spacing:0.5px;">New review</p>
+        <h1 style="margin:0;font-size:22px;font-weight:700;color:#fff;">${data.clientName} rated you ${data.rating} star${data.rating !== 1 ? 's' : ''}</h1>
+        <p style="margin:8px 0 0;font-size:24px;letter-spacing:2px;color:#F59E0B;">${stars}</p>
+      </div>
+      <div style="padding:32px;">
+        ${data.comment ? `<div style="background:rgba(255,255,255,0.04);border-radius:10px;padding:16px 20px;margin-bottom:24px;">
+          <p style="margin:0;font-size:15px;line-height:1.6;color:#d1d5db;">"${data.comment}"</p>
+        </div>` : ''}
+        <p style="margin:0 0 24px;font-size:15px;color:#9ca3af;">
+          Hi ${data.freelancerName}, you can reply to this review from your dashboard.
+        </p>
+        <a href="${data.dashboardUrl}"
+           style="display:inline-block;padding:12px 28px;background:linear-gradient(135deg,#10B981,#059669);color:#fff;text-decoration:none;border-radius:8px;font-size:15px;font-weight:600;">
+          View in dashboard
+        </a>
+      </div>
+      <div style="padding:20px 32px;border-top:1px solid rgba(255,255,255,0.06);text-align:center;">
+        <p style="margin:0;font-size:12px;color:#4b5563;">Forgefly · <a href="https://forgefly.io" style="color:#10B981;text-decoration:none;">forgefly.io</a></p>
+      </div>
+    </div>
+  </div>
+</body>
+</html>`;
+  return { subject, html };
+}
+

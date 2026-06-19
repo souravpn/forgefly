@@ -25,6 +25,8 @@ import RequestsPage from './pages/RequestsPage';
 import VisibilityPage from './pages/VisibilityPage';
 import OutreachKitPage from './pages/OutreachKitPage';
 import MessagesPage from './pages/MessagesPage';
+import ReviewSubmitPage from './pages/ReviewSubmitPage';
+import ReviewsPage from './pages/ReviewsPage';
 
 export interface RouteConfig {
   name: string;
@@ -77,6 +79,12 @@ export const routes: RouteConfig[] = [
     name: 'Public Portfolio',
     path: '/p/:slug',
     element: <PublicPortfolioPage />,
+    public: true,
+  },
+  {
+    name: 'Review Submit',
+    path: '/review/:token',
+    element: <ReviewSubmitPage />,
     public: true,
   },
 
@@ -165,6 +173,11 @@ export const routes: RouteConfig[] = [
     name: 'Outreach Kit',
     path: '/dashboard/outreach',
     element: <OutreachKitPage />,
+  },
+  {
+    name: 'Reviews',
+    path: '/dashboard/reviews',
+    element: <ReviewsPage />,
   },
   {
     name: 'Messages',

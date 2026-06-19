@@ -500,7 +500,9 @@ function ContactHub({
   const [savingProfile, setSavingProfile] = useState(false);
   const [theme, setTheme] = useState<"dark" | "light">(() => {
     try {
-      return (localStorage.getItem("portal-theme") as "dark" | "light") || "dark";
+      return (
+        (localStorage.getItem("portal-theme") as "dark" | "light") || "dark"
+      );
     } catch {
       return "dark";
     }
@@ -509,30 +511,33 @@ function ContactHub({
   const toggleTheme = () => {
     const next = theme === "dark" ? "light" : "dark";
     setTheme(next);
-    try { localStorage.setItem("portal-theme", next); } catch {}
+    try {
+      localStorage.setItem("portal-theme", next);
+    } catch {}
   };
 
   const isDark = theme === "dark";
   const portalVars = {
-    "--p-bg":      isDark ? "#111111" : "#f8fafc",
-    "--p-card":    isDark ? "#1a1a1a" : "#ffffff",
-    "--p-chip":    isDark ? "var(--p-chip)" : "#f1f5f9",
-    "--p-input":   isDark ? "#242424" : "#f1f5f9",
-    "--p-msg":     isDark ? "#1e1e1e" : "#f1f5f9",
-    "--p-border":  isDark ? "var(--p-chip)" : "#e2e8f0",
-    "--p-iborder": isDark ? "#333"    : "#e2e8f0",
-    "--p-text":    isDark ? "#e5e5e5" : "#0f172a",
-    "--p-text2":   isDark ? "#888"    : "#64748b",
-    "--p-text3":   isDark ? "#666"    : "#94a3b8",
-    "--p-text4":   isDark ? "#555"    : "#94a3b8",
-    "--p-text5":   isDark ? "#aaa"    : "#475569",
-    "--p-text6":   isDark ? "var(--p-text6)"    : "#334155",
-    "--p-text7":   isDark ? "#777"    : "#475569",
-    "--p-receipt": isDark ? "#444"    : "#94a3b8",
+    "--p-bg": isDark ? "#111111" : "#f8fafc",
+    "--p-card": isDark ? "#1a1a1a" : "#ffffff",
+    "--p-chip": isDark ? "var(--p-chip)" : "#f1f5f9",
+    "--p-input": isDark ? "#242424" : "#f1f5f9",
+    "--p-msg": isDark ? "#1e1e1e" : "#f1f5f9",
+    "--p-border": isDark ? "var(--p-chip)" : "#e2e8f0",
+    "--p-iborder": isDark ? "#333" : "#e2e8f0",
+    "--p-text": isDark ? "#e5e5e5" : "#0f172a",
+    "--p-text2": isDark ? "#888" : "#64748b",
+    "--p-text3": isDark ? "#666" : "#94a3b8",
+    "--p-text4": isDark ? "#555" : "#94a3b8",
+    "--p-text5": isDark ? "#aaa" : "#475569",
+    "--p-text6": isDark ? "var(--p-text6)" : "#334155",
+    "--p-text7": isDark ? "#777" : "#475569",
+    "--p-receipt": isDark ? "#444" : "#94a3b8",
   } as React.CSSProperties;
 
   const accent = business.extracted_data?.brand?.primaryColor || "#10b981";
-  const businessName = business.name || business.extracted_data?.identity?.name || "Business";
+  const businessName =
+    business.name || business.extracted_data?.identity?.name || "Business";
 
   // Get current auth user
   useEffect(() => {
@@ -827,18 +832,22 @@ function ContactHub({
       const arrayBuffer = await file.arrayBuffer();
       const uint8 = new Uint8Array(arrayBuffer);
       let binary = "";
-      for (let i = 0; i < uint8.length; i++) binary += String.fromCharCode(uint8[i]);
+      for (let i = 0; i < uint8.length; i++)
+        binary += String.fromCharCode(uint8[i]);
       const fileBase64 = btoa(binary);
 
-      const { data, error } = await supabase.functions.invoke("upload-portal-file", {
-        body: {
-          portal_token: token,
-          fileBase64,
-          fileName: file.name,
-          mimeType: file.type || "application/octet-stream",
-          fileSize: file.size,
+      const { data, error } = await supabase.functions.invoke(
+        "upload-portal-file",
+        {
+          body: {
+            portal_token: token,
+            fileBase64,
+            fileName: file.name,
+            mimeType: file.type || "application/octet-stream",
+            fileSize: file.size,
+          },
         },
-      });
+      );
 
       if (error) throw error;
       setPortalFiles((prev) => [data as PortalFileItem, ...prev]);
@@ -868,7 +877,11 @@ function ContactHub({
   return (
     <div
       className="portal-root min-h-screen flex flex-col"
-      style={{ ...portalVars, background: "var(--p-bg)", color: "var(--p-text)" }}
+      style={{
+        ...portalVars,
+        background: "var(--p-bg)",
+        color: "var(--p-text)",
+      }}
     >
       {/* Theme: remap text-white to CSS variable so light mode works */}
       <style>{`.portal-root .text-white { color: var(--p-text) }`}</style>
@@ -892,7 +905,10 @@ function ContactHub({
               {businessName}
             </div>
             {contact.company && (
-              <div className="text-xs truncate" style={{ color: "var(--p-text2)" }}>
+              <div
+                className="text-xs truncate"
+                style={{ color: "var(--p-text2)" }}
+              >
                 {contact.company}
               </div>
             )}
@@ -965,16 +981,24 @@ function ContactHub({
                     </div>
                   </div>
                 </DropdownMenuLabel>
-                <DropdownMenuSeparator style={{ background: isDark ? "#2a2a2a" : "#e2e8f0" }} />
+                <DropdownMenuSeparator
+                  style={{ background: isDark ? "#2a2a2a" : "#e2e8f0" }}
+                />
                 <DropdownMenuItem
                   onClick={toggleTheme}
                   className="cursor-pointer gap-2 focus:bg-black/5"
                   style={{ color: isDark ? "#e5e5e5" : "#0f172a" }}
                 >
-                  {isDark ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
+                  {isDark ? (
+                    <Sun className="w-3.5 h-3.5" />
+                  ) : (
+                    <Moon className="w-3.5 h-3.5" />
+                  )}
                   {isDark ? "Light mode" : "Dark mode"}
                 </DropdownMenuItem>
-                <DropdownMenuSeparator style={{ background: isDark ? "#2a2a2a" : "#e2e8f0" }} />
+                <DropdownMenuSeparator
+                  style={{ background: isDark ? "#2a2a2a" : "#e2e8f0" }}
+                />
                 <DropdownMenuItem
                   onClick={() => supabase.auth.signOut()}
                   className="cursor-pointer gap-2 focus:bg-black/5"
@@ -1015,7 +1039,10 @@ function ContactHub({
         {/* Overview */}
         {tab === "overview" && (
           <div className="space-y-4">
-            <div className="rounded-2xl p-5" style={{ background: "var(--p-card)" }}>
+            <div
+              className="rounded-2xl p-5"
+              style={{ background: "var(--p-card)" }}
+            >
               <div className="text-lg font-semibold text-white mb-1">
                 Welcome Back,
               </div>
@@ -1113,7 +1140,10 @@ function ContactHub({
                 />
               ))
             ) : proposals.length === 0 ? (
-              <div className="text-center py-16" style={{ color: "var(--p-text4)" }}>
+              <div
+                className="text-center py-16"
+                style={{ color: "var(--p-text4)" }}
+              >
                 <FileText className="w-8 h-8 mx-auto mb-3 opacity-40" />
                 <p className="text-sm">No proposals yet.</p>
               </div>
@@ -1130,7 +1160,10 @@ function ContactHub({
                       <div className="font-medium text-white truncate">
                         {p.title || "Proposal"}
                       </div>
-                      <div className="text-xs mt-0.5" style={{ color: "var(--p-text3)" }}>
+                      <div
+                        className="text-xs mt-0.5"
+                        style={{ color: "var(--p-text3)" }}
+                      >
                         {new Date(p.created_at).toLocaleDateString("en-US", {
                           month: "short",
                           day: "numeric",
@@ -1174,7 +1207,10 @@ function ContactHub({
                 style={{ background: "var(--p-card)" }}
               />
             ) : invoices.length === 0 ? (
-              <div className="text-center py-16" style={{ color: "var(--p-text4)" }}>
+              <div
+                className="text-center py-16"
+                style={{ color: "var(--p-text4)" }}
+              >
                 <Receipt className="w-8 h-8 mx-auto mb-3 opacity-40" />
                 <p className="text-sm">No invoices yet.</p>
               </div>
@@ -1206,7 +1242,10 @@ function ContactHub({
                           inv.payment_status === "paid"
                             ? `rgba(${hexToRgb(accent)},0.12)`
                             : "var(--p-chip)",
-                        color: inv.payment_status === "paid" ? accent : "var(--p-text2)",
+                        color:
+                          inv.payment_status === "paid"
+                            ? accent
+                            : "var(--p-text2)",
                       }}
                     >
                       {inv.payment_status === "paid"
@@ -1223,7 +1262,10 @@ function ContactHub({
                     ${Number(inv.amount).toLocaleString()}
                   </div>
                   {inv.due_date && (
-                    <div className="text-xs mb-3" style={{ color: "var(--p-text3)" }}>
+                    <div
+                      className="text-xs mb-3"
+                      style={{ color: "var(--p-text3)" }}
+                    >
                       Due{" "}
                       {new Date(inv.due_date).toLocaleDateString("en-US", {
                         month: "long",
@@ -1259,14 +1301,20 @@ function ContactHub({
         {tab === "projects" && (
           <div className="space-y-3">
             {projects.length === 0 ? (
-              <div className="text-center py-16" style={{ color: "var(--p-text4)" }}>
+              <div
+                className="text-center py-16"
+                style={{ color: "var(--p-text4)" }}
+              >
                 <Layers className="w-8 h-8 mx-auto mb-3 opacity-40" />
                 <p className="text-sm">No project updates yet.</p>
               </div>
             ) : (
               projects.map((p) => {
                 const statusConfig = {
-                  not_started: { label: "Not started", color: "var(--p-text4)" },
+                  not_started: {
+                    label: "Not started",
+                    color: "var(--p-text4)",
+                  },
                   in_progress: { label: "In progress", color: accent },
                   review: { label: "In review", color: "#f59e0b" },
                   complete: { label: "Complete", color: "#10b981" },
@@ -1311,13 +1359,19 @@ function ContactHub({
                     {p.client_visible_note && (
                       <p
                         className="text-xs mt-3 pt-3 border-t leading-relaxed"
-                        style={{ color: "var(--p-text5)", borderColor: "var(--p-chip)" }}
+                        style={{
+                          color: "var(--p-text5)",
+                          borderColor: "var(--p-chip)",
+                        }}
                       >
                         {p.client_visible_note}
                       </p>
                     )}
                     {p.deadline && (
-                      <p className="text-xs mt-2" style={{ color: "var(--p-text3)" }}>
+                      <p
+                        className="text-xs mt-2"
+                        style={{ color: "var(--p-text3)" }}
+                      >
                         Due{" "}
                         {new Date(p.deadline).toLocaleDateString("en-US", {
                           month: "short",
@@ -1341,7 +1395,10 @@ function ContactHub({
           >
             <div className="flex-1 overflow-y-auto space-y-3 pb-4 pr-1">
               {messages.length === 0 ? (
-                <div className="text-center py-16" style={{ color: "var(--p-text4)" }}>
+                <div
+                  className="text-center py-16"
+                  style={{ color: "var(--p-text4)" }}
+                >
                   <MessageSquare className="w-8 h-8 mx-auto mb-3 opacity-40" />
                   <p className="text-sm">
                     No messages yet. Start the conversation.
@@ -1389,7 +1446,9 @@ function ContactHub({
                     {m.sender_role === "client" && (
                       <span
                         className="text-[10px] mt-0.5 px-1"
-                        style={{ color: m.read_at ? accent : "var(--p-receipt)" }}
+                        style={{
+                          color: m.read_at ? accent : "var(--p-receipt)",
+                        }}
                       >
                         {m.read_at ? "✓✓" : "✓"}
                       </span>
@@ -1455,7 +1514,10 @@ function ContactHub({
                 </>
               ) : (
                 <>
-                  <Send className="w-4 h-4" style={{ transform: "rotate(-45deg)" }} />
+                  <Send
+                    className="w-4 h-4"
+                    style={{ transform: "rotate(-45deg)" }}
+                  />
                   Upload a file
                 </>
               )}
@@ -1471,7 +1533,10 @@ function ContactHub({
             />
 
             {portalFiles.length === 0 ? (
-              <div className="text-center py-12" style={{ color: "var(--p-text4)" }}>
+              <div
+                className="text-center py-12"
+                style={{ color: "var(--p-text4)" }}
+              >
                 <Folder className="w-8 h-8 mx-auto mb-3 opacity-40" />
                 <p className="text-sm">No files shared yet.</p>
               </div>
@@ -1499,8 +1564,13 @@ function ContactHub({
                     <p className="text-sm font-medium text-white truncate">
                       {f.file_name}
                     </p>
-                    <p className="text-xs mt-0.5" style={{ color: "var(--p-text3)" }}>
-                      {f.uploaded_by === "client" ? "You · " : `${businessName} · `}
+                    <p
+                      className="text-xs mt-0.5"
+                      style={{ color: "var(--p-text3)" }}
+                    >
+                      {f.uploaded_by === "client"
+                        ? "You · "
+                        : `${businessName} · `}
                       {formatFileSize(f.file_size)}
                       {f.file_size ? " · " : ""}
                       {new Date(f.created_at).toLocaleDateString("en-US", {
@@ -1520,28 +1590,6 @@ function ContactHub({
           </div>
         )}
       </div>
-
-      {/* Footer */}
-      <footer
-        className="py-5 text-center"
-        style={{ borderTop: isDark ? "none" : "1px solid var(--p-border)" }}
-      >
-        <a
-          href="https://forgefly.io"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full transition-opacity hover:opacity-70"
-          style={{
-            background: "var(--p-msg)",
-            color: "var(--p-text4)",
-            border: "1px solid var(--p-chip)",
-          }}
-        >
-          <span style={{ color: accent, fontWeight: 600 }}>⚡</span>
-          Powered by Forgefly
-          <ChevronRight className="w-3 h-3" />
-        </a>
-      </footer>
 
       {/* Profile completion prompt — shown once on first portal visit */}
       {showProfilePrompt && (
@@ -1571,7 +1619,10 @@ function ContactHub({
                   <DialogTitle className="text-white text-base">
                     Complete your profile
                   </DialogTitle>
-                  <p className="text-xs mt-0.5" style={{ color: "var(--p-text2)" }}>
+                  <p
+                    className="text-xs mt-0.5"
+                    style={{ color: "var(--p-text2)" }}
+                  >
                     Helps {businessName} reach you
                   </p>
                 </div>
@@ -1783,7 +1834,10 @@ function ContactHub({
                 >
                   {selectedProposal.total_amount && (
                     <div>
-                      <div className="text-xs" style={{ color: "var(--p-text3)" }}>
+                      <div
+                        className="text-xs"
+                        style={{ color: "var(--p-text3)" }}
+                      >
                         Investment
                       </div>
                       <div
@@ -1797,7 +1851,10 @@ function ContactHub({
                   )}
                   {selectedProposal.timeline && (
                     <div>
-                      <div className="text-xs" style={{ color: "var(--p-text3)" }}>
+                      <div
+                        className="text-xs"
+                        style={{ color: "var(--p-text3)" }}
+                      >
                         Timeline
                       </div>
                       <div className="text-sm font-semibold mt-0.5 text-white">
@@ -1852,7 +1909,10 @@ function ContactHub({
                         setTab("messages");
                       }}
                       className="w-full py-2 rounded-xl text-sm transition-opacity hover:opacity-80"
-                      style={{ background: "var(--p-chip)", color: "var(--p-text2)" }}
+                      style={{
+                        background: "var(--p-chip)",
+                        color: "var(--p-text2)",
+                      }}
                     >
                       Request changes via messages
                     </button>
@@ -1876,6 +1936,15 @@ function ContactHub({
           </DialogContent>
         </Dialog>
       )}
+
+      {/* Portal footer */}
+      <footer
+        className="mt-12 py-5 text-center text-xs border-t"
+        style={{ borderColor: "var(--p-border)", color: "var(--p-muted)" }}
+      >
+        © {new Date().getFullYear()} · {business.name} · All Rights Reserved ·
+        Powered by Forgefly
+      </footer>
     </div>
   );
 }
@@ -1895,7 +1964,8 @@ function ContactPortalWithAuth({
     "loading" | "gate" | "denied" | "authed"
   >("loading");
   const accent = business.extracted_data?.brand?.primaryColor || "#10b981";
-  const businessName = business.name || business.extracted_data?.identity?.name || "Business";
+  const businessName =
+    business.name || business.extracted_data?.identity?.name || "Business";
 
   useEffect(() => {
     let mounted = true;
@@ -2001,7 +2071,8 @@ function EngagementPortal({
   const viewedTrackedRef = useRef(false);
 
   const accent = business.extracted_data?.brand?.primaryColor || "#10b981";
-  const businessName = business.name || business.extracted_data?.identity?.name || "Business";
+  const businessName =
+    business.name || business.extracted_data?.identity?.name || "Business";
   const contact = engagement.contacts;
   const proposal = engagement.scope?.proposal;
 
@@ -2920,6 +2991,15 @@ function EngagementPortal({
           </div>
         )}
       </div>
+
+      {/* Portal footer */}
+      <footer
+        className="mt-12 py-5 text-center text-xs border-t"
+        style={{ borderColor: "#2a2a2a", color: "#666" }}
+      >
+        © {new Date().getFullYear()} · {businessName} · All Rights Reserved ·
+        Powered by Forgefly
+      </footer>
     </div>
   );
 }
@@ -2939,7 +3019,8 @@ function EngagementPortalWithAuth({
     "loading" | "gate" | "denied" | "authed"
   >("loading");
   const accent = business.extracted_data?.brand?.primaryColor || "#10b981";
-  const businessName = business.name || business.extracted_data?.identity?.name || "Business";
+  const businessName =
+    business.name || business.extracted_data?.identity?.name || "Business";
 
   useEffect(() => {
     let mounted = true;

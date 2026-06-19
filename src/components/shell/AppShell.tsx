@@ -7,11 +7,13 @@ import { MobileMoreSheet } from './MobileMoreSheet'
 import { AICopilot } from '@/components/layouts/AICopilot'
 import { CurrentBusinessProvider } from '@/contexts/CurrentBusinessContext'
 import { useBusiness } from '@/contexts/CurrentBusinessContext'
+import { useReviewNotification } from '@/hooks/useReviewNotification'
 import NoBusinessPage from '@/pages/NoBusinessPage'
 
 function AppShellContent({ children }: { children: ReactNode }) {
   const [moreOpen, setMoreOpen] = useState(false)
   const { business, isLoading } = useBusiness()
+  useReviewNotification()
 
   if (!isLoading && !business) {
     return <NoBusinessPage />

@@ -77,6 +77,144 @@ const SERVICE_TYPE_LABELS: Record<string, string> = {
   hourly: "Hourly",
 };
 
+interface PortalSection {
+  id: string;
+  section_type: "text" | "text_image" | "banner" | "links";
+  position: number;
+  title?: string | null;
+  body?: string | null;
+  image_url?: string | null;
+  banner_color?: "info" | "warning" | "closed" | null;
+  links?: Array<{ label: string; url: string }> | null;
+}
+
+interface WorkSample {
+  id: string;
+  title?: string | null;
+  image_url: string;
+  sort_order: number;
+}
+
+interface Review {
+  id: string;
+  client_name: string;
+  rating: number;
+  comment?: string | null;
+  freelancer_reply?: string | null;
+  submitted_at: string;
+}
+
+const BANNER_COLORS = {
+  info: "bg-blue-50 text-blue-700 border-blue-200",
+  warning: "bg-amber-50 text-amber-700 border-amber-200",
+  closed: "bg-red-50 text-red-700 border-red-200",
+} as const;
+
+function PortalSectionRenderer({
+  section,
+  primaryColor,
+}: {
+  section: PortalSection;
+  primaryColor: string;
+}) {
+  if (section.section_type === "text") {
+    return (
+      <div className="w-full md:max-w-[60vw] mx-auto px-4 md:px-6 py-8">
+        {section.title && (
+          <h2 className="text-lg font-semibold mb-3">{section.title}</h2>
+        )}
+        <p className="text-muted-foreground leading-relaxed whitespace-pre-wrap">
+          {section.body}
+        </p>
+      </div>
+    );
+  }
+  if (section.section_type === "text_image") {
+    return (
+      <div className="w-full md:max-w-[60vw] mx-auto px-4 md:px-6 py-8">
+        <div className="flex flex-col md:flex-row gap-6 items-start">
+          <div className="flex-1">
+            {section.title && (
+              <h2 className="text-lg font-semibold mb-3">{section.title}</h2>
+            )}
+            {section.body && (
+              <p className="text-muted-foreground leading-relaxed whitespace-pre-wrap">
+                {section.body}
+              </p>
+            )}
+          </div>
+          {section.image_url && (
+            <img
+              src={section.image_url}
+              alt={section.title ?? ""}
+              className="w-full md:w-64 rounded-xl object-cover"
+            />
+          )}
+        </div>
+      </div>
+    );
+  }
+  if (section.section_type === "banner") {
+    const colorClass = BANNER_COLORS[section.banner_color ?? "info"];
+    return (
+      <div className={`w-full border-y px-6 py-3 text-sm text-center ${colorClass}`}>
+        {section.body}
+      </div>
+    );
+  }
+  if (section.section_type === "links") {
+    const links = section.links ?? [];
+    return (
+      <div className="w-full md:max-w-[60vw] mx-auto px-4 md:px-6 py-8">
+        {section.title && (
+          <h2 className="text-lg font-semibold mb-4">{section.title}</h2>
+        )}
+        <div className="flex flex-wrap gap-3">
+          {links.map((link, i) => (
+            <a
+              key={i}
+              href={link.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-4 py-2 rounded-full border text-sm hover:shadow-sm transition-shadow"
+              style={{ borderColor: `${primaryColor}50`, color: primaryColor }}
+            >
+              {link.label}
+            </a>
+          ))}
+        </div>
+      </div>
+    );
+  }
+  return null;
+}
+
+function StarRating({ rating, color }: { rating: number; color: string }) {
+  return (
+    <div className="flex gap-0.5">
+      {[1, 2, 3, 4, 5].map((i) => (
+        <svg
+          key={i}
+          className="h-4 w-4"
+          viewBox="0 0 20 20"
+          fill={i <= rating ? color : "none"}
+          stroke={i <= rating ? color : "#d1d5db"}
+          strokeWidth="1"
+        >
+          <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+        </svg>
+      ))}
+    </div>
+  );
+}
+
+function formatReviewDate(dateStr: string) {
+  return new Date(dateStr).toLocaleDateString("en-US", {
+    month: "short",
+    year: "numeric",
+  });
+}
+
 export default function PublicPortfolioPage() {
   const { slug } = useParams<{ slug: string }>();
   const [business, setBusiness] = useState<Business | null>(null);
@@ -87,6 +225,10 @@ export default function PublicPortfolioPage() {
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [walletLoading, setWalletLoading] = useState(false);
+  const [portalSections, setPortalSections] = useState<PortalSection[]>([]);
+  const [workSamples, setWorkSamples] = useState<WorkSample[]>([]);
+  const [testimonials, setTestimonials] = useState<Review[]>([]);
+  const [lightboxSample, setLightboxSample] = useState<WorkSample | null>(null);
 
   useEffect(() => {
     if (!slug) return;
@@ -115,6 +257,30 @@ export default function PublicPortfolioPage() {
         setNotFound(true);
       } else {
         setBusiness(data as unknown as Business);
+        const [sectionsRes, samplesRes, reviewsRes] = await Promise.all([
+          supabase
+            .from("portal_sections")
+            .select("*")
+            .eq("business_id", data.id)
+            .eq("is_active", true)
+            .order("position"),
+          supabase
+            .from("work_samples")
+            .select("id, title, image_url, sort_order")
+            .eq("business_id", data.id)
+            .eq("is_active", true)
+            .order("sort_order"),
+          supabase
+            .from("reviews")
+            .select("id, client_name, rating, comment, freelancer_reply, submitted_at")
+            .eq("business_id", data.id)
+            .eq("ai_selected", true)
+            .eq("portal_eligible", true)
+            .order("ai_selected_at", { ascending: false }),
+        ]);
+        if (sectionsRes.data) setPortalSections(sectionsRes.data as PortalSection[]);
+        if (samplesRes.data) setWorkSamples(samplesRes.data as WorkSample[]);
+        if (reviewsRes.data) setTestimonials(reviewsRes.data as Review[]);
       }
     })();
   }, [slug]);
@@ -294,6 +460,18 @@ export default function PublicPortfolioPage() {
         </div>
       )}
 
+      {/* Custom sections — position 1 and 2 (both above services) */}
+      {portalSections
+        .filter((s) => s.position === 1)
+        .map((s) => (
+          <PortalSectionRenderer key={s.id} section={s} primaryColor={primaryColor} />
+        ))}
+      {portalSections
+        .filter((s) => s.position === 2)
+        .map((s) => (
+          <PortalSectionRenderer key={s.id} section={s} primaryColor={primaryColor} />
+        ))}
+
       {/* Services grid */}
       <main className="w-full md:max-w-[60vw] mx-auto px-4 md:px-6 py-12">
         {services.length > 0 ? (
@@ -398,6 +576,99 @@ export default function PublicPortfolioPage() {
           </div>
         </div>
       </main>
+
+      {/* Work samples grid */}
+      {workSamples.length > 0 && (
+        <div className="w-full md:max-w-[60vw] mx-auto px-4 md:px-6 py-12 border-t" style={{ borderColor: `${primaryColor}20` }}>
+          <h2 className="text-xl font-semibold mb-6">Work</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {workSamples.map((sample) => (
+              <button
+                key={sample.id}
+                type="button"
+                onClick={() => setLightboxSample(sample)}
+                className="group relative overflow-hidden rounded-xl border aspect-video bg-muted cursor-zoom-in text-left"
+              >
+                <img
+                  src={sample.image_url}
+                  alt={sample.title ?? ""}
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                />
+                {sample.title && (
+                  <div className="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-xs px-3 py-2 translate-y-full group-hover:translate-y-0 transition-transform">
+                    {sample.title}
+                  </div>
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Testimonials — only renders when ≥ 3 ai_selected reviews */}
+      {testimonials.length >= 3 && (
+        <div className="w-full md:max-w-[60vw] mx-auto px-4 md:px-6 py-12 border-t" style={{ borderColor: `${primaryColor}20` }}>
+          <h2 className="text-xl font-semibold mb-8">What clients say</h2>
+          <div className="grid gap-6 sm:grid-cols-2">
+            {testimonials.map((review) => (
+              <div key={review.id} className="border rounded-xl p-5 flex flex-col gap-3">
+                <StarRating rating={review.rating} color={primaryColor} />
+                {review.comment && (
+                  <p className="text-sm text-foreground leading-relaxed">
+                    "{review.comment}"
+                  </p>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  — {review.client_name} · {formatReviewDate(review.submitted_at)}
+                </p>
+                {review.freelancer_reply && (
+                  <p className="text-xs text-muted-foreground border-t pt-3 mt-auto">
+                    ↳ "{review.freelancer_reply}"
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Work sample lightbox */}
+      <Dialog open={!!lightboxSample} onOpenChange={(open) => { if (!open) setLightboxSample(null); }}>
+        {lightboxSample && (
+          <DialogContent className="max-w-3xl p-0 overflow-hidden">
+            <DialogHeader className="sr-only">
+              <DialogTitle>{lightboxSample.title ?? "Work sample"}</DialogTitle>
+            </DialogHeader>
+            <img
+              src={lightboxSample.image_url}
+              alt={lightboxSample.title ?? ""}
+              className="w-full object-contain max-h-[80vh]"
+            />
+            {lightboxSample.title && (
+              <div className="px-4 py-3 text-sm font-medium border-t">
+                {lightboxSample.title}
+              </div>
+            )}
+          </DialogContent>
+        )}
+      </Dialog>
+
+      {/* Footer */}
+      <footer className="border-t mt-8 py-8 px-6 text-center text-sm text-muted-foreground">
+        <p>
+          © {new Date().getFullYear()} · {bizName} · All Rights Reserved ·
+          Powered by Forgefly
+        </p>
+        <a
+          href="https://forgefly.io?ref=portfolio_footer"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex mt-3 items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium"
+          style={{ background: "#E1F5EE", color: "#085041", border: "1px solid #5DCAA5" }}
+        >
+          Have a business? Try Forgefly
+        </a>
+      </footer>
 
       {/* Proposal Request Modal */}
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>

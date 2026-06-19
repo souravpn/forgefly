@@ -11,6 +11,7 @@ export const NAV_ITEMS = [
 ] as const
 
 export const MORE_ITEMS = [
+  { id: 'reviews',     label: 'Reviews',     icon: 'star',             route: '/dashboard/reviews' },
   { id: 'messages',    label: 'Messages',    icon: 'message-square',   route: '/dashboard/messages' },
   { id: 'calendar',    label: 'Calendar',    icon: 'calendar',         route: '/dashboard/calendar' },
   { id: 'automations', label: 'Automations', icon: 'bolt',             route: '/dashboard/automations' },

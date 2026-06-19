@@ -13,6 +13,7 @@ import {
   Inbox,
   MessageSquare,
   Landmark,
+  Star,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -31,6 +32,7 @@ const ICON_MAP: Record<string, LucideIcon> = {
   'inbox': Inbox,
   'message-square': MessageSquare,
   'landmark': Landmark,
+  'star': Star,
 }
 
 export function NavIcon({ name, className }: { name: string; className?: string }) {
