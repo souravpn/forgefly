@@ -264,6 +264,36 @@ export function CommandBar({ onClose, business, extractedData, refetch }: Comman
         .eq('id', business.id)
       if (error) throw error
 
+      // Sync new services → services table
+      if (pending.sections.includes('services')) {
+        type Svc = { name?: string; price?: string; type?: string; description?: string; deliverables?: string[] }
+        const oldSvcs = asArr<Svc>((extractedData as RawData)?.services)
+        const newSvcs = asArr<Svc>((pending.mergedData as RawData)?.services)
+        const oldNames = new Set(oldSvcs.map(s => s.name?.toLowerCase()).filter(Boolean))
+        const toInsert = newSvcs.filter(s => s.name && !oldNames.has(s.name.toLowerCase()))
+        if (toInsert.length > 0) {
+          // Get current max sort_order
+          const { data: existing } = await supabase
+            .from('services')
+            .select('sort_order')
+            .eq('business_id', business.id)
+            .order('sort_order', { ascending: false })
+            .limit(1)
+          const maxOrder = (existing?.[0]?.sort_order ?? -1) as number
+          const rows = toInsert.map((s, i) => ({
+            business_id: business.id,
+            name: s.name!,
+            price: s.price ?? null,
+            type: s.type ?? 'project',
+            description: s.description ?? null,
+            deliverables: s.deliverables ?? [],
+            sort_order: maxOrder + 1 + i,
+          }))
+          const { error: svcErr } = await supabase.from('services').insert(rows)
+          if (svcErr) console.warn('Service sync warning (non-fatal):', svcErr)
+        }
+      }
+
       // Sync new contacts → clients table
       if (pending.sections.includes('contacts')) {
         type Contact = { name?: string; email?: string; company?: string; status?: string }

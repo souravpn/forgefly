@@ -185,7 +185,13 @@ Rules:
   - motion: b2b=sells to businesses, b2c=sells to consumers, hybrid=both
   - sale_type: portfolio_forward=work portfolio drives decisions, review_driven=reviews/ratings, trust_referral=credentials+referrals, direct_search=people search for the service
   - presence_tier: b2b_creative=design/creative B2B, b2c_local=local consumer services, b2b_professional=professional services B2B, hybrid_professional=both motions
-  - If ambiguous, pick most likely and set confidence: "low"`;
+  - If ambiguous, pick most likely and set confidence: "low"
+
+CRITICAL OVERRIDES:
+- "I now offer", "I also offer", "I'm adding", "we now offer", "starting to offer" → prompt_type MUST be "additive"; sections_needed MUST include "services"
+- "my brand colors are", "my colors are", "brand colors are", "brand color is" → sections_needed MUST include "brand"
+- Any dollar amount in the prompt (e.g. $800, $1,200) → has_pricing MUST be true
+- For "additive" and "revision" prompts: sections_needed must NEVER be empty`;
 
 async function runClassifier(prompt: string): Promise<ClassifierOutput> {
   const result = await callAnthropic({
@@ -239,7 +245,7 @@ Return ONLY valid JSON matching this schema (no markdown, no explanation):
 Rules:
 - Be specific and realistic — infer reasonable values from context
 - For missing info, use sensible defaults or short placeholders
-- accentColor: pick a professional hex color that fits the niche
+- BRAND COLORS — CRITICAL: If the user explicitly names any colors (e.g. "navy blue", "light blue", "white", "black", "teal", "gold"), convert them to hex and use them as primaryColor/secondaryColor/accentColor. User-specified colors ALWAYS override niche-inferred colors. Approximate mappings: navy blue → #1B3A6B, light blue → #AED6F1, sky blue → #5BA4CF, white → #F8F8F8, black → #111111, dark blue → #1E3A8A, royal blue → #2563EB, teal → #0D9488, forest green → #15803D, gold → #D97706, red → #DC2626, coral → #F97316, purple → #7C3AED, burgundy → #9F1239. If no colors are specified, pick a professional hex that fits the niche.
 - initials: first 2 letters of business name or owner initials
 - pipeline.stages: always ["Prospect","Qualified","Proposal Sent","Negotiating","Closed Won"]
 
@@ -302,11 +308,24 @@ async function extractSection(
   }
 }
 
-function deepMerge(base: Record<string, unknown>, diff: Record<string, unknown>): Record<string, unknown> {
+// Keys whose arrays should be appended (additive) rather than replaced
+const APPEND_ARRAY_KEYS = new Set(['services', 'contacts', 'pipeline', 'invoices']);
+
+function deepMerge(base: Record<string, unknown>, diff: Record<string, unknown>, additive = false): Record<string, unknown> {
   const result = { ...base };
   for (const key of Object.keys(diff)) {
     if (Array.isArray(diff[key])) {
-      result[key] = diff[key]; // arrays replace, not merge
+      if (additive && APPEND_ARRAY_KEYS.has(key) && Array.isArray(base[key])) {
+        // Append new items, skip duplicates by name
+        type Named = { name?: string };
+        const existing = base[key] as Named[];
+        const incoming = diff[key] as Named[];
+        const existingNames = new Set(existing.map(s => s.name?.toLowerCase()).filter(Boolean));
+        const toAdd = incoming.filter(s => !existingNames.has(s.name?.toLowerCase() ?? ''));
+        result[key] = [...existing, ...toAdd];
+      } else {
+        result[key] = diff[key]; // arrays replace, not merge
+      }
     } else if (
       typeof diff[key] === 'object' &&
       diff[key] !== null &&
@@ -314,7 +333,7 @@ function deepMerge(base: Record<string, unknown>, diff: Record<string, unknown>)
       base[key] !== null &&
       !Array.isArray(base[key])
     ) {
-      result[key] = deepMerge(base[key] as Record<string, unknown>, diff[key] as Record<string, unknown>);
+      result[key] = deepMerge(base[key] as Record<string, unknown>, diff[key] as Record<string, unknown>, additive);
     } else {
       result[key] = diff[key];
     }
@@ -375,7 +394,12 @@ async function handleExtract(
   await logUsage(supabase, userId, business_id ?? null, HAIKU, 'classifier', 150, 80);
 
   let { prompt_type, complexity, token_estimate, sections_needed } = classification;
-  const isDiff = prompt_type === 'additive' || prompt_type === 'revision';
+  let isDiff = prompt_type === 'additive' || prompt_type === 'revision';
+
+  // Seed prompts always need all sections regardless of classifier output
+  if (prompt_type === 'seed') {
+    sections_needed = [...STRUCTURAL_SECTIONS, ...CREATIVE_SECTIONS];
+  }
 
   // Guard: classifier found no business sections — prompt is not a business update.
   // Only fire when there IS prior business context (business_id or non-empty current_data).
@@ -384,6 +408,20 @@ async function handleExtract(
     business_id ||
     (current_data && Object.keys(current_data as object).length > 0)
   );
+
+  // Keyword safety net: phrases like "I now offer X" or "my brand colors are Y" are always
+  // business updates even if the classifier incorrectly returned sections_needed = []
+  const ADDITIVE_PATTERN = /\b(i now offer|i also offer|i'?m adding|we now offer|starting to offer|my brand colors|my colors are|brand colors are|brand color is)\b/i;
+  if (sections_needed.length === 0 && !isDiff && hasPriorContext && ADDITIVE_PATTERN.test(prompt)) {
+    const inferred: string[] = [];
+    if (/\boffer|service|package|speciali[sz]|photo|coach|audit|sprint|retainer|consult|design|develop|write\b/i.test(prompt)) inferred.push('services');
+    if (/\bcolor|colour|brand|palette|logo\b/i.test(prompt)) inferred.push('brand');
+    if (inferred.length > 0) {
+      sections_needed = inferred;
+      prompt_type = 'additive';
+      isDiff = true;
+    }
+  }
 
   if (sections_needed.length === 0 && !isDiff) {
     if (hasPriorContext) {
@@ -465,7 +503,7 @@ async function handleExtract(
 
   // Step 4: Merge for diff mode
   let finalData = (isDiff && current_data)
-    ? deepMerge(current_data, extractedData)
+    ? deepMerge(current_data, extractedData, prompt_type === 'additive')
     : extractedData;
 
   // Embed business_profile from classifier into extracted_data on seed prompts

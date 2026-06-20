@@ -49,7 +49,7 @@ export function useNudges(): UseNudgesResult {
     if (!user) return
 
     const channel = supabase
-      .channel(`nudges:${user.id}`)
+      .channel(`nudges:${user.id}:${Date.now()}`)
       .on('postgres_changes', {
         event: 'INSERT',
         schema: 'public',
@@ -60,7 +60,7 @@ export function useNudges(): UseNudgesResult {
       })
       .subscribe()
 
-    return () => { channel.unsubscribe() }
+    return () => { supabase.removeChannel(channel) }
   }, [user?.id])
 
   const markRead = useCallback(async (id: string) => {

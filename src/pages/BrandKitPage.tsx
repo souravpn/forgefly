@@ -128,6 +128,25 @@ function isValidHex(hex: string) {
   return /^#[0-9A-Fa-f]{6}$/.test(hex);
 }
 
+const FONT_PAIRS = [
+  { id: 'clean-modern',     name: 'Clean & modern',     heading: 'Inter',              body: 'Inter',             bestFor: 'SaaS, tech, dev agencies',       headingStyle: { fontFamily: 'sans-serif', fontWeight: 500 as const },                              bodyStyle: { fontFamily: 'sans-serif' } },
+  { id: 'editorial',        name: 'Editorial',           heading: 'DM Serif Display',   body: 'Plus Jakarta Sans', bestFor: 'Photographers, writers',          headingStyle: { fontFamily: 'Georgia, serif', fontWeight: 400 as const },                         bodyStyle: { fontFamily: 'sans-serif' } },
+  { id: 'warm-professional',name: 'Warm professional',   heading: 'Playfair Display',   body: 'Lato',              bestFor: 'Coaches, consultants',            headingStyle: { fontFamily: 'Georgia, serif' },                                                    bodyStyle: { fontFamily: 'sans-serif' } },
+  { id: 'bold-studio',      name: 'Bold studio',         heading: 'Syne',               body: 'DM Sans',           bestFor: 'Designers, creative directors',   headingStyle: { fontFamily: 'sans-serif', fontWeight: 500 as const, letterSpacing: '-0.03em' },  bodyStyle: { fontFamily: 'sans-serif' } },
+  { id: 'classic-trust',    name: 'Classic trust',       heading: 'Merriweather',       body: 'Source Sans 3',     bestFor: 'Lawyers, financial advisors',     headingStyle: { fontFamily: 'Georgia, serif', fontWeight: 400 as const, fontSize: 13 as const },  bodyStyle: { fontFamily: 'sans-serif' } },
+  { id: 'minimal',          name: 'Minimal',             heading: 'Geist',              body: 'Geist Mono',        bestFor: 'Engineers, developers',           headingStyle: { fontFamily: 'monospace', fontSize: 13 as const },                                  bodyStyle: { fontFamily: 'monospace' } },
+] as const;
+
+function inferFontPairId(niche: string): string {
+  const n = niche.toLowerCase();
+  if (/photo|film|brand|strat|writ|content|copy/.test(n)) return 'editorial';
+  if (/coach|consult|therap|wellnes|health/.test(n)) return 'warm-professional';
+  if (/design|creative|studio|art/.test(n)) return 'bold-studio';
+  if (/law|legal|financ|account|audit/.test(n)) return 'classic-trust';
+  if (/engineer|dev|code|software|tech/.test(n)) return 'minimal';
+  return 'clean-modern';
+}
+
 function contrastColor(hex: string): string {
   if (!isValidHex(hex)) return "#ffffff";
   const r = parseInt(hex.slice(1, 3), 16);
@@ -445,6 +464,7 @@ export default function BrandKitPage() {
   // ── Brand state ────────────────────────────────────────────────────────────
   const [brand, setBrand] = useState<BrandData>({});
   const [newKeyword, setNewKeyword] = useState("");
+  const [selectedFontPairId, setSelectedFontPairId] = useState<string>('clean-modern');
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [saving, setSaving] = useState(false);
   const [qrLight, setQrLight] = useState("");
@@ -485,7 +505,12 @@ export default function BrandKitPage() {
   // ── Load brand ─────────────────────────────────────────────────────────────
   useEffect(() => {
     if (extractedData?.brand) {
-      setBrand(extractedData.brand as BrandData);
+      const b = extractedData.brand as BrandData;
+      setBrand(b);
+      // Match loaded font to a known pair, or infer from niche
+      const niche = (extractedData?.identity as Record<string, string> | null)?.niche ?? '';
+      const matchedPair = FONT_PAIRS.find(p => p.heading === b.fonts?.heading);
+      setSelectedFontPairId(matchedPair?.id ?? inferFontPairId(niche));
     }
   }, [extractedData]);
 
@@ -609,6 +634,16 @@ export default function BrandKitPage() {
     };
 
   const handleFontBlur = () => immediateSave(brand);
+
+  const handleFontPairSelect = (pairId: string) => {
+    const pair = FONT_PAIRS.find(p => p.id === pairId);
+    if (!pair) return;
+    setSelectedFontPairId(pairId);
+    const updated = { ...brand, fonts: { heading: pair.heading, body: pair.body } };
+    setBrand(updated);
+    immediateSave(updated);
+  };
+
   const handleToneChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setBrand((b) => ({ ...b, tone: e.target.value }));
   };
@@ -995,48 +1030,42 @@ export default function BrandKitPage() {
                     <CardHeader className="pb-3">
                       <CardTitle className="text-base">Typography</CardTitle>
                       <CardDescription>
-                        Font names as suggested by your Business OS
+                        Choose a font pair that matches your brand
                       </CardDescription>
                     </CardHeader>
-                    <CardContent className="space-y-3">
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="space-y-1.5">
-                          <label className="text-xs font-medium text-muted-foreground">
-                            Heading font
-                          </label>
-                          <Input
-                            value={brand.fonts?.heading ?? ""}
-                            onChange={handleFontChange("heading")}
-                            onBlur={handleFontBlur}
-                            placeholder="e.g., Playfair Display"
-                            className="h-9 text-sm"
-                          />
-                        </div>
-                        <div className="space-y-1.5">
-                          <label className="text-xs font-medium text-muted-foreground">
-                            Body font
-                          </label>
-                          <Input
-                            value={brand.fonts?.body ?? ""}
-                            onChange={handleFontChange("body")}
-                            onBlur={handleFontBlur}
-                            placeholder="e.g., Inter"
-                            className="h-9 text-sm"
-                          />
-                        </div>
+                    <CardContent>
+                      <div className="grid grid-cols-2 gap-2">
+                        {FONT_PAIRS.map(pair => {
+                          const isSelected = selectedFontPairId === pair.id;
+                          return (
+                            <button
+                              key={pair.id}
+                              type="button"
+                              onClick={() => handleFontPairSelect(pair.id)}
+                              className={`text-left rounded-lg border p-3 transition-all ${
+                                isSelected
+                                  ? 'border-primary bg-primary/5 ring-1 ring-primary/20'
+                                  : 'border-border hover:border-muted-foreground/40 hover:bg-muted/30'
+                              }`}
+                            >
+                              <p style={{ ...pair.headingStyle, fontSize: 13, color: isSelected ? (brand.primaryColor ?? '#1D9E75') : 'inherit', marginBottom: 2, lineHeight: 1.3 }}>
+                                {businessName}
+                              </p>
+                              <p style={{ ...pair.bodyStyle, fontSize: 9, color: 'hsl(var(--muted-foreground))', marginBottom: 6, lineHeight: 1.4 }}>
+                                Professional · Results-driven
+                              </p>
+                              <p className="text-[10px] font-medium" style={{ color: isSelected ? (brand.primaryColor ?? '#1D9E75') : 'hsl(var(--muted-foreground))' }}>
+                                {pair.name}
+                              </p>
+                              <p className="text-[9px] text-muted-foreground/60 mt-0.5">{pair.bestFor}</p>
+                            </button>
+                          );
+                        })}
                       </div>
                       {brand.fonts?.heading && (
-                        <div
-                          className="rounded-lg p-3 bg-muted/40"
-                          style={{
-                            borderLeft: `3px solid ${brand.primaryColor ?? "#1D9E75"}`,
-                          }}
-                        >
-                          <p className="text-xs text-muted-foreground mb-0.5">
-                            Heading preview
-                          </p>
-                          <p className="text-lg font-semibold">{businessName}</p>
-                        </div>
+                        <p className="text-[11px] text-muted-foreground mt-3">
+                          Active: {brand.fonts.heading} / {brand.fonts.body}
+                        </p>
                       )}
                     </CardContent>
                   </Card>

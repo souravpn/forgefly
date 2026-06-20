@@ -340,6 +340,54 @@ export default function DashboardPage() {
           </DropdownMenu>
         </div>
 
+        {/* Completeness checklist — shown when profile is < 100% complete */}
+        {business && (business.completeness_score ?? 0) > 0 && (business.completeness_score ?? 100) < 100 && (() => {
+          const score = business.completeness_score ?? 0;
+          const cmap = (business.confidence_map ?? {}) as Record<string, string>;
+          const SECTIONS = [
+            { key: 'services',  label: 'Services & pricing',    tip: 'List your services with prices',   route: '/dashboard/services' },
+            { key: 'brand',     label: 'Brand identity',         tip: 'Add colors, fonts, tone',          route: '/dashboard/brand' },
+            { key: 'identity',  label: 'Business identity',      tip: 'Name, tagline, niche, location',   route: null },
+            { key: 'location',  label: 'Location / market',      tip: 'Where you operate or serve',       route: null },
+            { key: 'niche',     label: 'Niche & target clients', tip: 'Who you work with',                route: null },
+          ] as const;
+          const weak = SECTIONS.filter(s => cmap[s.key] === 'low' || !cmap[s.key]);
+          if (weak.length === 0) return null;
+          return (
+            <Card className="border-amber-500/20 bg-amber-500/5">
+              <CardContent className="p-4">
+                <div className="flex items-start gap-3">
+                  <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-3 mb-2">
+                      <p className="text-sm font-medium">Profile {score}% complete</p>
+                      <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
+                        <div className="h-full bg-amber-500 rounded-full transition-all" style={{ width: `${score}%` }} />
+                      </div>
+                    </div>
+                    <p className="text-xs text-muted-foreground mb-3">
+                      Strengthen these areas to improve proposals, brand kit, and AI accuracy:
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {weak.map(s => (
+                        <button
+                          key={s.key}
+                          type="button"
+                          onClick={() => s.route ? navigate(s.route) : null}
+                          className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400 hover:bg-amber-500/20 transition-colors"
+                          title={s.tip}
+                        >
+                          <span className="font-medium">{s.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })()}
+
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
 
           {/* 1 — Cash position */}

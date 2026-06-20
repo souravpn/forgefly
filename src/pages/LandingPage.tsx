@@ -1,44 +1,24 @@
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import {
-  Sparkles,
-  TestTubeDiagonal,
-  Zap,
-  Target,
-  TrendingUp,
-  Users,
-  Calendar,
-  FileText,
-  DollarSign,
-  Briefcase,
-  ArrowRight,
-  CheckCircle2,
-  Rocket,
-  ChevronLeft,
-  ChevronRight,
-  Star,
-  Check,
-  Crown,
-  AlertTriangle,
-} from "lucide-react";
+import { ArrowRight, AlertTriangle, Star } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/db/supabase";
 
 function validatePrompt(prompt: string): string | null {
   const trimmed = prompt.trim();
   if (trimmed.length < 30) {
     return "Tell us a bit more — what do you do and who do you work with?";
   }
-  const hasService = /\b(offer|service|speciali[sz]|package|consult|design|develop|write|photo|coach|audit|sprint|retainer)\b/i.test(trimmed);
+  const hasService =
+    /\b(offer|service|speciali[sz]|package|consult|design|develop|write|photo|coach|audit|sprint|retainer)\b/i.test(
+      trimmed,
+    );
   if (!hasService) {
     return "Mention at least one service you offer to get the best results.";
   }
   return null;
 }
-import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/db/supabase";
-import useEmblaCarousel from "embla-carousel-react";
-import Autoplay from "embla-carousel-autoplay";
 
 const SEED_EXAMPLES = [
   "I am a UX/UI designer specializing in mobile apps and SaaS dashboards, based in San Francisco, CA. I offer services like UX Audit ($1,800), Design Sprint ($4,500), Full Product Design ($12,000), and a monthly Design Partner retainer ($2,200/mo). I work with Series A startups and scale-ups.",
@@ -48,30 +28,12 @@ const SEED_EXAMPLES = [
 ];
 
 const GEN_STEPS = [
-  {
-    label: "Parsing business identity",
-    subtitle: "Analysing your prompt and extracting your business identity",
-  },
-  {
-    label: "Extracting services and pricing",
-    subtitle: "Identifying your services, rates, and package structure",
-  },
-  {
-    label: "Building sales pipeline",
-    subtitle: "Setting up your deal stages and prospect workflow",
-  },
-  {
-    label: "Drafting proposal template",
-    subtitle: "Creating a tailored proposal intro and scope of work",
-  },
-  {
-    label: "Generating brand kit",
-    subtitle: "Picking colours, tone, and keywords that match your niche",
-  },
-  {
-    label: "Assembling your portal",
-    subtitle: "Pulling everything together into your business OS",
-  },
+  { label: "Parsing business identity", subtitle: "Analysing your prompt and extracting your business identity" },
+  { label: "Extracting services and pricing", subtitle: "Identifying your services, rates, and package structure" },
+  { label: "Building sales pipeline", subtitle: "Setting up your deal stages and prospect workflow" },
+  { label: "Drafting proposal template", subtitle: "Creating a tailored proposal intro and scope of work" },
+  { label: "Generating brand kit", subtitle: "Picking colours, tone, and keywords that match your niche" },
+  { label: "Assembling your portal", subtitle: "Pulling everything together into your business OS" },
 ];
 
 const SEED_CHIPS = [
@@ -81,30 +43,154 @@ const SEED_CHIPS = [
   "Brand strategist, Austin",
 ];
 
+const HOW_STEPS = [
+  { num: "01", label: "Describe what you do" },
+  { num: "02", label: "Watch it assemble" },
+  { num: "03", label: "Your business is live" },
+  { num: "04", label: "Run everything from one place" },
+];
+
+const PAGE_CSS = `
+  @keyframes driftGrid {
+    0%   { background-position: 0 0; }
+    100% { background-position: 28px 28px; }
+  }
+  @keyframes breathe {
+    0%, 100% { opacity: 0.16; transform: scale(1); }
+    50%       { opacity: 0.22; transform: scale(1.04); }
+  }
+  @keyframes scrollBob {
+    0%, 100% { transform: translateY(0);  opacity: 0.4; }
+    50%       { transform: translateY(4px); opacity: 0.8; }
+  }
+
+  .ff-hero-section { position: relative; overflow: hidden; }
+
+  .ff-dot-grid {
+    position: absolute; inset: 0; pointer-events: none; z-index: 0;
+    background-image: radial-gradient(circle, rgba(16,185,129,0.28) 1px, transparent 1px);
+    background-size: 28px 28px;
+    mask-image: radial-gradient(ellipse 80% 60% at 50% 40%, black, transparent);
+    -webkit-mask-image: radial-gradient(ellipse 80% 60% at 50% 40%, black, transparent);
+    animation: driftGrid 20s linear infinite;
+  }
+
+  .ff-bloom {
+    position: absolute; pointer-events: none; z-index: 0;
+    width: 700px; height: 700px; border-radius: 50%;
+    background: radial-gradient(circle, #10B981 0%, transparent 70%);
+    filter: blur(90px);
+    animation: breathe 9s ease-in-out infinite;
+  }
+
+  .ff-scroll-bob { animation: scrollBob 2.5s ease-in-out infinite; }
+
+  .ff-hero-content { position: relative; z-index: 1; }
+
+  .ff-how-panel {
+    opacity: 0; transform: translateY(20px);
+    transition: opacity 0.6s ease, transform 0.6s ease;
+  }
+  .ff-how-panel.visible { opacity: 1; transform: translateY(0); }
+
+  .ff-feature-pair {
+    opacity: 0; transform: translateY(40px);
+    transition: opacity 0.7s ease, transform 0.7s ease;
+  }
+  .ff-feature-pair.visible { opacity: 1; transform: translateY(0); }
+
+  .ff-fade-up {
+    opacity: 0; transform: translateY(20px);
+    transition: opacity 0.6s ease, transform 0.6s ease;
+  }
+  .ff-fade-up.visible { opacity: 1; transform: translateY(0); }
+
+  .ff-pricing-card {
+    opacity: 0; transform: translateY(20px);
+    transition: opacity 0.6s ease, transform 0.6s ease;
+  }
+  .ff-pricing-card.visible { opacity: 1; transform: translateY(0); }
+
+  .ff-feature-visual { position: relative; }
+  .ff-feature-visual::after {
+    content: ''; position: absolute; inset: 0; pointer-events: none;
+    border-radius: 16px;
+    background: linear-gradient(to bottom, transparent 60%, rgba(16,185,129,0.05));
+  }
+
+  @media (max-width: 1024px) {
+    .ff-how-grid  { display: block !important; min-height: auto !important; }
+    .ff-how-sticky { position: relative !important; height: auto !important;
+      display: flex !important; flex-direction: row !important;
+      overflow-x: auto !important; gap: 12px !important;
+      margin-bottom: 32px !important; padding-bottom: 8px !important; }
+    .ff-how-panel  { min-height: auto !important; padding-top: 32px !important; }
+    .ff-feature-pair { display: flex !important; flex-direction: column !important; margin-bottom: 56px !important; }
+    .ff-feature-pair > * { order: unset !important; }
+    .ff-pricing-grid { grid-template-columns: 1fr !important; max-width: 420px !important; margin: 0 auto !important; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .ff-dot-grid, .ff-bloom, .ff-scroll-bob { animation: none !important; }
+    .ff-how-panel, .ff-feature-pair, .ff-fade-up, .ff-pricing-card {
+      opacity: 1 !important; transform: none !important;
+    }
+  }
+`;
+
+const S = {
+  bg:       "#080D0B",
+  bg2:      "#0D1512",
+  em:       "#10B981",
+  em2:      "#059669",
+  text:     "#E8EDE8",
+  mid:      "#8FA98A",
+  dim:      "#4A5C4A",
+  border:   "rgba(16,185,129,0.12)",
+  border2:  "rgba(232,237,232,0.07)",
+} as const;
+
+const sora = "'Sora', sans-serif";
+
 export default function LandingPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const [seedPrompt, setSeedPrompt] = useState("");
-  const [activeChip, setActiveChip] = useState(0);
-  const [generating, setGenerating] = useState(false);
-  const [genStep, setGenStep] = useState(0);
-  const typingRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const cycleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const stepRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Redirect logged-in users to dashboard
+  const [seedPrompt, setSeedPrompt]   = useState("");
+  const [activeChip, setActiveChip]   = useState(0);
+  const [generating, setGenerating]   = useState(false);
+  const [genStep, setGenStep]         = useState(0);
+  const [navScrolled, setNavScrolled] = useState(false);
+  const [activeHowStep, setActiveHowStep] = useState(0);
+
+  const typingRef   = useRef<ReturnType<typeof setTimeout>  | null>(null);
+  const cycleRef    = useRef<ReturnType<typeof setTimeout>  | null>(null);
+  const stepRef     = useRef<ReturnType<typeof setInterval> | null>(null);
+  const howPanelRefs = useRef<(HTMLDivElement | null)[]>([]);
+
+  useEffect(() => { if (user) navigate("/dashboard"); }, [user, navigate]);
+
+  // Inject Sora font
   useEffect(() => {
-    if (user) {
-      navigate("/dashboard");
-    }
-  }, [user, navigate]);
+    const link = document.createElement("link");
+    link.rel  = "stylesheet";
+    link.href = "https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600&display=swap";
+    document.head.appendChild(link);
+    return () => { document.head.removeChild(link); };
+  }, []);
 
-  // Typewriter cycling through examples
+  // Nav scroll
+  useEffect(() => {
+    const h = () => setNavScrolled(window.scrollY > 40);
+    window.addEventListener("scroll", h, { passive: true });
+    return () => window.removeEventListener("scroll", h);
+  }, []);
+
+  // Typewriter
   useEffect(() => {
     let charIndex = 0;
     let exampleIndex = 0;
     let cancelled = false;
-
     const typeNext = () => {
       if (cancelled) return;
       const target = SEED_EXAMPLES[exampleIndex];
@@ -113,7 +199,6 @@ export default function LandingPage() {
         charIndex++;
         typingRef.current = setTimeout(typeNext, 18);
       } else {
-        // Pause, then clear and move to next
         cycleRef.current = setTimeout(() => {
           if (cancelled) return;
           exampleIndex = (exampleIndex + 1) % SEED_EXAMPLES.length;
@@ -124,7 +209,6 @@ export default function LandingPage() {
         }, 3000);
       }
     };
-
     typingRef.current = setTimeout(typeNext, 600);
     return () => {
       cancelled = true;
@@ -133,235 +217,76 @@ export default function LandingPage() {
     };
   }, []);
 
-  const features = [
-    {
-      icon: Users,
-      title: "Client Management",
-      description:
-        "Organize clients, track relationships, and manage communications in one place.",
-    },
-    {
-      icon: Briefcase,
-      title: "Project Tracking",
-      description:
-        "Monitor project progress, deadlines, and deliverables with visual timelines.",
-    },
-    {
-      icon: FileText,
-      title: "Smart Proposals",
-      description:
-        "Generate professional proposals with AI assistance and send them instantly.",
-    },
-    {
-      icon: DollarSign,
-      title: "Financial Insights",
-      description:
-        "Track income, expenses, and forecast cashflow with interactive simulators.",
-    },
-    {
-      icon: Calendar,
-      title: "Unified Calendar",
-      description:
-        "Manage deadlines, meetings, and tasks in a single integrated calendar.",
-    },
-    {
-      icon: Zap,
-      title: "AI Co-pilot",
-      description:
-        "Context-aware AI assistant that understands your business and takes action.",
-    },
-  ];
-
-  const steps = [
-    {
-      icon: Rocket,
-      title: "Quick Setup",
-      description:
-        "Describe your business in plain English. Our AI understands your needs instantly.",
-    },
-    {
-      icon: Sparkles,
-      title: "AI Configuration",
-      description:
-        "Watch as Forgefly automatically sets up your workspace, packages, and workflows.",
-    },
-    {
-      icon: Target,
-      title: "Start Growing",
-      description:
-        "Manage clients, send proposals, track finances, and scale your business effortlessly.",
-    },
-  ];
-
-  const benefits = [
-    "Save 10+ hours per week on admin tasks",
-    "Professional proposals in minutes, not hours",
-    "Never miss a deadline or payment",
-    "Data-driven decisions with financial forecasting",
-    "Client portal for seamless collaboration",
-    "All-in-one platform, no tool juggling",
-    "24/7 on-call support for your business needs",
-    "Effortless payments with secure Stripe integration",
-  ];
-
-  const testimonials = [
-    {
-      quote:
-        "Forgefly turned my chaotic freelance life into a real business in under 10 minutes. The AI onboarding is pure magic.",
-      name: "Sarah Chen",
-      role: "Brand Designer",
-      avatar:
-        "https://miaoda-site-img.s3cdn.medo.dev/images/KLing_b3e4f5ce-8894-444b-9753-7c3a08c58518.jpg",
-      rating: 5,
-    },
-    {
-      quote:
-        "Finally one tool that handles proposals, invoices, clients AND cashflow forecasting. I closed two clients this week because of the professional proposals.",
-      name: "Marcus Okoro",
-      role: "Web Developer",
-      avatar:
-        "https://miaoda-site-img.s3cdn.medo.dev/images/KLing_5453a9f8-1e61-4b65-8d1e-812b5d956173.jpg",
-      rating: 5,
-    },
-    {
-      quote:
-        "The contextual AI Co-pilot feels like having a business partner. It actually understands my agency workflow.",
-      name: "Priya Sharma",
-      role: "Freelance Strategist",
-      avatar:
-        "https://miaoda-site-img.s3cdn.medo.dev/images/KLing_d60fe409-c0ac-4f94-aa01-824044ec4c3d.jpg",
-      rating: 5,
-    },
-    {
-      quote:
-        "Stripe integration is seamless. Getting paid feels effortless now.",
-      name: "Diego Morales",
-      role: "Graphic Illustrator",
-      avatar:
-        "https://miaoda-site-img.s3cdn.medo.dev/images/KLing_652adae2-c426-40ff-b4ed-42987dbf4d24.jpg",
-      rating: 5,
-    },
-    {
-      quote:
-        "I went from 7 different tools to just Forgefly. My clients love the professional portal too.",
-      name: "Aisha Khan",
-      role: "UI/UX Designer",
-      avatar:
-        "https://miaoda-site-img.s3cdn.medo.dev/images/KLing_4514af45-40f3-43c5-ab0a-3b85ec13b583.jpg",
-      rating: 5,
-    },
-    {
-      quote: "Best investment of 2026 for any solopreneur. Highly recommend.",
-      name: "Jamal Wright",
-      role: "Motion Designer",
-      avatar:
-        "https://miaoda-site-img.s3cdn.medo.dev/images/KLing_f020a5e2-d58e-4919-92bd-11122bb19132.jpg",
-      rating: 5,
-    },
-  ];
-
-  const [emblaRef, emblaApi] = useEmblaCarousel(
-    { loop: true, align: "start" },
-    [Autoplay({ delay: 5000, stopOnInteraction: false })],
-  );
-
-  const [selectedIndex, setSelectedIndex] = useState(0);
-
-  const scrollPrev = useCallback(() => {
-    if (emblaApi) emblaApi.scrollPrev();
-  }, [emblaApi]);
-
-  const scrollNext = useCallback(() => {
-    if (emblaApi) emblaApi.scrollNext();
-  }, [emblaApi]);
-
-  const scrollTo = useCallback(
-    (index: number) => {
-      if (emblaApi) emblaApi.scrollTo(index);
-    },
-    [emblaApi],
-  );
-
-  const onSelect = useCallback(() => {
-    if (!emblaApi) return;
-    setSelectedIndex(emblaApi.selectedScrollSnap());
-  }, [emblaApi]);
-
+  // How-it-works IntersectionObserver
   useEffect(() => {
-    if (!emblaApi) return;
-    onSelect();
-    emblaApi.on("select", onSelect);
-    return () => {
-      emblaApi.off("select", onSelect);
-    };
-  }, [emblaApi, onSelect]);
+    const observers: IntersectionObserver[] = [];
+    howPanelRefs.current.forEach((panel, i) => {
+      if (!panel) return;
+      const obs = new IntersectionObserver(
+        ([entry]) => {
+          if (entry.isIntersecting) {
+            panel.classList.add("visible");
+            setActiveHowStep(i);
+          }
+        },
+        { threshold: 0.5 },
+      );
+      obs.observe(panel);
+      observers.push(obs);
+    });
+    return () => observers.forEach((o) => o.disconnect());
+  }, []);
+
+  // Scroll reveal — features, pricing, fade-ups
+  useEffect(() => {
+    const els = document.querySelectorAll(".ff-feature-pair, .ff-pricing-card, .ff-fade-up");
+    const obs = new IntersectionObserver(
+      (entries) => { entries.forEach((e) => { if (e.isIntersecting) e.target.classList.add("visible"); }); },
+      { threshold: 0.15 },
+    );
+    els.forEach((el) => obs.observe(el));
+    return () => obs.disconnect();
+  }, []);
 
   const handleGenerate = async () => {
     const prompt = seedPrompt.trim();
     if (!prompt || generating) return;
     if (typingRef.current) clearTimeout(typingRef.current);
     if (cycleRef.current) clearTimeout(cycleRef.current);
-
     setGenerating(true);
     setGenStep(0);
     const startedAt = Date.now();
-
-    // Auto-advance steps every 1.8s (stops at last step)
     let step = 0;
     stepRef.current = setInterval(() => {
       step += 1;
       setGenStep((s) => Math.min(s + 1, GEN_STEPS.length - 1));
-      if (step >= GEN_STEPS.length - 1 && stepRef.current) {
-        clearInterval(stepRef.current);
-      }
+      if (step >= GEN_STEPS.length - 1 && stepRef.current) clearInterval(stepRef.current);
     }, 1800);
-
     try {
       const res = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-gateway`,
         {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-          },
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}` },
           body: JSON.stringify({ mode: "extract", prompt }),
         },
       );
       if (!res.ok) throw new Error(await res.text());
       const data = await res.json();
       const elapsedSeconds = Math.round((Date.now() - startedAt) / 1000);
-
       const pendingPayload = {
-        extracted_data: data.extracted_data,
-        prompt,
-        elapsed_seconds: elapsedSeconds,
-        timestamp: Date.now(),
-        confidence_map: data.confidence_map ?? null,
+        extracted_data: data.extracted_data, prompt, elapsed_seconds: elapsedSeconds,
+        timestamp: Date.now(), confidence_map: data.confidence_map ?? null,
         completeness_score: data.completeness_score ?? 0,
       };
-
-      // Save to localStorage as same-device fallback
       localStorage.setItem("pending_portal", JSON.stringify(pendingPayload));
-
-      // Save to DB so the token can travel through the email verification link
       try {
         const { data: row } = await supabase
           .from("pending_businesses")
-          .insert({
-            extracted_data: data.extracted_data,
-            prompt,
-            elapsed_seconds: elapsedSeconds,
-            confidence_map: data.confidence_map ?? null,
-            completeness_score: data.completeness_score ?? 0,
-          })
-          .select("token")
-          .single();
+          .insert({ extracted_data: data.extracted_data, prompt, elapsed_seconds: elapsedSeconds, confidence_map: data.confidence_map ?? null, completeness_score: data.completeness_score ?? 0 })
+          .select("token").single();
         if (row?.token) localStorage.setItem("pending_portal_token", row.token);
-      } catch {
-        // Non-fatal: same-device localStorage fallback still works
-      }
-
+      } catch { /* non-fatal */ }
       if (stepRef.current) clearInterval(stepRef.current);
       navigate("/preview");
     } catch (err) {
@@ -372,52 +297,27 @@ export default function LandingPage() {
     }
   };
 
-  // ── Generating screen ────────────────────────────────────────────────────
+  // ── Generating screen ───────────────────────────────────────────────────────
   if (generating) {
     const current = GEN_STEPS[genStep];
     return (
       <div className="min-h-screen bg-[#1a1a1a] flex items-center justify-center px-4">
         <div className="max-w-lg w-full text-center">
-          {/* Spinner */}
           <div className="flex justify-center mb-8">
             <div className="w-16 h-16 rounded-full border-[3px] border-white/10 border-t-emerald-400 animate-spin" />
           </div>
-
-          {/* Title */}
-          <h2 className="text-2xl font-bold text-white mb-2">
-            Building your business OS…
-          </h2>
-          <p className="text-gray-400 text-sm mb-10 min-h-[20px] transition-all duration-500">
-            {current.subtitle}
-          </p>
-
-          {/* Steps */}
+          <h2 className="text-2xl font-bold text-white mb-2">Building your business OS…</h2>
+          <p className="text-gray-400 text-sm mb-10 min-h-[20px] transition-all duration-500">{current.subtitle}</p>
           <div className="space-y-4 text-left max-w-xs mx-auto">
             {GEN_STEPS.map((step, i) => {
               const done = i < genStep;
               const active = i === genStep;
               return (
                 <div key={step.label} className="flex items-center gap-3">
-                  <span
-                    className={`w-5 shrink-0 text-center text-sm font-bold transition-colors duration-300 ${
-                      done
-                        ? "text-emerald-400"
-                        : active
-                          ? "text-gray-400"
-                          : "text-gray-700"
-                    }`}
-                  >
+                  <span className={`w-5 shrink-0 text-center text-sm font-bold transition-colors duration-300 ${done ? "text-emerald-400" : active ? "text-gray-400" : "text-gray-700"}`}>
                     {done ? "✓" : "·"}
                   </span>
-                  <span
-                    className={`text-base font-medium transition-colors duration-300 ${
-                      done
-                        ? "text-emerald-400"
-                        : active
-                          ? "text-white"
-                          : "text-gray-600"
-                    }`}
-                  >
+                  <span className={`text-base font-medium transition-colors duration-300 ${done ? "text-emerald-400" : active ? "text-white" : "text-gray-600"}`}>
                     {step.label}
                   </span>
                 </div>
@@ -429,91 +329,80 @@ export default function LandingPage() {
     );
   }
 
+  // ── Main page ───────────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-black">
-      {/* Navigation */}
-      <nav className="fixed top-0 left-0 right-0 z-50 border-b border-white/10 bg-black/80 backdrop-blur-lg">
-        <div className="w-full md:max-w-[60vw] mx-auto px-4 md:px-6">
-          <div className="flex items-center justify-between h-16">
-            <div className="flex items-center gap-3">
-              <img
-                src="/forgefly-icon.png"
-                alt="Forgefly Logo"
-                className="w-10 h-10 rounded-lg"
-              />
-              <div>
-                <h1 className="text-xl font-bold text-white">Forgefly</h1>
-                <p className="text-xs text-emerald-400">Forge Your Freedom</p>
-              </div>
-            </div>
-            <div className="hidden md:flex items-center gap-1">
-              <Button
-                variant="ghost"
-                className="text-gray-300 hover:text-white hover:bg-white/5 text-sm"
-                onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
-              >
-                Home
-              </Button>
-              {[
-                { label: "How", id: "how-it-works" },
-                { label: "Reviews", id: "reviews" },
-                { label: "Pricing", id: "pricing" },
-              ].map(({ label, id }) => (
-                <Button
-                  key={id}
-                  variant="ghost"
-                  className="text-gray-300 hover:text-white hover:bg-white/5 text-sm"
-                  onClick={() =>
-                    document
-                      .getElementById(id)
-                      ?.scrollIntoView({ behavior: "smooth" })
-                  }
-                >
-                  {label}
-                </Button>
-              ))}
-            </div>
-            <div className="flex items-center gap-4">
-              <Button
-                variant="ghost"
-                className="text-white hover:text-emerald-400 hover:bg-white/5"
-                onClick={() => navigate("/login")}
-              >
-                Sign In
-              </Button>
-              <Button
-                className="bg-emerald-500 hover:bg-emerald-600 text-white"
-                onClick={() => navigate("/login")}
-              >
-                Get Started
-              </Button>
-            </div>
+    <div style={{ background: S.bg, color: S.text, fontFamily: "Inter, sans-serif", minHeight: "100vh" }}>
+      <style>{PAGE_CSS}</style>
+
+      {/* ── Nav ─────────────────────────────────────────────────────────────── */}
+      <nav style={{
+        position: "fixed", top: 0, left: 0, right: 0, zIndex: 100,
+        transition: "background 0.3s ease, border-color 0.3s ease",
+        background:      navScrolled ? "rgba(8,13,11,0.85)" : "transparent",
+        backdropFilter:  navScrolled ? "blur(16px)" : "none",
+        borderBottom:    navScrolled ? `1px solid ${S.border}` : "1px solid transparent",
+      }}>
+        <div style={{ maxWidth: "1152px", margin: "0 auto", padding: "0 24px", display: "flex", alignItems: "center", justifyContent: "space-between", height: "64px" }}>
+          {/* Logo */}
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <img src="/forgefly-icon.png" alt="Forgefly" style={{ width: "32px", height: "32px", borderRadius: "8px" }} />
+            <span style={{ fontFamily: sora, fontWeight: 600, fontSize: "1.05rem", color: S.text }}>Forgefly</span>
+          </div>
+
+          {/* Center links */}
+          <div className="hidden md:flex" style={{ gap: "32px" }}>
+            {[{ label: "How it works", id: "how" }, { label: "Features", id: "features" }, { label: "Pricing", id: "pricing" }].map(({ label, id }) => (
+              <button key={id} type="button"
+                onClick={() => document.getElementById(id)?.scrollIntoView({ behavior: "smooth" })}
+                style={{ background: "none", border: "none", cursor: "pointer", color: S.mid, fontSize: "0.875rem", transition: "color 0.2s" }}
+                onMouseEnter={e => (e.currentTarget.style.color = S.text)}
+                onMouseLeave={e => (e.currentTarget.style.color = S.mid)}
+              >{label}</button>
+            ))}
+          </div>
+
+          {/* Right actions */}
+          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+            <button type="button" onClick={() => navigate("/login")}
+              style={{ background: "none", border: "none", cursor: "pointer", color: S.mid, fontSize: "0.875rem", transition: "color 0.2s" }}
+              onMouseEnter={e => (e.currentTarget.style.color = S.text)}
+              onMouseLeave={e => (e.currentTarget.style.color = S.mid)}
+            >Sign in</button>
+            <button type="button" onClick={() => navigate("/login")}
+              style={{ background: `linear-gradient(135deg, ${S.em}, ${S.em2})`, color: "#fff", border: "none", borderRadius: "9999px", padding: "8px 20px", fontSize: "0.875rem", fontWeight: 500, cursor: "pointer", transition: "opacity 0.2s" }}
+              onMouseEnter={e => (e.currentTarget.style.opacity = "0.85")}
+              onMouseLeave={e => (e.currentTarget.style.opacity = "1")}
+            >Get started</button>
           </div>
         </div>
       </nav>
 
-      {/* Hero Section */}
-      <section className="pt-32 pb-20 px-4 sm:px-6 lg:px-8">
-        <div className="w-full md:max-w-[60vw] mx-auto text-center">
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-emerald-500/10  border border-emerald-500/20 text-emerald-400 text-sm mb-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
-            <TestTubeDiagonal className="w-4 h-4" />
-            <span>• Coming Soon</span>
+      {/* ── Hero ────────────────────────────────────────────────────────────── */}
+      <section id="hero" className="ff-hero-section" style={{ minHeight: "100vh", display: "flex", alignItems: "center", paddingTop: "80px" }}>
+        <div className="ff-dot-grid" />
+        <div className="ff-bloom" style={{ bottom: "-10%", left: "50%", transform: "translateX(-50%)" }} />
+
+        <div className="ff-hero-content" style={{ width: "100%", maxWidth: "896px", margin: "0 auto", padding: "0 24px", textAlign: "center" }}>
+          {/* Badge */}
+          <div style={{ display: "inline-flex", alignItems: "center", gap: "8px", padding: "6px 16px", borderRadius: "9999px", background: "rgba(16,185,129,0.08)", border: `1px solid rgba(16,185,129,0.2)`, color: S.em, fontSize: "0.78rem", marginBottom: "28px", fontWeight: 500 }}>
+            ✦ AI Business OS for freelancers &amp; solopreneurs
           </div>
 
-          <p className="text-2xl md:text-3xl text-emerald-400 mb-4 animate-in fade-in slide-in-from-bottom-4 duration-700 delay-200">
-            AI Business OS for Solopreneurs
+          {/* Headline */}
+          <h1 style={{ fontFamily: sora, fontWeight: 600, fontSize: "clamp(2.2rem, 5vw, 3.8rem)", lineHeight: 1.15, color: S.text, marginBottom: "20px", letterSpacing: "-0.02em" }}>
+            Describe your business.<br />
+            <span style={{ color: S.em }}>Watch it come alive.</span>
+          </h1>
+
+          {/* Sub */}
+          <p style={{ color: S.mid, fontSize: "clamp(1rem, 2vw, 1.15rem)", maxWidth: "520px", margin: "0 auto 48px", lineHeight: 1.65 }}>
+            One prompt. Forgefly builds your client portal, proposal engine,
+            invoicing, and finances — fully configured around your niche.
           </p>
 
-          <p className="text-lg md:text-xl text-gray-400 max-w-3xl mx-auto mb-12 animate-in fade-in slide-in-from-bottom-4 duration-700 delay-300">
-            The all-in-one platform that combines client management, project
-            tracking, financial forecasting, and AI assistance to help
-            freelancers and solopreneurs scale their business with confidence.
-          </p>
-
-          {/* Seed Prompt Hero */}
+          {/* ── SEED PROMPT + PILLS — PRESERVED EXACTLY ───────────────────── */}
           <div className="mt-10 max-w-3xl mx-auto animate-in fade-in slide-in-from-bottom-6 duration-700 delay-400">
             <div className="rounded-2xl border border-white/15 bg-white/5 backdrop-blur-sm shadow-2xl overflow-hidden">
-              {/* Textarea */}
               <textarea
                 value={seedPrompt}
                 onChange={(e) => setSeedPrompt(e.target.value)}
@@ -525,20 +414,14 @@ export default function LandingPage() {
                 className="w-full bg-transparent text-white text-lg leading-relaxed p-6 pb-4 resize-none outline-none placeholder:text-gray-500 min-h-[160px]"
                 rows={5}
               />
-
-              {/* Validation hint */}
               {validatePrompt(seedPrompt) && seedPrompt.trim().length > 0 && (
                 <div className="flex items-center gap-2 px-6 pb-2">
                   <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
                   <p className="text-xs text-amber-400">{validatePrompt(seedPrompt)}</p>
                 </div>
               )}
-
-              {/* Bottom bar */}
               <div className="flex items-center justify-between px-6 py-4 border-t border-white/10">
-                <span className="text-sm text-gray-500">
-                  No account needed to generate
-                </span>
+                <span className="text-sm text-gray-500">No account needed to generate</span>
                 <Button
                   size="lg"
                   className="bg-white text-gray-900 hover:bg-gray-100 font-semibold px-6 disabled:opacity-60"
@@ -559,8 +442,6 @@ export default function LandingPage() {
                 </Button>
               </div>
             </div>
-
-            {/* Example chips */}
             <div className="flex flex-wrap items-center justify-center gap-3 mt-5">
               {SEED_CHIPS.map((chip, i) => (
                 <button
@@ -583,430 +464,416 @@ export default function LandingPage() {
               ))}
             </div>
           </div>
-        </div>
-      </section>
+          {/* ── END PRESERVED SECTION ─────────────────────────────────────── */}
 
-      {/* How It Works Section */}
-      <section id="how-it-works" className="py-20 px-4 sm:px-6 lg:px-8">
-        <div className="w-full md:max-w-[60vw] mx-auto">
-          <div className="text-center mb-16">
-            <h2 className="text-4xl md:text-5xl font-bold text-white mb-4">
-              How It Works
-            </h2>
-            <p className="text-xl text-gray-400 max-w-2xl mx-auto">
-              Get started in minutes with our AI-powered setup process
-            </p>
-          </div>
-
-          <div className="grid md:grid-cols-3 gap-8">
-            {steps.map((step, index) => (
-              <Card
-                key={index}
-                className="bg-white/5 backdrop-blur-sm border-white/10 hover:border-emerald-500/30 transition-all duration-300 animate-in fade-in slide-in-from-bottom-4"
-                style={{ animationDelay: `${index * 150}ms` }}
-              >
-                <CardContent className="p-8">
-                  <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-emerald-500/20 to-emerald-600/10 border border-emerald-500/20 flex items-center justify-center mb-6">
-                    <step.icon className="w-8 h-8 text-emerald-400" />
-                  </div>
-                  <div className="text-sm font-semibold text-emerald-400 mb-2">
-                    Step {index + 1}
-                  </div>
-                  <h3 className="text-2xl font-bold text-white mb-3">
-                    {step.title}
-                  </h3>
-                  <p className="text-gray-400 leading-relaxed">
-                    {step.description}
-                  </p>
-                </CardContent>
-              </Card>
-            ))}
+          <div className="ff-scroll-bob" style={{ marginTop: "56px", color: S.dim, fontSize: "0.75rem", display: "flex", flexDirection: "column", alignItems: "center", gap: "4px" }}>
+            <span>↓</span>
           </div>
         </div>
       </section>
 
-      {/* Features Section */}
-      <section
-        id="features"
-        className="py-20 px-4 sm:px-6 lg:px-8 bg-gradient-to-b from-transparent via-emerald-500/5 to-transparent"
-      >
-        <div className="w-full md:max-w-[60vw] mx-auto">
-          <div className="text-center mb-16">
-            <h2 className="text-4xl md:text-5xl font-bold text-white mb-4">
-              Everything You Need to Scale
+      {/* ── How It Works ────────────────────────────────────────────────────── */}
+      <section id="how" style={{ padding: "120px 0", background: S.bg }}>
+        <div style={{ maxWidth: "1152px", margin: "0 auto", padding: "0 24px" }}>
+          <div className="ff-fade-up" style={{ textAlign: "center", marginBottom: "80px" }}>
+            <p style={{ color: S.em, fontSize: "0.75rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: "12px" }}>How it works</p>
+            <h2 style={{ fontFamily: sora, fontWeight: 600, fontSize: "clamp(1.8rem, 3.5vw, 2.8rem)", color: S.text, letterSpacing: "-0.02em" }}>
+              From prompt to business OS<br />in under 60 seconds
             </h2>
-            <p className="text-xl text-gray-400 max-w-2xl mx-auto">
-              Powerful features designed specifically for solopreneurs and
-              freelancers
-            </p>
           </div>
 
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {features.map((feature, index) => (
-              <Card
-                key={index}
-                className="bg-white/5 backdrop-blur-sm border-white/10 hover:border-amber-500/30 transition-all duration-300 group animate-in fade-in slide-in-from-bottom-4"
-                style={{ animationDelay: `${index * 100}ms` }}
-              >
-                <CardContent className="p-6">
-                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-500/20 to-amber-600/10 border border-amber-500/20 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-300">
-                    <feature.icon className="w-6 h-6 text-amber-400" />
-                  </div>
-                  <h3 className="text-xl font-bold text-white mb-2">
-                    {feature.title}
-                  </h3>
-                  <p className="text-gray-400 text-sm leading-relaxed">
-                    {feature.description}
-                  </p>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Benefits Section */}
-      <section className="py-20 px-4 sm:px-6 lg:px-8">
-        <div className="w-full md:max-w-[60vw] mx-auto">
-          {/* Centered Section Header */}
-          <div className="text-center mb-16">
-            <h2 className="text-4xl md:text-5xl font-bold text-white mb-4 text-balance">
-              Built for Freelancers Who Want More
-            </h2>
-            <p className="text-xl text-gray-400 max-w-2xl mx-auto text-pretty">
-              Stop juggling multiple tools and spreadsheets. Forgefly brings
-              everything together in one beautiful, intelligent platform.
-            </p>
-          </div>
-
-          {/* Two Column Layout */}
-          <div className="grid lg:grid-cols-2 gap-12 items-center">
-            <div className="space-y-4">
-              {benefits.map((benefit, index) => (
-                <div
-                  key={index}
-                  className="flex items-start gap-3 animate-in fade-in slide-in-from-left-4"
-                  style={{ animationDelay: `${index * 100}ms` }}
-                >
-                  <CheckCircle2 className="w-6 h-6 text-emerald-400 shrink-0 mt-0.5" />
-                  <span className="text-lg text-gray-300">{benefit}</span>
+          <div className="ff-how-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", minHeight: "400vh", gap: "0 80px" }}>
+            {/* Left sticky indicators */}
+            <div className="ff-how-sticky" style={{ position: "sticky", top: 0, height: "100vh", display: "flex", flexDirection: "column", justifyContent: "center" }}>
+              {HOW_STEPS.map((step, i) => (
+                <div key={step.num} style={{
+                  display: "flex", alignItems: "center", gap: "16px",
+                  padding: "22px 0",
+                  borderBottom: i < HOW_STEPS.length - 1 ? `1px solid ${S.border2}` : "none",
+                  opacity: activeHowStep === i ? 1 : 0.35,
+                  transition: "opacity 0.35s ease",
+                }}>
+                  <div style={{
+                    width: "40px", height: "40px", borderRadius: "50%", flexShrink: 0,
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    fontSize: "0.7rem", fontWeight: 700,
+                    background: activeHowStep === i ? S.em : "rgba(16,185,129,0.08)",
+                    color:      activeHowStep === i ? S.bg  : S.em,
+                    border:     activeHowStep === i ? "none" : `1px solid rgba(16,185,129,0.18)`,
+                    transition: "background 0.35s ease, color 0.35s ease",
+                  }}>{step.num}</div>
+                  <span style={{
+                    fontFamily: sora, fontSize: "1rem",
+                    fontWeight: activeHowStep === i ? 500 : 400,
+                    color: activeHowStep === i ? S.text : S.dim,
+                    transition: "color 0.35s ease",
+                  }}>{step.label}</span>
                 </div>
               ))}
             </div>
 
-            <div className="relative">
-              <Card className="relative bg-white/5 backdrop-blur-sm border-white/10">
-                <CardContent className="p-8 space-y-4">
-                  <div className="flex items-center justify-between p-4 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
-                    <div>
-                      <div className="text-sm text-emerald-400 mb-1">
-                        Monthly Revenue
-                      </div>
-                      <div className="text-2xl font-bold text-white">
-                        $12,450
-                      </div>
-                    </div>
-                    <TrendingUp className="w-8 h-8 text-emerald-400" />
+            {/* Right scrolling panels */}
+            <div>
+              {/* Panel 1 */}
+              <div className="ff-how-panel" ref={el => { howPanelRefs.current[0] = el; }}
+                style={{ minHeight: "100vh", display: "flex", flexDirection: "column", justifyContent: "center", paddingTop: "80px" }}>
+                <div style={{ background: S.bg2, border: `1px solid ${S.border}`, borderRadius: "16px", padding: "28px", marginBottom: "28px" }}>
+                  <p style={{ color: S.dim, fontSize: "0.7rem", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "12px" }}>Your prompt</p>
+                  <p style={{ color: S.text, fontSize: "0.9rem", lineHeight: 1.65, marginBottom: "20px" }}>
+                    "I'm a brand strategist + identity designer. Full Brand Identity $4,200,
+                    Discovery Workshop $950, Brand Guidelines $1,800. Remote, purpose-driven founders."
+                  </p>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+                    {["Brand Strategist", "Identity Designer", "Remote", "3 services", "$4,200 avg"].map(tag => (
+                      <span key={tag} style={{ padding: "3px 10px", borderRadius: "6px", background: "rgba(16,185,129,0.07)", border: `1px solid rgba(16,185,129,0.14)`, color: S.em, fontSize: "0.72rem" }}>{tag}</span>
+                    ))}
                   </div>
-                  <div className="flex items-center justify-between p-4 rounded-lg bg-amber-500/10 border border-amber-500/20">
-                    <div>
-                      <div className="text-sm text-amber-400 mb-1">
-                        Active Projects
-                      </div>
-                      <div className="text-2xl font-bold text-white">8</div>
+                </div>
+                <h3 style={{ fontFamily: sora, fontWeight: 600, fontSize: "1.4rem", color: S.text, marginBottom: "12px" }}>Describe what you do</h3>
+                <p style={{ color: S.mid, lineHeight: 1.65 }}>Write freely — your niche, services, rates, and clients. Forgefly's AI classifies every detail into a structured business profile.</p>
+              </div>
+
+              {/* Panel 2 */}
+              <div className="ff-how-panel" ref={el => { howPanelRefs.current[1] = el; }}
+                style={{ minHeight: "100vh", display: "flex", flexDirection: "column", justifyContent: "center", paddingTop: "80px" }}>
+                <div style={{ background: S.bg2, border: `1px solid ${S.border}`, borderRadius: "16px", padding: "28px", marginBottom: "28px" }}>
+                  <p style={{ color: S.dim, fontSize: "0.7rem", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "16px" }}>Generating</p>
+                  {GEN_STEPS.slice(0, 5).map((step, i) => (
+                    <div key={step.label} style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "10px" }}>
+                      <span style={{ color: S.em, fontSize: "0.75rem", width: "16px" }}>✓</span>
+                      <span style={{ color: i < 3 ? S.text : S.dim, fontSize: "0.85rem" }}>{step.label}</span>
                     </div>
-                    <Briefcase className="w-8 h-8 text-amber-400" />
-                  </div>
-                  <div className="flex items-center justify-between p-4 rounded-lg bg-blue-500/10 border border-blue-500/20">
-                    <div>
-                      <div className="text-sm text-blue-400 mb-1">
-                        Time Saved
-                      </div>
-                      <div className="text-2xl font-bold text-white">
-                        12 hrs/week
-                      </div>
+                  ))}
+                  <div style={{ marginTop: "16px", padding: "12px", background: "rgba(16,185,129,0.04)", borderRadius: "8px", border: `1px solid rgba(16,185,129,0.1)` }}>
+                    <div style={{ display: "flex", gap: "8px", marginBottom: "8px" }}>
+                      {["#0A4228", "#10B981", "#E1F5EE", "#085041"].map(c => (
+                        <div key={c} style={{ width: "22px", height: "22px", borderRadius: "4px", background: c, border: "1px solid rgba(255,255,255,0.08)" }} />
+                      ))}
                     </div>
-                    <Zap className="w-8 h-8 text-blue-400" />
+                    <p style={{ color: S.mid, fontSize: "0.72rem" }}>Brand palette extracted from your niche</p>
                   </div>
-                </CardContent>
-              </Card>
+                </div>
+                <h3 style={{ fontFamily: sora, fontWeight: 600, fontSize: "1.4rem", color: S.text, marginBottom: "12px" }}>Watch it assemble</h3>
+                <p style={{ color: S.mid, lineHeight: 1.65 }}>Services are packaged, a proposal drafted, your brand kit generated, and pipeline stages mapped — in seconds.</p>
+              </div>
+
+              {/* Panel 3 */}
+              <div className="ff-how-panel" ref={el => { howPanelRefs.current[2] = el; }}
+                style={{ minHeight: "100vh", display: "flex", flexDirection: "column", justifyContent: "center", paddingTop: "80px" }}>
+                <div style={{ background: S.bg2, border: `1px solid ${S.border}`, borderRadius: "16px", padding: "28px", marginBottom: "28px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "20px" }}>
+                    <div style={{ width: "36px", height: "36px", borderRadius: "8px", background: `linear-gradient(135deg, ${S.em}, ${S.em2})`, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: "0.8rem", fontWeight: 600 }}>P</div>
+                    <div>
+                      <p style={{ color: S.text, fontWeight: 600, fontSize: "0.9rem" }}>PacUX Studio</p>
+                      <p style={{ color: S.dim, fontSize: "0.72rem" }}>pacux.forgefly.io</p>
+                    </div>
+                    <span style={{ marginLeft: "auto", padding: "3px 10px", borderRadius: "6px", background: "rgba(16,185,129,0.08)", border: `1px solid rgba(16,185,129,0.18)`, color: S.em, fontSize: "0.68rem", fontWeight: 600 }}>Live</span>
+                  </div>
+                  {["Brand Discovery Workshop — $950", "Full Brand Identity — $4,200", "Brand Guidelines — $1,800"].map(s => (
+                    <div key={s} style={{ padding: "10px 12px", marginBottom: "8px", background: "rgba(255,255,255,0.025)", borderRadius: "8px", color: S.mid, fontSize: "0.85rem", borderLeft: `2px solid rgba(16,185,129,0.3)` }}>{s}</div>
+                  ))}
+                </div>
+                <h3 style={{ fontFamily: sora, fontWeight: 600, fontSize: "1.4rem", color: S.text, marginBottom: "12px" }}>Your business is live</h3>
+                <p style={{ color: S.mid, lineHeight: 1.65 }}>A shareable client portal appears instantly — your services, brand colors, and contact details, ready to send to prospects.</p>
+              </div>
+
+              {/* Panel 4 */}
+              <div className="ff-how-panel" ref={el => { howPanelRefs.current[3] = el; }}
+                style={{ minHeight: "100vh", display: "flex", flexDirection: "column", justifyContent: "center", paddingTop: "80px" }}>
+                <div style={{ background: S.bg2, border: `1px solid ${S.border}`, borderRadius: "16px", padding: "28px", marginBottom: "28px" }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                    {[
+                      { label: "Revenue MTD", value: "$8,400", color: S.em },
+                      { label: "Active clients", value: "7",      color: S.em },
+                      { label: "Open proposals", value: "3",      color: "#F59E0B" },
+                      { label: "Invoices due",   value: "$2,950", color: "#F59E0B" },
+                    ].map(cell => (
+                      <div key={cell.label} style={{ padding: "16px", background: "rgba(255,255,255,0.025)", borderRadius: "10px", border: `1px solid ${S.border2}` }}>
+                        <p style={{ color: S.dim, fontSize: "0.65rem", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "6px" }}>{cell.label}</p>
+                        <p style={{ color: cell.color, fontWeight: 700, fontSize: "1.4rem", fontFamily: sora }}>{cell.value}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <h3 style={{ fontFamily: sora, fontWeight: 600, fontSize: "1.4rem", color: S.text, marginBottom: "12px" }}>Run everything from one place</h3>
+                <p style={{ color: S.mid, lineHeight: 1.65 }}>Proposals, invoices, projects, calendar, finances, and AI insights — your full business command center, no tab-juggling required.</p>
+              </div>
             </div>
           </div>
         </div>
       </section>
 
-      {/* Testimonials Section */}
-      <section
-        id="reviews"
-        className="py-20 px-4 sm:px-6 lg:px-8 bg-gradient-to-b from-transparent via-amber-500/5 to-transparent"
-      >
-        <div className="w-full md:max-w-[60vw] mx-auto">
-          <div className="text-center mb-16">
-            <h2 className="text-4xl md:text-5xl font-bold text-white mb-4">
-              Real Freelancers, Real Freedom
+      {/* ── Features ────────────────────────────────────────────────────────── */}
+      <section id="features" style={{ padding: "120px 0", background: S.bg }}>
+        <div style={{ maxWidth: "1152px", margin: "0 auto", padding: "0 24px" }}>
+          <div className="ff-fade-up" style={{ textAlign: "center", marginBottom: "80px" }}>
+            <p style={{ color: S.em, fontSize: "0.75rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: "12px" }}>Features</p>
+            <h2 style={{ fontFamily: sora, fontWeight: 600, fontSize: "clamp(1.8rem, 3.5vw, 2.8rem)", color: S.text, letterSpacing: "-0.02em" }}>
+              Everything a freelance business needs.<br />
+              <span style={{ color: S.mid, fontWeight: 400 }}>Nothing you don't.</span>
             </h2>
-            <p className="text-xl text-gray-400 max-w-2xl mx-auto">
-              Join thousands of solopreneurs who transformed their business with
-              Forgefly
-            </p>
           </div>
 
-          <div className="relative">
-            {/* Carousel Container */}
-            <div className="overflow-hidden" ref={emblaRef}>
-              <div className="flex ml-[-24px]">
-                {testimonials.map((testimonial, index) => (
-                  <div
-                    key={index}
-                    className="flex-[0_0_100%] md:flex-[0_0_50%] lg:flex-[0_0_33.333%] min-w-0 pl-6"
-                  >
-                    <Card className="h-full bg-white/5 backdrop-blur-sm border-white/10 hover:border-amber-500/30 transition-all duration-300">
-                      <CardContent className="p-8 flex flex-col h-full">
-                        {/* Rating Stars */}
-                        <div className="flex gap-1 mb-4">
-                          {Array.from({ length: testimonial.rating }).map(
-                            (_, i) => (
-                              <Star
-                                key={i}
-                                className="w-5 h-5 fill-amber-400 text-amber-400"
-                              />
-                            ),
-                          )}
-                        </div>
-
-                        {/* Quote */}
-                        <p className="text-gray-300 text-pretty mb-6 flex-1 leading-relaxed">
-                          "{testimonial.quote}"
-                        </p>
-
-                        {/* Author */}
-                        <div className="flex items-center gap-4">
-                          <img
-                            src={testimonial.avatar}
-                            alt={testimonial.name}
-                            className="w-12 h-12 rounded-full object-cover border-2 border-emerald-500/30"
-                          />
-                          <div>
-                            <div className="font-semibold text-white">
-                              {testimonial.name}
-                            </div>
-                            <div className="text-sm text-emerald-400">
-                              {testimonial.role}
-                            </div>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
+          {[
+            {
+              title: "Generate, then gate",
+              desc: "Get your business OS first. No form, no credit card, no friction. The AI builds your entire workspace from a single prompt. Sign up happens after — because seeing is believing.",
+              reverse: false,
+              visual: (
+                <div style={{ background: S.bg2, border: `1px solid ${S.border}`, borderRadius: "16px", padding: "28px" }}>
+                  {GEN_STEPS.map((s, i) => (
+                    <div key={s.label} style={{ display: "flex", gap: "12px", alignItems: "center", marginBottom: "12px" }}>
+                      <span style={{ width: "20px", height: "20px", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.58rem", flexShrink: 0, background: i < 4 ? "rgba(16,185,129,0.12)" : "rgba(255,255,255,0.04)", border: `1px solid ${i < 4 ? "rgba(16,185,129,0.25)" : "rgba(255,255,255,0.08)"}`, color: i < 4 ? S.em : S.dim }}>✓</span>
+                      <span style={{ color: i < 4 ? S.text : S.dim, fontSize: "0.85rem" }}>{s.label}</span>
+                    </div>
+                  ))}
+                </div>
+              ),
+            },
+            {
+              title: "Let's make you visible",
+              desc: "A public portfolio page that actually converts. Custom sections, work samples, AI-selected testimonials, and a live client portal — all under your brand, not ours.",
+              reverse: true,
+              visual: (
+                <div style={{ background: S.bg2, border: `1px solid ${S.border}`, borderRadius: "16px", padding: "28px" }}>
+                  {["Public portfolio page", "Client portal link", "Work samples gallery", "Testimonials (AI-curated)", "Custom brand colors + logo", "forgefly.io/yourname"].map((item, i) => (
+                    <div key={item} style={{ display: "flex", alignItems: "center", gap: "10px", padding: "9px 0", borderBottom: i < 5 ? `1px solid ${S.border2}` : "none" }}>
+                      <span style={{ color: S.em, fontSize: "0.75rem" }}>✦</span>
+                      <span style={{ color: i < 5 ? S.text : S.em, fontSize: "0.85rem" }}>{item}</span>
+                    </div>
+                  ))}
+                </div>
+              ),
+            },
+            {
+              title: "Client portal",
+              desc: "Give every client a private space with proposals, active contracts, invoices, and a direct message thread. Professional, without the agency overhead.",
+              reverse: false,
+              visual: (
+                <div style={{ background: S.bg2, border: `1px solid ${S.border}`, borderRadius: "16px", padding: "28px" }}>
+                  <div style={{ display: "flex", gap: "8px", marginBottom: "16px" }}>
+                    {["Overview", "Proposal", "Invoice", "Messages"].map((tab, i) => (
+                      <span key={tab} style={{ padding: "4px 10px", borderRadius: "6px", fontSize: "0.72rem", background: i === 1 ? "rgba(16,185,129,0.1)" : "transparent", color: i === 1 ? S.em : S.dim, border: i === 1 ? `1px solid rgba(16,185,129,0.18)` : "none" }}>{tab}</span>
+                    ))}
                   </div>
-                ))}
+                  <div style={{ background: "rgba(255,255,255,0.025)", borderRadius: "10px", padding: "16px", border: `1px solid ${S.border2}` }}>
+                    <p style={{ color: S.text, fontWeight: 600, marginBottom: "6px", fontSize: "0.9rem" }}>Brand Identity Project</p>
+                    <p style={{ color: S.mid, fontSize: "0.78rem", marginBottom: "14px" }}>Full Brand Identity · $4,200</p>
+                    <div style={{ height: "4px", background: "rgba(255,255,255,0.06)", borderRadius: "2px" }}>
+                      <div style={{ height: "100%", width: "65%", background: `linear-gradient(90deg, ${S.em}, ${S.em2})`, borderRadius: "2px" }} />
+                    </div>
+                    <p style={{ color: S.dim, fontSize: "0.68rem", marginTop: "6px" }}>65% complete</p>
+                  </div>
+                </div>
+              ),
+            },
+            {
+              title: "Proposals that close",
+              desc: "AI-generated proposals tailored to your niche and the client. Send directly from Forgefly, track opens, and get notified the moment someone views or accepts.",
+              reverse: true,
+              visual: (
+                <div style={{ background: S.bg2, border: `1px solid ${S.border}`, borderRadius: "16px", padding: "28px" }}>
+                  {[
+                    { name: "Novo Agency",  service: "Brand Identity",       value: "$4,200", status: "Accepted", c: S.em       },
+                    { name: "Drift Labs",   service: "Discovery Workshop",    value: "$950",   status: "Viewed",   c: "#F59E0B"  },
+                    { name: "Mira & Co.",  service: "Brand Guidelines",      value: "$1,800", status: "Sent",     c: S.mid      },
+                  ].map(p => (
+                    <div key={p.name} style={{ display: "flex", alignItems: "center", gap: "12px", padding: "12px 0", borderBottom: `1px solid ${S.border2}` }}>
+                      <div style={{ flex: 1 }}>
+                        <p style={{ color: S.text, fontSize: "0.85rem", fontWeight: 500 }}>{p.name}</p>
+                        <p style={{ color: S.dim, fontSize: "0.72rem" }}>{p.service} · {p.value}</p>
+                      </div>
+                      <span style={{ padding: "3px 8px", borderRadius: "6px", fontSize: "0.68rem", background: `${p.c}18`, color: p.c, border: `1px solid ${p.c}28` }}>{p.status}</span>
+                    </div>
+                  ))}
+                </div>
+              ),
+            },
+            {
+              title: "Finances without the spreadsheet",
+              desc: "P&L at a glance. Cashflow forecast. Tax estimates. SEP-IRA nudges. Forgefly turns your invoice data into financial clarity — no accountant degree required.",
+              reverse: false,
+              visual: (
+                <div style={{ background: S.bg2, border: `1px solid ${S.border}`, borderRadius: "16px", padding: "28px" }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginBottom: "16px" }}>
+                    {[{ l: "Revenue", v: "$31,400", c: S.em }, { l: "Expenses", v: "$4,200", c: "#F87171" }, { l: "Net profit", v: "$27,200", c: S.em }, { l: "Tax reserve", v: "$8,160", c: "#F59E0B" }].map(cell => (
+                      <div key={cell.l} style={{ padding: "12px", background: "rgba(255,255,255,0.025)", borderRadius: "8px", border: `1px solid ${S.border2}` }}>
+                        <p style={{ color: S.dim, fontSize: "0.62rem", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "4px" }}>{cell.l}</p>
+                        <p style={{ color: cell.c, fontWeight: 700, fontSize: "1.1rem", fontFamily: sora }}>{cell.v}</p>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ padding: "10px 12px", background: "rgba(245,158,11,0.05)", borderRadius: "8px", border: "1px solid rgba(245,158,11,0.14)", display: "flex", gap: "8px" }}>
+                    <span style={{ color: "#F59E0B" }}>⚠</span>
+                    <p style={{ color: S.mid, fontSize: "0.75rem" }}>Q3 estimated tax due Sept 15 · $2,720</p>
+                  </div>
+                </div>
+              ),
+            },
+            {
+              title: "Time tracking that pays",
+              desc: "Log hours per project. Forgefly maps time to revenue and flags scope creep before it eats your margin. See exactly which clients are profitable — and which aren't.",
+              reverse: true,
+              visual: (
+                <div style={{ background: S.bg2, border: `1px solid ${S.border}`, borderRadius: "16px", padding: "28px" }}>
+                  {[
+                    { project: "Novo Brand Identity", hours: "14.5h", rate: "$290/hr effective", margin: "92%", c: S.em       },
+                    { project: "Drift Discovery",     hours: "9.0h",  rate: "$105/hr effective", margin: "71%", c: "#F59E0B"  },
+                    { project: "Mira Guidelines",     hours: "22.0h", rate: "$82/hr effective",  margin: "55%", c: "#F87171"  },
+                  ].map(r => (
+                    <div key={r.project} style={{ padding: "12px 0", borderBottom: `1px solid ${S.border2}` }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
+                        <span style={{ color: S.text, fontSize: "0.85rem" }}>{r.project}</span>
+                        <span style={{ color: r.c, fontSize: "0.8rem", fontWeight: 600 }}>{r.margin}</span>
+                      </div>
+                      <p style={{ color: S.dim, fontSize: "0.72rem" }}>{r.hours} · {r.rate}</p>
+                    </div>
+                  ))}
+                  <div style={{ marginTop: "14px", padding: "10px 12px", background: "rgba(16,185,129,0.04)", borderRadius: "8px", border: `1px solid rgba(16,185,129,0.1)` }}>
+                    <p style={{ color: S.em, fontSize: "0.75rem" }}>↑ Novo is your most profitable client. Consider a retainer offer.</p>
+                  </div>
+                </div>
+              ),
+            },
+          ].map((feat, i) => (
+            <div key={feat.title} className="ff-feature-pair"
+              style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "60px", alignItems: "center", marginBottom: i < 5 ? "96px" : "0" }}>
+              <div className="ff-feature-visual" style={{ order: feat.reverse ? 2 : 1 }}>{feat.visual}</div>
+              <div style={{ order: feat.reverse ? 1 : 2 }}>
+                <h3 style={{ fontFamily: sora, fontWeight: 600, fontSize: "1.55rem", color: S.text, marginBottom: "16px", letterSpacing: "-0.01em" }}>{feat.title}</h3>
+                <p style={{ color: S.mid, lineHeight: 1.7, fontSize: "0.975rem" }}>{feat.desc}</p>
               </div>
             </div>
-
-            {/* Navigation Arrows */}
-            <Button
-              variant="ghost"
-              size="icon"
-              className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-4 md:-translate-x-12 w-12 h-12 rounded-full bg-white/5 backdrop-blur-sm border border-white/10 hover:bg-emerald-500/20 hover:border-emerald-500/30 text-white"
-              onClick={scrollPrev}
-            >
-              <ChevronLeft className="w-6 h-6" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-4 md:translate-x-12 w-12 h-12 rounded-full bg-white/5 backdrop-blur-sm border border-white/10 hover:bg-emerald-500/20 hover:border-emerald-500/30 text-white"
-              onClick={scrollNext}
-            >
-              <ChevronRight className="w-6 h-6" />
-            </Button>
-
-            {/* Dot Indicators */}
-            <div className="flex justify-center gap-2 mt-8">
-              {testimonials.map((_, index) => (
-                <button
-                  key={index}
-                  className={`w-2 h-2 rounded-full transition-all duration-300 ${
-                    index === selectedIndex
-                      ? "bg-emerald-400 w-8"
-                      : "bg-white/20 hover:bg-white/40"
-                  }`}
-                  onClick={() => scrollTo(index)}
-                  aria-label={`Go to testimonial ${index + 1}`}
-                />
-              ))}
-            </div>
-          </div>
+          ))}
         </div>
       </section>
 
-      {/* Pricing Section */}
-      <section id="pricing" className="py-20 px-4 sm:px-6 lg:px-8">
-        <div className="w-full md:max-w-[60vw] mx-auto">
-          <div className="text-center mb-14">
-            <h2 className="text-4xl md:text-5xl font-bold text-white mb-4">
-              Simple, Honest Pricing
-            </h2>
-            <p className="text-xl text-gray-400">
-              Start free. Upgrade when you're ready to scale.
-            </p>
+      {/* ── Pricing ─────────────────────────────────────────────────────────── */}
+      <section id="pricing" style={{ padding: "120px 0", background: S.bg }}>
+        <div style={{ maxWidth: "1152px", margin: "0 auto", padding: "0 24px" }}>
+          <div className="ff-fade-up" style={{ textAlign: "center", marginBottom: "64px" }}>
+            <p style={{ color: S.em, fontSize: "0.75rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: "12px" }}>Pricing</p>
+            <h2 style={{ fontFamily: sora, fontWeight: 600, fontSize: "clamp(1.8rem, 3.5vw, 2.8rem)", color: S.text, letterSpacing: "-0.02em", marginBottom: "12px" }}>Start free. Scale when you're ready.</h2>
+            <p style={{ color: S.mid }}>14-day free trial on all plans. No credit card required.</p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-stretch">
-            {/* Freelancer — Free */}
-            <Card className="bg-white/5 border-white/10 backdrop-blur-sm flex flex-col">
-              <CardContent className="p-8 flex flex-col flex-1">
-                <div className="mb-6">
-                  <p className="text-sm font-medium text-gray-400 uppercase tracking-wider mb-2">
-                    Freelancer
-                  </p>
-                  <div className="flex items-end gap-1 mb-1">
-                    <span className="text-5xl font-bold text-white">$0</span>
-                    <span className="text-gray-400 mb-2">/month</span>
-                  </div>
-                  <p className="text-gray-400 text-sm">
-                    Everything you need to get started
-                  </p>
+          <div className="ff-pricing-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "24px", alignItems: "stretch" }}>
+            {[
+              {
+                name: "Solo", price: "$19", period: "/mo", desc: "Core ops for solo freelancers", featured: false, delay: "0s",
+                features: ["Client portal + public portfolio", "Pipeline + project tracking", "AI proposal generation", "Invoice management", "Brand kit", "Basic AI copilot", "–", "–"],
+              },
+              {
+                name: "Studio", price: "$49", period: "/mo", desc: "Full AI suite for serious freelancers", featured: true, delay: "0.1s",
+                features: ["Everything in Solo", "Visibility engine + outreach", "Per-client portals", "Finances + cashflow forecast", "Time tracking + profitability", "Testimonial engine", "Advanced AI copilot", "–"],
+              },
+              {
+                name: "Pro", price: "$89", period: "/mo", desc: "Power users & growing agencies", featured: false, delay: "0.2s",
+                features: ["Everything in Studio", "Opus-tier AI (highest accuracy)", "Custom domain", "Demand signals", "Tax export (CSV)", "White-label portals", "Priority support", "API access"],
+              },
+            ].map((plan) => (
+              <div key={plan.name} className="ff-pricing-card"
+                style={{
+                  position: "relative",
+                  background: plan.featured ? "linear-gradient(135deg, rgba(16,185,129,0.08), rgba(5,150,105,0.03))" : S.bg2,
+                  border: plan.featured ? `1px solid rgba(16,185,129,0.32)` : `1px solid ${S.border2}`,
+                  borderRadius: "16px", padding: "32px",
+                  display: "flex", flexDirection: "column",
+                  transitionDelay: plan.delay,
+                }}>
+                {plan.featured && (
+                  <div style={{
+                    position: "absolute", top: "-12px", left: "50%", transform: "translateX(-50%)",
+                    background: `linear-gradient(135deg, ${S.em}, ${S.em2})`, color: "#fff",
+                    fontSize: "0.68rem", fontWeight: 700, padding: "4px 14px", borderRadius: "9999px", whiteSpace: "nowrap",
+                  }}>Most popular</div>
+                )}
+                <p style={{ color: plan.featured ? S.em : S.mid, fontSize: "0.72rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: "8px" }}>{plan.name}</p>
+                <div style={{ display: "flex", alignItems: "flex-end", gap: "4px", marginBottom: "8px" }}>
+                  <span style={{ fontFamily: sora, fontWeight: 600, fontSize: "2.8rem", color: S.text, lineHeight: 1 }}>{plan.price}</span>
+                  <span style={{ color: S.dim, marginBottom: "6px" }}>{plan.period}</span>
                 </div>
-
-                <ul className="space-y-3 flex-1 mb-8">
-                  {[
-                    "Up to 5 active clients",
-                    "Basic project tracking",
-                    "AI proposal generation",
-                    "Invoice management",
-                    "Financial dashboard",
-                    "Email support",
-                  ].map((f) => (
-                    <li
-                      key={f}
-                      className="flex items-center gap-3 text-gray-300 text-sm"
-                    >
-                      <Check className="w-4 h-4 text-emerald-400 shrink-0" />
-                      {f}
+                <p style={{ color: S.dim, fontSize: "0.82rem", marginBottom: "28px" }}>{plan.desc}</p>
+                <ul style={{ flex: 1, marginBottom: "28px", listStyle: "none", padding: 0 }}>
+                  {plan.features.map((f, fi) => (
+                    <li key={fi} style={{ display: "flex", gap: "10px", alignItems: "flex-start", marginBottom: "10px" }}>
+                      <span style={{ color: f === "–" ? S.border2 : S.em, fontSize: "0.8rem", flexShrink: 0, marginTop: "2px" }}>{f === "–" ? "–" : "✓"}</span>
+                      <span style={{ color: f === "–" ? S.dim : S.mid, fontSize: "0.875rem" }}>{f === "–" ? "Not included" : f}</span>
                     </li>
                   ))}
                 </ul>
-
-                <Button
-                  size="lg"
-                  variant="outline"
-                  className="w-full border-white/20 text-white hover:bg-white/10"
-                  onClick={() => navigate("/login")}
-                >
-                  Start Free
-                </Button>
-              </CardContent>
-            </Card>
-
-            {/* Agency — $29/$290 */}
-            <Card className="relative bg-gradient-to-br from-emerald-500/10 to-emerald-900/20 border-emerald-500/40 backdrop-blur-sm flex flex-col overflow-hidden">
-              <div className="absolute top-4 right-4">
-                <span className="inline-flex items-center gap-1.5 bg-emerald-500 text-white text-xs font-semibold px-3 py-1 rounded-full">
-                  <Crown className="w-3 h-3" /> Most Popular
-                </span>
+                <button type="button" onClick={() => navigate("/login")}
+                  style={{
+                    width: "100%", padding: "12px", borderRadius: "10px",
+                    fontSize: "0.875rem", fontWeight: 500, cursor: "pointer", transition: "opacity 0.2s",
+                    background: plan.featured ? `linear-gradient(135deg, ${S.em}, ${S.em2})` : "transparent",
+                    color: plan.featured ? "#fff" : S.text,
+                    border: plan.featured ? "none" : `1px solid ${S.border2}`,
+                  }}
+                  onMouseEnter={e => (e.currentTarget.style.opacity = "0.82")}
+                  onMouseLeave={e => (e.currentTarget.style.opacity = "1")}
+                >Start free trial</button>
               </div>
-              <CardContent className="p-8 flex flex-col flex-1">
-                <div className="mb-6">
-                  <p className="text-sm font-medium text-emerald-400 uppercase tracking-wider mb-2">
-                    Agency
-                  </p>
-                  <div className="flex items-end gap-1 mb-1">
-                    <span className="text-5xl font-bold text-white">$29</span>
-                    <span className="text-gray-400 mb-2">/month</span>
-                  </div>
-                  <p className="text-gray-400 text-sm">
-                    or $290/year — save $58
-                  </p>
-                </div>
-
-                <ul className="space-y-3 flex-1 mb-8">
-                  {[
-                    "Unlimited clients",
-                    "Advanced project tracking",
-                    "AI proposal generation",
-                    "Invoice management",
-                    "Financial dashboard",
-                    "Team member management",
-                    "Advanced proposal templates",
-                    "Priority support",
-                    "Custom branding",
-                    "API access",
-                  ].map((f) => (
-                    <li
-                      key={f}
-                      className="flex items-center gap-3 text-gray-300 text-sm"
-                    >
-                      <Check className="w-4 h-4 text-emerald-400 shrink-0" />
-                      {f}
-                    </li>
-                  ))}
-                </ul>
-
-                <Button
-                  size="lg"
-                  className="w-full bg-emerald-500 hover:bg-emerald-600 text-white"
-                  onClick={() => navigate("/login")}
-                >
-                  Get Started
-                  <ArrowRight className="w-4 h-4 ml-2" />
-                </Button>
-              </CardContent>
-            </Card>
+            ))}
           </div>
+          <p style={{ textAlign: "center", color: S.dim, fontSize: "0.78rem", marginTop: "20px" }}>Compare plans in detail →</p>
+        </div>
+      </section>
 
-          <p className="text-center text-gray-500 text-sm mt-8">
-            No credit card required to start • Cancel anytime
+      {/* ── Closing CTA ─────────────────────────────────────────────────────── */}
+      <section id="closing" style={{ padding: "120px 0", background: S.bg, position: "relative", overflow: "hidden" }}>
+        <div className="ff-bloom" style={{ top: "-20%", left: "50%", transform: "translateX(-50%)" }} />
+        <div style={{ maxWidth: "720px", margin: "0 auto", padding: "0 24px", textAlign: "center", position: "relative", zIndex: 1 }}>
+          <h2 className="ff-fade-up" style={{ fontFamily: sora, fontWeight: 600, fontSize: "clamp(1.8rem, 3.5vw, 2.8rem)", color: S.text, letterSpacing: "-0.02em", marginBottom: "20px", lineHeight: 1.2 }}>
+            Stop running your business<br />from a dozen different tabs.
+          </h2>
+          <p className="ff-fade-up" style={{ color: S.mid, fontSize: "1.05rem", maxWidth: "460px", margin: "0 auto 40px", lineHeight: 1.65 }}>
+            Proposals, invoices, clients, projects, finances, and AI assistance — all in one place. Built specifically for people who work for themselves.
           </p>
-        </div>
-      </section>
+          <div className="ff-fade-up" style={{ display: "flex", gap: "16px", justifyContent: "center", flexWrap: "wrap", marginBottom: "56px" }}>
+            <button type="button" onClick={() => document.getElementById("hero")?.scrollIntoView({ behavior: "smooth" })}
+              style={{ display: "inline-flex", alignItems: "center", gap: "8px", background: `linear-gradient(135deg, ${S.em}, ${S.em2})`, color: "#fff", border: "none", borderRadius: "10px", padding: "14px 28px", fontSize: "1rem", fontWeight: 500, cursor: "pointer", transition: "opacity 0.2s" }}
+              onMouseEnter={e => (e.currentTarget.style.opacity = "0.85")}
+              onMouseLeave={e => (e.currentTarget.style.opacity = "1")}
+            >Generate my business <ArrowRight size={18} /></button>
+            <button type="button" onClick={() => document.getElementById("how")?.scrollIntoView({ behavior: "smooth" })}
+              style={{ display: "inline-flex", alignItems: "center", background: "transparent", color: S.text, border: `1px solid ${S.border2}`, borderRadius: "10px", padding: "14px 28px", fontSize: "1rem", cursor: "pointer", transition: "border-color 0.2s" }}
+              onMouseEnter={e => (e.currentTarget.style.borderColor = "rgba(16,185,129,0.35)")}
+              onMouseLeave={e => (e.currentTarget.style.borderColor = S.border2)}
+            >See how it works</button>
+          </div>
 
-      {/* CTA Section */}
-      <section className="py-20 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-4xl mx-auto">
-          <Card className="bg-gradient-to-br from-emerald-500/10 via-amber-500/10 to-blue-500/10 backdrop-blur-sm border-white/10 overflow-hidden relative">
-            <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/20 to-amber-500/20 blur-3xl" />
-            <CardContent className="relative p-12 text-center">
-              <h2 className="text-4xl md:text-5xl font-bold text-white mb-4">
-                Ready to Forge Your Freedom?
-              </h2>
-              <p className="text-xl text-gray-300 mb-8 max-w-2xl mx-auto">
-                Join solopreneurs who are scaling their business with AI-powered
-                automation
-              </p>
-              <Button
-                size="lg"
-                className="bg-emerald-500 hover:bg-emerald-600 text-white text-lg px-12 py-6 h-auto"
-                onClick={() => navigate("/login")}
-              >
-                Start Your Free Trial
-                <ArrowRight className="w-5 h-5 ml-2" />
-              </Button>
-              <p className="text-sm text-gray-400 mt-4">
-                No credit card required • Setup in 5 minutes
-              </p>
-            </CardContent>
-          </Card>
-        </div>
-      </section>
-
-      {/* Footer */}
-      <footer className="border-t border-white/10 py-8 px-4 sm:px-6 lg:px-8">
-        <div className="w-full md:max-w-[60vw] mx-auto">
-          <div className="flex flex-col md:flex-row items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <img
-                src="/forgefly-icon.png"
-                alt="Forgefly Logo"
-                className="w-8 h-8 rounded-lg"
-              />
+          {/* Pull-quote testimonial */}
+          <div className="ff-fade-up" style={{ background: S.bg2, border: `1px solid ${S.border}`, borderRadius: "16px", padding: "28px 32px", textAlign: "left" }}>
+            <div style={{ display: "flex", gap: "3px", marginBottom: "16px" }}>
+              {[...Array(5)].map((_, i) => <Star key={i} size={14} style={{ fill: S.em, color: S.em }} />)}
+            </div>
+            <p style={{ color: S.text, fontSize: "0.975rem", lineHeight: 1.7, marginBottom: "20px", fontStyle: "italic" }}>
+              "Forgefly replaced four tools I was paying for and gave me back six hours every week.
+              The client portal alone closed two projects last month."
+            </p>
+            <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+              <div style={{ width: "36px", height: "36px", borderRadius: "50%", background: `linear-gradient(135deg, ${S.em}, ${S.em2})`, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 600, fontSize: "0.875rem", flexShrink: 0 }}>C</div>
               <div>
-                <div className="text-sm font-semibold text-white">Forgefly</div>
-                <div className="text-xs text-gray-400">Forge Your Freedom</div>
+                <p style={{ color: S.text, fontWeight: 600, fontSize: "0.875rem" }}>Clara Lim</p>
+                <p style={{ color: S.dim, fontSize: "0.72rem" }}>Brand designer · Studio plan</p>
               </div>
             </div>
-            <div className="flex flex-wrap items-center gap-3 text-sm text-gray-400">
-              <span>• Built with ❤️ in California by Sourav Nayak</span>
-            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── Footer ──────────────────────────────────────────────────────────── */}
+      <footer style={{ borderTop: `1px solid ${S.border2}`, padding: "32px 24px", background: S.bg }}>
+        <div style={{ maxWidth: "1152px", margin: "0 auto", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "16px" }}>
+          <p style={{ color: S.dim, fontSize: "0.82rem" }}>© {new Date().getFullYear()} Forgefly. Built for the solo operator.</p>
+          <div style={{ display: "flex", gap: "24px" }}>
+            {["Privacy", "Terms", "Contact"].map(link => (
+              <a key={link} href="#" style={{ color: S.dim, fontSize: "0.82rem", textDecoration: "none", transition: "color 0.2s" }}
+                onMouseEnter={e => (e.currentTarget.style.color = S.mid)}
+                onMouseLeave={e => (e.currentTarget.style.color = S.dim)}
+              >{link}</a>
+            ))}
           </div>
         </div>
       </footer>
