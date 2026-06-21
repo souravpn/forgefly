@@ -405,14 +405,6 @@ export default function SettingsPage() {
             Manage your account and business preferences
           </p>
         </div>
-        <Button
-          variant="outline"
-          className="glow-accent"
-          onClick={() => navigate("/client-portal")}
-        >
-          <Eye className="w-4 h-4 mr-2" />
-          Preview Client Portal
-        </Button>
       </div>
 
       <Tabs defaultValue={searchParams.get('tab') || 'business'}>
@@ -421,7 +413,6 @@ export default function SettingsPage() {
           <TabsTrigger value="account">Account</TabsTrigger>
           <TabsTrigger value="payments">Payments</TabsTrigger>
           <TabsTrigger value="finances">Finances</TabsTrigger>
-          <TabsTrigger value="client-portal">Client Portal</TabsTrigger>
           <TabsTrigger value="ai-history">AI History</TabsTrigger>
         </TabsList>
 
@@ -1056,88 +1047,6 @@ export default function SettingsPage() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="client-portal" className="mt-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-balance">
-                Client Portal Settings
-              </CardTitle>
-              <CardDescription>
-                Customize how clients view their projects and invoices
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="p-6 rounded-lg bg-gradient-to-br from-accent/10 to-primary/10 border border-accent/20">
-                <div className="flex items-start gap-4">
-                  <img
-                    src="/forgefly-icon.png"
-                    alt="Forgefly Logo"
-                    className="w-10 h-10 rounded-lg"
-                  />
-                  <div className="flex-1">
-                    <h3 className="font-semibold text-lg mb-2">
-                      Client Portal Preview
-                    </h3>
-                    <p className="text-sm text-muted-foreground text-pretty mb-4">
-                      See how your clients experience their dedicated portal
-                      with branded project tracking, invoice management, and
-                      proposal approvals.
-                    </p>
-                    <Button
-                      className="glow-accent"
-                      onClick={() => navigate("/client-portal")}
-                    >
-                      <Eye className="w-4 h-4 mr-2" />
-                      Open Preview
-                    </Button>
-                  </div>
-                </div>
-              </div>
-
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="portalBranding">Portal Branding</Label>
-                  <Input
-                    id="portalBranding"
-                    placeholder="Your Business Name"
-                    value={businessProfile?.business_name || ""}
-                    disabled
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Portal uses your business name from Business Profile
-                    settings
-                  </p>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Features Enabled</Label>
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2 p-3 rounded-lg bg-muted">
-                      <div className="w-2 h-2 rounded-full bg-success" />
-                      <span className="text-sm">Project Tracking</span>
-                    </div>
-                    <div className="flex items-center gap-2 p-3 rounded-lg bg-muted">
-                      <div className="w-2 h-2 rounded-full bg-success" />
-                      <span className="text-sm">Invoice Management</span>
-                    </div>
-                    <div className="flex items-center gap-2 p-3 rounded-lg bg-muted">
-                      <div className="w-2 h-2 rounded-full bg-success" />
-                      <span className="text-sm">Proposal Approvals</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="pt-4 border-t">
-                  <p className="text-sm text-muted-foreground text-pretty">
-                    💡 <strong>Tip:</strong> Share the client portal link with
-                    your clients to give them 24/7 access to their projects,
-                    invoices, and proposals. They'll love the transparency!
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
 
         <TabsContent value="ai-history" className="mt-6">
           <AIHistoryTab />

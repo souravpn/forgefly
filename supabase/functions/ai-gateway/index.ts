@@ -108,8 +108,16 @@ function calcCost(model: string, inputTokens: number, outputTokens: number): num
 
 // ─── Usage logging ──────────────────────────────────────────────────────────
 
+// Service-role client bypasses RLS for inserts into ai_usage_log
+function getServiceClient() {
+  return createClient(
+    Deno.env.get('SUPABASE_URL') ?? '',
+    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+  );
+}
+
 async function logUsage(
-  supabase: ReturnType<typeof createClient>,
+  _supabase: ReturnType<typeof createClient>,
   userId: string | null,
   businessId: string | null,
   model: string,
@@ -119,7 +127,8 @@ async function logUsage(
 ): Promise<void> {
   try {
     const costUsd = calcCost(model, inputTokens, outputTokens);
-    await supabase.from('ai_usage_log').insert({
+    // Use service role client — ai_usage_log has no anon INSERT policy (RLS)
+    await getServiceClient().from('ai_usage_log').insert({
       user_id: userId,
       business_id: businessId,
       model,
@@ -129,7 +138,6 @@ async function logUsage(
       cost_usd: costUsd,
     });
   } catch (err) {
-    // Non-fatal — table may not exist yet during migrations
     console.warn('ai_usage_log insert failed (non-fatal):', err);
   }
 }
