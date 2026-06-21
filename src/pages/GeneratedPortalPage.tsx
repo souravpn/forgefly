@@ -1,4 +1,5 @@
-import { Check as CheckIcon, ChevronDown, ChevronUp, Copy, Sparkles } from 'lucide-react';
+import { Check as CheckIcon, ChevronDown, ChevronUp, Copy, Sparkles, MoreHorizontal, Star, MessageSquare, Calendar, Zap, Settings, Globe, Lock } from 'lucide-react';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
@@ -91,8 +92,18 @@ export interface ExtractedData {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-const TABS = ['Overview', 'Services', 'Pipeline', 'Invoices', 'Contacts', 'Proposals', 'Brand Kit', 'Client Portal'] as const;
-type TabName = typeof TABS[number];
+const TABS = [
+  { id: 'overview',   label: 'Overview',   icon: '⊞' },
+  { id: 'services',   label: 'Services',   icon: '⬡' },
+  { id: 'visibility', label: 'Visibility', icon: '✦' },
+  { id: 'pipeline',   label: 'Pipeline',   icon: '↗' },
+  { id: 'invoices',   label: 'Invoices',   icon: '▤' },
+  { id: 'finances',   label: 'Finances',   icon: '⬡' },
+  { id: 'clients',    label: 'Clients',    icon: '◎' },
+  { id: 'proposals',  label: 'Proposals',  icon: '▤' },
+  { id: 'brandkit',   label: 'Brand Kit',  icon: '◈' },
+] as const;
+type TabId = typeof TABS[number]['id'];
 
 function statusClass(status: string) {
   const s = status.toLowerCase();
@@ -212,7 +223,7 @@ export default function GeneratedPortalPage() {
   const [data, setData] = useState<ExtractedData | null>(null);
   const [prompt, setPrompt] = useState('');
   const [elapsedSeconds, setElapsedSeconds] = useState<number | null>(null);
-  const [activeTab, setActiveTab] = useState<TabName>('Overview');
+  const [activeTab, setActiveTab] = useState<TabId>('overview');
   const [promptExpanded, setPromptExpanded] = useState(true);
   const [copied, setCopied] = useState(false);
 
@@ -338,7 +349,7 @@ export default function GeneratedPortalPage() {
             </button>
             {promptExpanded && (
               <div className="flex items-start gap-3">
-                <p className="text-[12px] text-gray-400 flex-1 leading-[1.6] line-clamp-2 break-words">
+                <p className="text-[12px] text-gray-400 flex-1 leading-[1.6] break-words overflow-y-auto max-h-[5.5rem]" style={{ display: '-webkit-box', WebkitBoxOrient: 'vertical', WebkitLineClamp: 'unset' }}>
                   {prompt}
                 </p>
                 <button
@@ -360,59 +371,94 @@ export default function GeneratedPortalPage() {
 
       {/* ── Tab navigation ────────────────────────────────────────────────── */}
       <div className="sticky top-14 z-40 bg-black/95 backdrop-blur border-b border-white/[0.06]">
-        <div className="w-full md:max-w-[60vw] mx-auto px-4 md:px-6">
-          <div className="flex gap-0 overflow-x-auto scrollbar-hide">
+        <div className="w-full md:max-w-[60vw] mx-auto px-2 md:px-2">
+          <div className="flex gap-0 overflow-x-auto scrollbar-hide h-10 items-center">
             {TABS.map((tab) => {
-              const isActive = activeTab === tab;
+              const isActive = activeTab === tab.id;
               return (
                 <button
-                  key={tab}
+                  key={tab.id}
                   type="button"
-                  onClick={() => setActiveTab(tab)}
-                  className="relative px-4 py-3 text-[12px] font-medium whitespace-nowrap transition-colors shrink-0"
+                  onClick={() => setActiveTab(tab.id)}
+                  className="relative h-9 px-3 text-[13px] font-medium whitespace-nowrap transition-colors shrink-0 border-b-2 -mb-px"
                   style={{
                     color: isActive ? 'var(--preview-primary)' : 'rgba(156,163,175,1)',
+                    borderBottomColor: isActive ? 'var(--preview-primary)' : 'transparent',
                   }}
                 >
-                  {tab}
-                  {isActive && (
-                    <span
-                      className="absolute bottom-0 left-0 right-0 h-0.5 rounded-full"
-                      style={{ background: 'var(--preview-primary)' }}
-                    />
-                  )}
+                  {tab.label}
                 </button>
               );
             })}
+            <div className="ml-auto shrink-0">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    className="h-9 px-3 flex items-center gap-1.5 text-[13px] font-medium text-gray-400 hover:text-gray-200 transition-colors border-b-2 border-transparent -mb-px shrink-0"
+                  >
+                    <MoreHorizontal className="h-4 w-4" />
+                    <span className="text-sm">More</span>
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-52">
+                  {[
+                    { label: 'Reviews',     Icon: Star },
+                    { label: 'Messages',    Icon: MessageSquare },
+                    { label: 'Calendar',    Icon: Calendar },
+                    { label: 'Automations', Icon: Zap },
+                    { label: 'Settings',    Icon: Settings },
+                  ].map(({ label, Icon }) => (
+                    <DropdownMenuItem key={label} disabled className="opacity-50 cursor-not-allowed">
+                      <Icon className="mr-2 h-4 w-4" />
+                      {label}
+                      <Lock className="ml-auto h-3 w-3 text-gray-500" />
+                    </DropdownMenuItem>
+                  ))}
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem disabled className="opacity-50 cursor-not-allowed">
+                    <Globe className="mr-2 h-4 w-4" />
+                    Public Portfolio
+                    <Lock className="ml-auto h-3 w-3 text-gray-500" />
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           </div>
         </div>
       </div>
 
       {/* ── Tab content ───────────────────────────────────────────────────── */}
       <div className="w-full md:max-w-[60vw] mx-auto px-4 md:px-6 py-5 pb-16">
-        {activeTab === 'Overview' && (
-          <OverviewTab data={data} accent={accent} />
+        {activeTab === 'overview' && <OverviewTab data={data} accent={accent} />}
+        {activeTab === 'services' && <ServicesTab services={services} accentColor={accent} />}
+        {activeTab === 'visibility' && (
+          <div className="space-y-6">
+            <ClientPortalTab data={data} slug={portfolioSlug} />
+            <BrandKitTab
+              brand={brand}
+              businessName={businessName}
+              tagline={identity.tagline}
+              email={identity.email}
+              location={identity.location}
+              initials={initials}
+              niche={identity.niche}
+            />
+          </div>
         )}
-        {activeTab === 'Services' && (
-          <ServicesTab services={services} accentColor={accent} />
+        {activeTab === 'pipeline' && (
+          <PipelineTab leads={pipeline.leads ?? []} pipelineValue={metrics.pipelineValue} accentColor={accent} />
         )}
-        {activeTab === 'Pipeline' && (
-          <PipelineTab
-            leads={pipeline.leads ?? []}
-            pipelineValue={metrics.pipelineValue}
-            accentColor={accent}
-          />
+        {activeTab === 'invoices' && <InvoicesTab invoices={invoices} />}
+        {activeTab === 'finances' && (
+          <div className="rounded-xl p-8 bg-white/5 text-center" style={{ border: '0.5px solid rgba(255,255,255,0.1)' }}>
+            <p className="text-[13px] font-medium text-white mb-1">Finances</p>
+            <p className="text-[12px] text-gray-500">Track revenue, expenses, and profitability — available after you save your Business OS.</p>
+          </div>
         )}
-        {activeTab === 'Invoices' && (
-          <InvoicesTab invoices={invoices} />
-        )}
-        {activeTab === 'Contacts' && (
-          <ContactsTab contacts={contacts} accentColor={accent} />
-        )}
-        {activeTab === 'Proposals' && (
-          <ProposalsTab proposal={proposal} accentColor={accent} />
-        )}
-        {activeTab === 'Brand Kit' && (
+        {activeTab === 'clients' && <ContactsTab contacts={contacts} accentColor={accent} />}
+        {activeTab === 'proposals' && <ProposalsTab proposal={proposal} accentColor={accent} />}
+        {activeTab === 'brandkit' && (
           <BrandKitTab
             brand={brand}
             businessName={businessName}
@@ -422,9 +468,6 @@ export default function GeneratedPortalPage() {
             initials={initials}
             niche={identity.niche}
           />
-        )}
-        {activeTab === 'Client Portal' && (
-          <ClientPortalTab data={data} slug={portfolioSlug} />
         )}
       </div>
     </div>

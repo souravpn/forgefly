@@ -223,10 +223,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signInWithOAuth = async (provider: 'google' | 'apple') => {
     try {
+      const pendingToken = localStorage.getItem('pending_portal_token');
+      const callbackUrl = new URL(`${window.location.origin}/auth/callback`);
+      if (pendingToken) callbackUrl.searchParams.set('pending_token', pendingToken);
       const { error } = await supabase.auth.signInWithOAuth({
         provider,
         options: {
-          redirectTo: `${window.location.origin}/auth/callback`,
+          redirectTo: callbackUrl.toString(),
         },
       });
       if (error) throw error;
