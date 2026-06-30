@@ -64,36 +64,22 @@ const HOW_STEPS = [
 ];
 
 const PAGE_CSS = `
-  @keyframes driftGrid {
-    0%   { background-position: 0 0; }
-    100% { background-position: 28px 28px; }
-  }
-  @keyframes breathe {
-    0%, 100% { opacity: 0.16; transform: scale(1); }
-    50%       { opacity: 0.22; transform: scale(1.04); }
-  }
   @keyframes scrollBob {
     0%, 100% { transform: translateY(0);  opacity: 0.4; }
     50%       { transform: translateY(4px); opacity: 0.8; }
   }
 
-  .ff-hero-section { position: relative; overflow: hidden; }
-
-  .ff-dot-grid {
-    position: absolute; inset: 0; pointer-events: none; z-index: 0;
-    background-image: radial-gradient(circle, rgba(16,185,129,0.28) 1px, transparent 1px);
-    background-size: 28px 28px;
-    mask-image: radial-gradient(ellipse 80% 60% at 50% 40%, black, transparent);
-    -webkit-mask-image: radial-gradient(ellipse 80% 60% at 50% 40%, black, transparent);
-    animation: driftGrid 20s linear infinite;
+  .ff-hero-section {
+    position: relative; overflow: hidden;
+    background-image: url('/hero-bg.png');
+    background-size: cover;
+    background-position: center top;
+    background-repeat: no-repeat;
   }
 
-  .ff-bloom {
-    position: absolute; pointer-events: none; z-index: 0;
-    width: 700px; height: 700px; border-radius: 50%;
-    background: radial-gradient(circle, #10B981 0%, transparent 70%);
-    filter: blur(90px);
-    animation: breathe 9s ease-in-out infinite;
+  .ff-hero-overlay {
+    position: absolute; inset: 0; pointer-events: none; z-index: 0;
+    background: linear-gradient(to bottom, rgba(8,13,11,0.35) 0%, rgba(8,13,11,0.6) 100%);
   }
 
   .ff-scroll-bob { animation: scrollBob 2.5s ease-in-out infinite; }
@@ -144,7 +130,7 @@ const PAGE_CSS = `
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .ff-dot-grid, .ff-bloom, .ff-scroll-bob { animation: none !important; }
+    .ff-scroll-bob { animation: none !important; }
     .ff-how-panel, .ff-feature-pair, .ff-fade-up, .ff-pricing-card {
       opacity: 1 !important; transform: none !important;
     }
@@ -499,11 +485,7 @@ export default function LandingPage() {
           paddingBottom: "30px",
         }}
       >
-        <div className="ff-dot-grid" />
-        <div
-          className="ff-bloom"
-          style={{ bottom: "-10%", left: "50%", transform: "translateX(-50%)" }}
-        />
+        <div className="ff-hero-overlay" />
 
         <div
           className="ff-hero-content"
