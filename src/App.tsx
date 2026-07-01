@@ -1,5 +1,6 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, MemoryRouter, Routes, Route, Navigate } from 'react-router-dom';
+import PublicPortfolioPage from './pages/PublicPortfolioPage';
 import IntersectObserver from '@/components/common/IntersectObserver';
 import { Toaster } from '@/components/ui/sonner';
 import { MainLayout } from '@/components/layouts/MainLayout';
@@ -13,6 +14,23 @@ import { RouteGuard } from '@/components/common/RouteGuard';
 import { ThemeProvider } from '@/contexts/ThemeContext';
 
 const App: React.FC = () => {
+  const portfolioMatch = window.location.hostname.match(/^([a-z0-9-]+)\.p\.forgefly\.io$/)
+  if (portfolioMatch) {
+    const slug = portfolioMatch[1]
+    return (
+      <ErrorBoundary>
+        <ThemeProvider>
+          <MemoryRouter initialEntries={[`/p/${slug}`]}>
+            <Routes>
+              <Route path="/p/:slug" element={<PublicPortfolioPage />} />
+            </Routes>
+            <Toaster />
+          </MemoryRouter>
+        </ThemeProvider>
+      </ErrorBoundary>
+    )
+  }
+
   return (
     <ErrorBoundary>
       <ThemeProvider>

@@ -238,23 +238,10 @@ export default function PublicPortfolioPage() {
   useEffect(() => {
     if (!slug) return;
     (async () => {
-      // Step 1: resolve username → id (profiles.id = auth.users.id)
-      const { data: profile, error: profileError } = await supabase
-        .from("profiles")
-        .select("id")
-        .eq("username", slug)
-        .maybeSingle();
-
-      if (profileError || !profile) {
-        setNotFound(true);
-        return;
-      }
-
-      // Step 2: fetch the active business for that user
       const { data, error } = await supabase
         .from("businesses")
         .select("id, name, bio, contact_email, contact_phone, extracted_data")
-        .eq("user_id", profile.id)
+        .eq("slug", slug)
         .eq("status", "active")
         .maybeSingle();
 

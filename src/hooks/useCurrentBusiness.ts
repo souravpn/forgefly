@@ -39,6 +39,16 @@ export interface UseCurrentBusinessResult {
   refetch: () => void
 }
 
+async function ensureSlug(biz: Business): Promise<Business> {
+  if (biz.slug) return biz
+  const base = biz.name.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 20) || 'business'
+  const { data: taken } = await supabase
+    .from('businesses').select('id').eq('slug', base).neq('id', biz.id).maybeSingle()
+  const slug = taken ? `${base}${Date.now()}` : base
+  await supabase.from('businesses').update({ slug }).eq('id', biz.id)
+  return { ...biz, slug }
+}
+
 export function useCurrentBusiness(): UseCurrentBusinessResult {
   const { user } = useAuth()
   const [business, setBusiness] = useState<Business | null>(null)
@@ -128,7 +138,7 @@ export function useCurrentBusiness(): UseCurrentBusinessResult {
             .eq('user_id', user.id)
             .eq('status', 'active')
             .maybeSingle()
-          setBusiness(saved)
+          setBusiness(saved ? await ensureSlug(saved as Business) : saved)
           setError(null)
           setIsLoading(false)
           return
@@ -138,7 +148,7 @@ export function useCurrentBusiness(): UseCurrentBusinessResult {
       }
     }
 
-    setBusiness(data)
+    setBusiness(data ? await ensureSlug(data as Business) : data)
     setError(null)
     setIsLoading(false)
   }, [user])

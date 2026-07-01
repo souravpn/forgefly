@@ -15,8 +15,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { useAuth } from "@/contexts/AuthContext";
 import { useBusiness } from "@/contexts/CurrentBusinessContext";
+import { buildPortfolioUrl, displayPortfolioUrl } from "@/lib/portfolioUrl";
 
 type MainTab = "portal" | "share";
 type QrColorChoice = "brand" | "dark" | "black";
@@ -105,7 +105,6 @@ function ShareRow({
 }
 
 export default function PortfolioPage() {
-  const { profile } = useAuth();
   const { business, extractedData } = useBusiness();
 
   const [tab, setTab] = useState<MainTab>("portal");
@@ -135,13 +134,9 @@ export default function PortfolioPage() {
   const contactEmail = business?.contact_email ?? null;
   const contactPhone = business?.contact_phone ?? null;
 
-  function toSlug(name: string) {
-    return name.toLowerCase().replace(/\s+/g, "");
-  }
-  const slug = profile?.username ?? (business ? toSlug(business.name) : "");
-
-  const portfolioUrl = `${window.location.origin}/p/${slug}`;
-  const displayUrl = `forgefly.io/p/${slug}`;
+  const slug = business?.slug ?? "";
+  const portfolioUrl = slug ? buildPortfolioUrl(slug) : "";
+  const displayUrl = slug ? displayPortfolioUrl(slug) : "";
   const initials = bizName.slice(0, 2).toUpperCase();
   const passTextColor =
     getLuminance(brandPrimary) > 0.5 ? "#000000" : "#ffffff";

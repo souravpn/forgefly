@@ -1,11 +1,13 @@
 import QRCode from "qrcode";
 import {
+  AlertCircle,
   ArrowRight,
   Check,
   Copy,
   Download,
   GripVertical,
   Image,
+  Loader2,
   Plus,
   Sparkles,
   Trash2,
@@ -54,6 +56,7 @@ import { useBusiness } from "@/contexts/CurrentBusinessContext";
 import { supabase } from "@/db/supabase";
 import { getProjects } from "@/services/projectService";
 import type { Project } from "@/types/types";
+import { buildPortfolioUrl, displayPortfolioUrl } from "@/lib/portfolioUrl";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -501,15 +504,24 @@ export default function BrandKitPage() {
   const [coverUploading, setCoverUploading] = useState(false);
   const [bgUploading, setBgUploading] = useState(false);
 
+  const [slugInput, setSlugInput] = useState("");
+  const [slugChecking, setSlugChecking] = useState(false);
+  const [slugAvailable, setSlugAvailable] = useState<boolean | null>(null);
+  const [slugSaving, setSlugSaving] = useState(false);
+  const [slugError, setSlugError] = useState<string | null>(null);
+
   const portfolioSlug = business?.slug ?? "";
-  const portfolioUrl = portfolioSlug
-    ? `${window.location.origin}/p/${portfolioSlug}`
-    : "";
+  const portfolioUrl = portfolioSlug ? buildPortfolioUrl(portfolioSlug) : "";
 
   const identity = extractedData?.identity;
   const businessName =
     identity?.businessName ?? identity?.name ?? "Your Business";
   const initials = identity?.initials ?? businessName.slice(0, 2).toUpperCase();
+
+  // ── Sync slug input when business loads ────────────────────────────────────
+  useEffect(() => {
+    if (business?.slug) setSlugInput(business.slug);
+  }, [business?.slug]);
 
   // ── Load brand ─────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -678,6 +690,57 @@ export default function BrandKitPage() {
     setBrand(updated);
     immediateSave(updated);
   };
+
+  // ── Slug editor ────────────────────────────────────────────────────────────
+
+  const RESERVED_SLUGS = new Set(['www', 'api', 'app', 'admin', 'mail', 'cdn', 'dev', 'beta',
+    'portal', 'blog', 'help', 'support', 'dashboard', 'login', 'signup', 'forgefly', 'p'])
+
+  function validateSlugFormat(s: string): string | null {
+    if (s.length < 3) return 'Min 3 characters'
+    if (s.length > 30) return 'Max 30 characters'
+    if (!/^[a-z0-9][a-z0-9-]*[a-z0-9]$/.test(s)) return 'Lowercase letters, numbers, hyphens only'
+    if (RESERVED_SLUGS.has(s)) return 'This name is reserved'
+    return null
+  }
+
+  const checkSlugDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  function handleSlugChange(val: string) {
+    const clean = val.toLowerCase().replace(/[^a-z0-9-]/g, '')
+    setSlugInput(clean)
+    setSlugAvailable(null)
+    const err = validateSlugFormat(clean)
+    setSlugError(err)
+    if (err || clean === portfolioSlug) return
+    if (checkSlugDebounceRef.current) clearTimeout(checkSlugDebounceRef.current)
+    setSlugChecking(true)
+    checkSlugDebounceRef.current = setTimeout(async () => {
+      const { data } = await supabase
+        .from('businesses').select('id').eq('slug', clean).neq('id', business!.id).maybeSingle()
+      setSlugAvailable(!data)
+      setSlugChecking(false)
+    }, 600)
+  }
+
+  async function saveSlug() {
+    if (!business || !slugInput || slugInput === portfolioSlug) return
+    setSlugSaving(true)
+    try {
+      const { error } = await supabase.from('businesses').update({ slug: slugInput }).eq('id', business.id)
+      if (error) throw error
+      await refetch()
+      toast.success('Portfolio URL updated')
+    } catch {
+      toast.error('Failed to save URL')
+    } finally {
+      setSlugSaving(false)
+    }
+  }
+
+  const slugChanged = slugInput !== portfolioSlug
+  const slugValid = !validateSlugFormat(slugInput)
+  const slugSaveEnabled = slugChanged && slugValid && slugAvailable === true && !slugChecking && !slugSaving
 
   // ── Brand asset uploads ────────────────────────────────────────────────────
 
@@ -1493,9 +1556,9 @@ export default function BrandKitPage() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2 mt-4">
-                      <p className="text-[11px] text-muted-foreground font-mono flex-1 truncate">{`${window.location.origin}/p/${portfolioSlug}`}</p>
+                      <p className="text-[11px] text-muted-foreground font-mono flex-1 truncate">{buildPortfolioUrl(portfolioSlug)}</p>
                       <CopyLinkButton
-                        url={`${window.location.origin}/p/${portfolioSlug}`}
+                        url={buildPortfolioUrl(portfolioSlug)}
                         onCopied={() => {
                           if (
                             !business?.onboarding_milestones?.portfolio_shared
@@ -1516,6 +1579,59 @@ export default function BrandKitPage() {
           {/* ── Portal tab ──────────────────────────────────────────────────── */}
           {activeTab === "portal" && (
             <div className="max-w-2xl space-y-4">
+
+              {/* Slug editor */}
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base">Portfolio URL</CardTitle>
+                  <CardDescription>
+                    Your public portfolio address — must be unique across all Forgefly users
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {portfolioSlug && (
+                    <p className="text-xs text-muted-foreground font-mono bg-muted/40 rounded-md px-3 py-2">
+                      {displayPortfolioUrl(portfolioSlug)}
+                    </p>
+                  )}
+                  <div className="flex gap-2 items-start">
+                    <div className="flex-1 space-y-1.5">
+                      <div className="relative">
+                        <Input
+                          value={slugInput}
+                          onChange={(e) => handleSlugChange(e.target.value)}
+                          placeholder="your-url-name"
+                          className="h-9 text-sm pr-8 font-mono"
+                        />
+                        <div className="absolute right-2.5 top-1/2 -translate-y-1/2">
+                          {slugChecking && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
+                          {!slugChecking && slugChanged && slugValid && slugAvailable === true && <Check className="h-3.5 w-3.5 text-emerald-500" />}
+                          {!slugChecking && slugChanged && slugValid && slugAvailable === false && <AlertCircle className="h-3.5 w-3.5 text-destructive" />}
+                        </div>
+                      </div>
+                      {slugError && <p className="text-[11px] text-destructive">{slugError}</p>}
+                      {!slugError && slugChanged && slugValid && slugAvailable === false && (
+                        <p className="text-[11px] text-destructive">Already taken — try a different name</p>
+                      )}
+                      {!slugError && slugChanged && slugValid && slugAvailable === true && (
+                        <p className="text-[11px] text-emerald-600">Available</p>
+                      )}
+                    </div>
+                    <Button
+                      size="sm"
+                      className="h-9 shrink-0"
+                      onClick={saveSlug}
+                      disabled={!slugSaveEnabled}
+                    >
+                      {slugSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Save'}
+                    </Button>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">
+                    Lowercase letters, numbers, and hyphens only · 3–30 characters
+                  </p>
+                </CardContent>
+              </Card>
+
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-muted-foreground">
