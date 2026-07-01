@@ -14,9 +14,11 @@ import { RouteGuard } from '@/components/common/RouteGuard';
 import { ThemeProvider } from '@/contexts/ThemeContext';
 
 const App: React.FC = () => {
-  const portfolioMatch = window.location.hostname.match(/^([a-z0-9-]+)\.p\.forgefly\.io$/)
-  if (portfolioMatch) {
-    const slug = portfolioMatch[1]
+  const SYSTEM_SUBDOMAINS = new Set(['www', 'api', 'mail', 'cdn', 'dev', 'staging'])
+  const portfolioMatch = window.location.hostname.match(/^([a-z0-9-]+)\.forgefly\.io$/)
+  const isPortfolioSubdomain = portfolioMatch && !SYSTEM_SUBDOMAINS.has(portfolioMatch[1])
+  if (isPortfolioSubdomain) {
+    const slug = portfolioMatch![1]
     return (
       <ErrorBoundary>
         <ThemeProvider>
