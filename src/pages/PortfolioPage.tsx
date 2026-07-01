@@ -135,7 +135,9 @@ export default function PortfolioPage() {
   const contactPhone = business?.contact_phone ?? null;
 
   const slug = business?.slug ?? "";
+  // Share URL uses subdomain in prod; iframe preview always uses same-origin path
   const portfolioUrl = slug ? buildPortfolioUrl(slug) : "";
+  const iframeUrl = slug ? `${window.location.origin}/p/${slug}` : "";
   const displayUrl = slug ? displayPortfolioUrl(slug) : "";
   const initials = bizName.slice(0, 2).toUpperCase();
   const passTextColor =
@@ -309,7 +311,7 @@ export default function PortfolioPage() {
           )}
           <iframe
             ref={iframeRef}
-            src={portfolioUrl}
+            src={iframeUrl}
             title="Portfolio preview"
             onLoad={() => {
               setIframeLoading(false);
