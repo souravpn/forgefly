@@ -135,25 +135,21 @@ function PortalSectionRenderer({
   if (section.section_type === "text_image") {
     return (
       <div className="w-full md:max-w-[60vw] mx-auto px-4 md:px-6 py-8">
-        <div className="flex flex-col md:flex-row gap-6 items-start">
-          <div className="flex-1">
-            {section.title && (
-              <h2 className="text-lg font-semibold mb-3">{section.title}</h2>
-            )}
-            {section.body && (
-              <p className="text-muted-foreground leading-relaxed whitespace-pre-wrap">
-                {section.body}
-              </p>
-            )}
-          </div>
-          {section.image_url && (
-            <img
-              src={section.image_url}
-              alt={section.title ?? ""}
-              className="w-full md:w-64 rounded-xl object-cover"
-            />
-          )}
-        </div>
+        {section.title && (
+          <h2 className="text-lg font-semibold mb-3">{section.title}</h2>
+        )}
+        {section.body && (
+          <p className="text-muted-foreground leading-relaxed whitespace-pre-wrap">
+            {section.body}
+          </p>
+        )}
+        {section.image_url && (
+          <img
+            src={section.image_url}
+            alt={section.title ?? ""}
+            className="w-full rounded-xl object-cover mt-4"
+          />
+        )}
       </div>
     );
   }
@@ -222,6 +218,17 @@ function formatReviewDate(dateStr: string) {
 
 export default function PublicPortfolioPage() {
   const { slug } = useParams<{ slug: string }>();
+
+  // Always render in light mode — this is a public page for clients
+  useEffect(() => {
+    const html = document.documentElement;
+    const wasDark = html.classList.contains("dark");
+    html.classList.remove("dark");
+    return () => {
+      if (wasDark) html.classList.add("dark");
+    };
+  }, []);
+
   const [business, setBusiness] = useState<Business | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
@@ -423,309 +430,323 @@ export default function PublicPortfolioPage() {
     (s) => s.section_type !== "banner",
   );
   return (
-    <div
-      className="min-h-screen bg-background"
-      style={
-        brand?.portalBgUrl
-          ? {
-              backgroundImage: `url(${brand.portalBgUrl})`,
-              backgroundSize: "cover",
-              backgroundAttachment: "fixed",
-              backgroundPosition: "center",
-            }
-          : undefined
-      }
-    >
-      {/* 1. Header */}
-      <header
-        className="relative py-16 px-6 text-center border-b overflow-hidden"
-        style={{ borderColor: `${primaryColor}30` }}
+    <div>
+      <div
+        className="min-h-screen bg-background"
+        style={
+          brand?.portalBgUrl
+            ? {
+                backgroundImage: `url(${brand.portalBgUrl})`,
+                backgroundSize: "cover",
+                backgroundAttachment: "fixed",
+                backgroundPosition: "center",
+              }
+            : undefined
+        }
       >
-        {brand?.headerCoverUrl && (
-          <div
-            className="absolute inset-0 z-0"
-            style={{
-              backgroundImage: `url(${brand.headerCoverUrl})`,
-              backgroundSize: "cover",
-              backgroundPosition: "center",
-            }}
-          >
-            <div className="absolute inset-0 bg-background/60" />
-          </div>
-        )}
-        <div className="relative z-10">
-          <div
-            className="inline-flex h-16 w-16 rounded-2xl items-center justify-center mb-4 overflow-hidden"
-            style={
-              brand?.businessIconUrl
-                ? undefined
-                : { backgroundColor: primaryColor }
-            }
-          >
-            {brand?.businessIconUrl ? (
-              <img
-                src={brand.businessIconUrl}
-                alt={bizName}
-                className="w-full h-full object-cover"
-              />
-            ) : (
-              <span className="text-white font-bold text-2xl">
-                {bizName.slice(0, 2).toUpperCase()}
-              </span>
-            )}
-          </div>
-          <h1 className="text-3xl font-bold tracking-tight">{bizName}</h1>
-          {identity?.tagline && (
-            <p className="mt-2 text-lg text-muted-foreground">
-              {identity.tagline}
-            </p>
-          )}
-          {identity?.niche && (
-            <Badge variant="secondary" className="mt-3">
-              {identity.niche}
-            </Badge>
-          )}
-          {brand?.keywords && brand.keywords.length > 0 && (
-            <div className="mt-3 flex flex-wrap justify-center gap-2">
-              {brand.keywords.map((k) => (
-                <span
-                  key={k}
-                  className="text-xs text-muted-foreground border rounded-full px-2.5 py-0.5"
-                >
-                  {k}
-                </span>
-              ))}
+        {/* 1. Header */}
+        <header
+          className="relative py-16 px-6 text-center border-b overflow-hidden"
+          style={{ borderColor: `${primaryColor}30` }}
+        >
+          {brand?.headerCoverUrl && (
+            <div
+              className="absolute inset-0 z-0"
+              style={{
+                backgroundImage: `url(${brand.headerCoverUrl})`,
+                backgroundSize: "cover",
+                backgroundPosition: "center",
+              }}
+            >
+              <div className="absolute inset-0 bg-background/60" />
             </div>
           )}
-        </div>
-      </header>
+          <div className="relative z-10">
+            <div
+              className="inline-flex h-16 w-16 rounded-2xl items-center justify-center mb-4 overflow-hidden"
+              style={
+                brand?.businessIconUrl
+                  ? undefined
+                  : { backgroundColor: primaryColor }
+              }
+            >
+              {brand?.businessIconUrl ? (
+                <img
+                  src={brand.businessIconUrl}
+                  alt={bizName}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <span className="text-white font-bold text-2xl">
+                  {bizName.slice(0, 2).toUpperCase()}
+                </span>
+              )}
+            </div>
+            <h1 className="text-3xl font-bold tracking-tight">{bizName}</h1>
+            {identity?.tagline && (
+              <p className="mt-2 text-lg text-muted-foreground">
+                {identity.tagline}
+              </p>
+            )}
+            {identity?.niche && (
+              <Badge variant="secondary" className="mt-3">
+                {identity.niche}
+              </Badge>
+            )}
+            {brand?.keywords && brand.keywords.length > 0 && (
+              <div className="mt-3 flex flex-wrap justify-center gap-2">
+                {brand.keywords.map((k) => (
+                  <span
+                    key={k}
+                    className="text-xs text-muted-foreground border rounded-full px-2.5 py-0.5"
+                  >
+                    {k}
+                  </span>
+                ))}
+              </div>
+            )}
+            <div className="mt-6">
+              <Button
+                size="default"
+                onClick={() => openModal()}
+                style={{ backgroundColor: primaryColor }}
+                className="gap-2 text-white"
+              >
+                <Sparkles className="h-4 w-4" />
+                Request a Proposal
+              </Button>
+            </div>
+          </div>
+        </header>
 
-      {/* 2. Banner section(s) — shown immediately after header if any exist */}
-      {bannerSections.map((s) => (
-        <PortalSectionRenderer
-          key={s.id}
-          section={s}
-          primaryColor={primaryColor}
-        />
-      ))}
+        {/* 2. Banner section(s) — shown immediately after header if any exist */}
+        {bannerSections.map((s) => (
+          <PortalSectionRenderer
+            key={s.id}
+            section={s}
+            primaryColor={primaryColor}
+          />
+        ))}
 
-      {/* 3. About — always shown; directly under header when no banner, after banner otherwise */}
-      {bio && (
-        <div className="w-full md:max-w-[60vw] mx-auto px-4 md:px-6 pt-10">
-          <h2 className="text-lg font-semibold mb-3">About</h2>
-          <p className="text-muted-foreground leading-relaxed">{bio}</p>
-        </div>
-      )}
+        {/* 3. About — always shown; directly under header when no banner, after banner otherwise */}
+        {bio && (
+          <div className="w-full md:max-w-[60vw] mx-auto px-4 md:px-6 pt-10">
+            <h2 className="text-lg font-semibold mb-3">About</h2>
+            <p className="text-muted-foreground leading-relaxed">{bio}</p>
+          </div>
+        )}
 
-      {/* 4. Custom sections (non-banner), in position order */}
-      {customSections.map((s) => (
-        <PortalSectionRenderer
-          key={s.id}
-          section={s}
-          primaryColor={primaryColor}
-        />
-      ))}
+        {/* 4. Custom sections (non-banner), in position order */}
+        {customSections.map((s) => (
+          <PortalSectionRenderer
+            key={s.id}
+            section={s}
+            primaryColor={primaryColor}
+          />
+        ))}
 
-      {/* 5. Services */}
-      <div className="w-full md:max-w-[60vw] mx-auto px-4 md:px-6 py-12">
-        {services.length > 0 ? (
-          <>
-            <h2 className="text-xl font-semibold mb-6">Services</h2>
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {services.map((svc, i) => (
-                <div
-                  key={i}
-                  className="border rounded-xl p-5 flex flex-col gap-3 hover:shadow-md transition-shadow"
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <h3 className="font-semibold text-sm leading-snug">
-                      {svc.name}
-                    </h3>
-                    <Badge variant="outline" className="shrink-0 text-[10px]">
-                      {SERVICE_TYPE_LABELS[svc.type] ?? svc.type}
-                    </Badge>
+        {/* 5. Services */}
+        <div className="w-full md:max-w-[60vw] mx-auto px-4 md:px-6 py-12">
+          {services.length > 0 ? (
+            <>
+              <h2 className="text-xl font-semibold mb-6">Services</h2>
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {services.map((svc, i) => (
+                  <div
+                    key={i}
+                    className="border rounded-xl p-5 flex flex-col gap-3 hover:shadow-md transition-shadow"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <h3 className="font-semibold text-sm leading-snug">
+                        {svc.name}
+                      </h3>
+                      <Badge variant="outline" className="shrink-0 text-[10px]">
+                        {SERVICE_TYPE_LABELS[svc.type] ?? svc.type}
+                      </Badge>
+                    </div>
+                    {svc.description && (
+                      <p className="text-xs text-muted-foreground line-clamp-3">
+                        {svc.description}
+                      </p>
+                    )}
+                    <div className="flex items-center justify-between mt-auto pt-1">
+                      <span
+                        className="text-sm font-bold"
+                        style={{ color: primaryColor }}
+                      >
+                        {svc.price}
+                      </span>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 text-xs"
+                        onClick={() => openModal(svc.name)}
+                      >
+                        Request →
+                      </Button>
+                    </div>
                   </div>
-                  {svc.description && (
-                    <p className="text-xs text-muted-foreground line-clamp-3">
-                      {svc.description}
+                ))}
+              </div>
+            </>
+          ) : (
+            <p className="text-muted-foreground text-sm text-center py-8">
+              No services listed yet.
+            </p>
+          )}
+        </div>
+
+        {/* 6. Work samples */}
+        {workSamples.length > 0 && (
+          <div
+            className="w-full md:max-w-[60vw] mx-auto px-4 md:px-6 py-12 border-t"
+            style={{ borderColor: `${primaryColor}20` }}
+          >
+            <h2 className="text-xl font-semibold mb-6">Work</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {workSamples.map((sample) => (
+                <button
+                  key={sample.id}
+                  type="button"
+                  onClick={() => setLightboxSample(sample)}
+                  className="group relative overflow-hidden rounded-xl border aspect-video bg-muted cursor-zoom-in text-left"
+                >
+                  <img
+                    src={sample.image_url}
+                    alt={sample.title ?? ""}
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                  />
+                  {sample.title && (
+                    <div className="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-xs px-3 py-2 translate-y-full group-hover:translate-y-0 transition-transform">
+                      {sample.title}
+                    </div>
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Testimonials — only renders when ≥ 3 ai_selected reviews */}
+        {testimonials.length >= 3 && (
+          <div
+            className="w-full md:max-w-[60vw] mx-auto px-4 md:px-6 py-12 border-t"
+            style={{ borderColor: `${primaryColor}20` }}
+          >
+            <h2 className="text-xl font-semibold mb-8">What clients say</h2>
+            <div className="grid gap-6 sm:grid-cols-2">
+              {testimonials.map((review) => (
+                <div
+                  key={review.id}
+                  className="border rounded-xl p-5 flex flex-col gap-3"
+                >
+                  <StarRating rating={review.rating} color={primaryColor} />
+                  {review.comment && (
+                    <p className="text-sm text-foreground leading-relaxed">
+                      "{review.comment}"
                     </p>
                   )}
-                  <div className="flex items-center justify-between mt-auto pt-1">
-                    <span
-                      className="text-sm font-bold"
-                      style={{ color: primaryColor }}
-                    >
-                      {svc.price}
-                    </span>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-7 text-xs"
-                      onClick={() => openModal(svc.name)}
-                    >
-                      Request →
-                    </Button>
-                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    — {review.client_name} ·{" "}
+                    {formatReviewDate(review.submitted_at)}
+                  </p>
+                  {review.freelancer_reply && (
+                    <p className="text-xs text-muted-foreground border-t pt-3 mt-auto">
+                      ↳ "{review.freelancer_reply}"
+                    </p>
+                  )}
                 </div>
               ))}
             </div>
-          </>
-        ) : (
-          <p className="text-muted-foreground text-sm text-center py-8">
-            No services listed yet.
-          </p>
+          </div>
         )}
-      </div>
 
-      {/* 6. Work samples */}
-      {workSamples.length > 0 && (
-        <div
-          className="w-full md:max-w-[60vw] mx-auto px-4 md:px-6 py-12 border-t"
-          style={{ borderColor: `${primaryColor}20` }}
-        >
-          <h2 className="text-xl font-semibold mb-6">Work</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {workSamples.map((sample) => (
-              <button
-                key={sample.id}
-                type="button"
-                onClick={() => setLightboxSample(sample)}
-                className="group relative overflow-hidden rounded-xl border aspect-video bg-muted cursor-zoom-in text-left"
-              >
-                <img
-                  src={sample.image_url}
-                  alt={sample.title ?? ""}
-                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                />
-                {sample.title && (
-                  <div className="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-xs px-3 py-2 translate-y-full group-hover:translate-y-0 transition-transform">
-                    {sample.title}
-                  </div>
-                )}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Testimonials — only renders when ≥ 3 ai_selected reviews */}
-      {testimonials.length >= 3 && (
-        <div
-          className="w-full md:max-w-[60vw] mx-auto px-4 md:px-6 py-12 border-t"
-          style={{ borderColor: `${primaryColor}20` }}
-        >
-          <h2 className="text-xl font-semibold mb-8">What clients say</h2>
-          <div className="grid gap-6 sm:grid-cols-2">
-            {testimonials.map((review) => (
-              <div
-                key={review.id}
-                className="border rounded-xl p-5 flex flex-col gap-3"
-              >
-                <StarRating rating={review.rating} color={primaryColor} />
-                {review.comment && (
-                  <p className="text-sm text-foreground leading-relaxed">
-                    "{review.comment}"
-                  </p>
-                )}
-                <p className="text-xs text-muted-foreground">
-                  — {review.client_name} ·{" "}
-                  {formatReviewDate(review.submitted_at)}
-                </p>
-                {review.freelancer_reply && (
-                  <p className="text-xs text-muted-foreground border-t pt-3 mt-auto">
-                    ↳ "{review.freelancer_reply}"
-                  </p>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* 7. CTA + Footer */}
-      <div className="border-t" style={{ borderColor: `${primaryColor}20` }}>
-        <div className="w-full md:max-w-[60vw] mx-auto px-4 md:px-6 py-16 text-center space-y-4">
-          <Button
-            size="lg"
-            className="gap-2"
-            style={{ backgroundColor: primaryColor }}
-            onClick={() => openModal()}
-          >
-            <Sparkles className="h-4 w-4" />
-            Request a Proposal
-          </Button>
-          {(contactEmail || contactPhone) && (
-            <div className="flex items-center justify-center gap-4 text-sm text-muted-foreground">
-              {contactEmail && (
-                <a
-                  href={`mailto:${contactEmail}`}
-                  className="hover:underline"
-                  style={{ color: primaryColor }}
-                >
-                  {contactEmail}
-                </a>
-              )}
-              {contactEmail && contactPhone && <span>·</span>}
-              {contactPhone && (
-                <a
-                  href={`tel:${contactPhone}`}
-                  className="hover:underline"
-                  style={{ color: primaryColor }}
-                >
-                  {contactPhone}
-                </a>
-              )}
-            </div>
-          )}
-          <div className="pt-2">
-            {isIos ? (
-              <button
-                type="button"
-                onClick={addToWallet}
-                disabled={walletLoading}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-border/60 text-sm text-muted-foreground hover:text-foreground hover:border-border transition-colors disabled:opacity-60"
-              >
-                {walletLoading ? (
-                  <div className="h-4 w-4 rounded-full border-2 border-muted-foreground/30 border-t-muted-foreground animate-spin" />
-                ) : (
-                  <Wallet className="h-4 w-4" />
-                )}
-                {walletLoading ? "Generating…" : "Add to Apple Wallet"}
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={saveContact}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-border/60 text-sm text-muted-foreground hover:text-foreground hover:border-border transition-colors"
-              >
-                <Download className="h-4 w-4" />
-                Save contact
-              </button>
-            )}
-          </div>
-        </div>
-
+        {/* 7. Footer */}
         <footer
-          className="border-t py-8 px-6 text-center text-sm text-muted-foreground"
+          className="border-t mt-8"
           style={{ borderColor: `${primaryColor}20` }}
         >
-          <p>
-            © {new Date().getFullYear()} · {bizName} · All Rights Reserved ·
-            Powered by Forgefly
-          </p>
-          <a
-            href="https://forgefly.io?ref=portfolio_footer"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex mt-3 items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium"
-            style={{
-              background: "#E1F5EE",
-              color: "#085041",
-              border: "1px solid #5DCAA5",
-            }}
-          >
-            Have a business? Try Forgefly
-          </a>
+          <div className="w-full md:max-w-[60vw] mx-auto px-4 md:px-6 py-10">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 items-start">
+              {/* Left — contact + save */}
+              <div className="flex flex-col gap-2">
+                {contactEmail && (
+                  <a
+                    href={`mailto:${contactEmail}`}
+                    className="text-sm hover:underline"
+                    style={{ color: primaryColor }}
+                  >
+                    {contactEmail}
+                  </a>
+                )}
+                {contactPhone && (
+                  <a
+                    href={`tel:${contactPhone}`}
+                    className="text-sm hover:underline"
+                    style={{ color: primaryColor }}
+                  >
+                    {contactPhone}
+                  </a>
+                )}
+                <div className="mt-1">
+                  {isIos ? (
+                    <button
+                      type="button"
+                      onClick={addToWallet}
+                      disabled={walletLoading}
+                      className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors disabled:opacity-60"
+                    >
+                      {walletLoading ? (
+                        <div className="h-3.5 w-3.5 rounded-full border-2 border-muted-foreground/30 border-t-muted-foreground animate-spin" />
+                      ) : (
+                        <Wallet className="h-3.5 w-3.5" />
+                      )}
+                      {walletLoading ? "Generating…" : "Add to Apple Wallet"}
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={saveContact}
+                      className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      <Download className="h-3.5 w-3.5" />
+                      Save contact
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Center — CTA */}
+              <div className="flex justify-center">
+                <Button
+                  size="default"
+                  onClick={() => openModal()}
+                  style={{ backgroundColor: primaryColor }}
+                  className="gap-2 text-white"
+                >
+                  <Sparkles className="h-4 w-4" />
+                  Request a Proposal
+                </Button>
+              </div>
+
+              {/* Right — copyright */}
+              <div className="flex flex-col gap-1 text-sm text-muted-foreground sm:text-right">
+                <p>
+                  © {new Date().getFullYear()} · {bizName}
+                </p>
+                <p>All Rights Reserved</p>
+                <a
+                  href="https://forgefly.io?ref=portfolio_footer"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hover:underline"
+                  style={{ color: primaryColor }}
+                >
+                  Powered by Forgefly
+                </a>
+              </div>
+            </div>
+          </div>
         </footer>
       </div>
 

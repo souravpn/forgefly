@@ -313,6 +313,7 @@ export default function PortfolioPage() {
             ref={iframeRef}
             src={iframeUrl}
             title="Portfolio preview"
+            scrolling="no"
             onLoad={() => {
               setIframeLoading(false);
               iframeResizeObserverRef.current?.disconnect();
