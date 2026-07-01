@@ -27,6 +27,7 @@ import OutreachKitPage from './pages/OutreachKitPage';
 import MessagesPage from './pages/MessagesPage';
 import ReviewSubmitPage from './pages/ReviewSubmitPage';
 import ReviewsPage from './pages/ReviewsPage';
+import PortfolioPage from './pages/PortfolioPage';
 
 export interface RouteConfig {
   name: string;
@@ -183,6 +184,11 @@ export const routes: RouteConfig[] = [
     name: 'Messages',
     path: '/dashboard/messages',
     element: <MessagesPage />,
+  },
+  {
+    name: 'Portfolio',
+    path: '/dashboard/portfolio',
+    element: <PortfolioPage />,
   },
   {
     name: 'Payment Success',

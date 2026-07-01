@@ -69,6 +69,9 @@ interface BrandData {
   tone?: string;
   keywords?: string[];
   fonts?: { heading?: string; body?: string };
+  businessIconUrl?: string;
+  headerCoverUrl?: string;
+  portalBgUrl?: string;
 }
 
 interface PortalSection {
@@ -491,6 +494,12 @@ export default function BrandKitPage() {
   const [completedProjects, setCompletedProjects] = useState<Project[]>([]);
   const workImageRef = useRef<HTMLInputElement>(null);
   const sectionImageRef = useRef<HTMLInputElement>(null);
+  const iconImageRef = useRef<HTMLInputElement>(null);
+  const coverImageRef = useRef<HTMLInputElement>(null);
+  const bgImageRef = useRef<HTMLInputElement>(null);
+  const [iconUploading, setIconUploading] = useState(false);
+  const [coverUploading, setCoverUploading] = useState(false);
+  const [bgUploading, setBgUploading] = useState(false);
 
   const portfolioSlug = business?.slug ?? "";
   const portfolioUrl = portfolioSlug
@@ -669,6 +678,64 @@ export default function BrandKitPage() {
     setBrand(updated);
     immediateSave(updated);
   };
+
+  // ── Brand asset uploads ────────────────────────────────────────────────────
+
+  async function uploadBrandAsset(file: File, assetType: string): Promise<string> {
+    const ext = file.name.split('.').pop();
+    const filename = `brand/${business!.id}/${assetType}/${Date.now()}.${ext}`;
+    const { error } = await supabase.storage
+      .from('work-samples')
+      .upload(filename, file, { upsert: true });
+    if (error) throw error;
+    const { data } = supabase.storage.from('work-samples').getPublicUrl(filename);
+    return data.publicUrl;
+  }
+
+  async function handleIconUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIconUploading(true);
+    try {
+      const url = await uploadBrandAsset(file, 'icon');
+      const updated = { ...brand, businessIconUrl: url };
+      setBrand(updated);
+      immediateSave(updated);
+    } catch { toast.error('Upload failed'); }
+    finally { setIconUploading(false); }
+  }
+
+  async function handleCoverUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setCoverUploading(true);
+    try {
+      const url = await uploadBrandAsset(file, 'cover');
+      const updated = { ...brand, headerCoverUrl: url };
+      setBrand(updated);
+      immediateSave(updated);
+    } catch { toast.error('Upload failed'); }
+    finally { setCoverUploading(false); }
+  }
+
+  async function handleBgUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setBgUploading(true);
+    try {
+      const url = await uploadBrandAsset(file, 'bg');
+      const updated = { ...brand, portalBgUrl: url };
+      setBrand(updated);
+      immediateSave(updated);
+    } catch { toast.error('Upload failed'); }
+    finally { setBgUploading(false); }
+  }
+
+  function removeBrandAsset(key: 'businessIconUrl' | 'headerCoverUrl' | 'portalBgUrl') {
+    const updated = { ...brand, [key]: undefined };
+    setBrand(updated);
+    immediateSave(updated);
+  }
 
   // ── Portal section CRUD ────────────────────────────────────────────────────
 
@@ -1022,6 +1089,132 @@ export default function BrandKitPage() {
                         Primary: text & icons · Secondary: soft backgrounds ·
                         Accent: card backgrounds · CTA: action buttons
                       </p>
+                    </CardContent>
+                  </Card>
+
+                  {/* Visuals */}
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-base">Visuals</CardTitle>
+                      <CardDescription>
+                        Business icon, header cover, and portal background
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-5">
+
+                      {/* Business icon */}
+                      <div>
+                        <p className="text-xs font-medium mb-2">Business Icon</p>
+                        <div className="flex items-center gap-4">
+                          <div
+                            className="h-14 w-14 rounded-xl flex items-center justify-center shrink-0 overflow-hidden border border-border/50"
+                            style={{ backgroundColor: brand.businessIconUrl ? undefined : `${brand.primaryColor ?? '#10B981'}18` }}
+                          >
+                            {brand.businessIconUrl
+                              ? <img src={brand.businessIconUrl} alt="Business icon" className="w-full h-full object-cover" />
+                              : <span className="text-sm font-bold" style={{ color: brand.primaryColor ?? '#10B981' }}>{initials}</span>}
+                          </div>
+                          <div className="flex flex-col gap-1.5">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-7 gap-1.5 text-xs"
+                              onClick={() => iconImageRef.current?.click()}
+                              disabled={iconUploading}
+                            >
+                              {iconUploading
+                                ? <div className="h-3 w-3 rounded-full border-2 border-muted-foreground/30 border-t-muted-foreground animate-spin" />
+                                : <Image className="h-3 w-3" />}
+                              {iconUploading ? 'Uploading…' : 'Upload image'}
+                            </Button>
+                            {brand.businessIconUrl && (
+                              <button
+                                type="button"
+                                onClick={() => removeBrandAsset('businessIconUrl')}
+                                className="text-[11px] text-muted-foreground hover:text-destructive transition-colors text-left"
+                              >
+                                Remove (use initials)
+                              </button>
+                            )}
+                          </div>
+                          <input ref={iconImageRef} type="file" accept="image/*" className="hidden" onChange={handleIconUpload} />
+                        </div>
+                      </div>
+
+                      <div className="border-t border-border/40" />
+
+                      {/* Header cover image */}
+                      <div>
+                        <p className="text-xs font-medium mb-1">Header Cover Image</p>
+                        <p className="text-[11px] text-muted-foreground mb-2">Full-width image shown behind the portfolio header. Default: no cover.</p>
+                        {brand.headerCoverUrl ? (
+                          <div className="relative rounded-xl overflow-hidden border border-border/50 aspect-[3/1] mb-2">
+                            <img src={brand.headerCoverUrl} alt="Header cover" className="w-full h-full object-cover" />
+                            <button
+                              type="button"
+                              onClick={() => removeBrandAsset('headerCoverUrl')}
+                              className="absolute top-2 right-2 h-6 w-6 rounded-full bg-black/60 text-white flex items-center justify-center hover:bg-black/80 transition-colors"
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="rounded-xl border border-dashed border-border/60 aspect-[3/1] flex items-center justify-center bg-muted/20 mb-2">
+                            <p className="text-xs text-muted-foreground">No cover image</p>
+                          </div>
+                        )}
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 gap-1.5 text-xs"
+                          onClick={() => coverImageRef.current?.click()}
+                          disabled={coverUploading}
+                        >
+                          {coverUploading
+                            ? <div className="h-3 w-3 rounded-full border-2 border-muted-foreground/30 border-t-muted-foreground animate-spin" />
+                            : <Image className="h-3 w-3" />}
+                          {coverUploading ? 'Uploading…' : brand.headerCoverUrl ? 'Replace image' : 'Upload image'}
+                        </Button>
+                        <input ref={coverImageRef} type="file" accept="image/*" className="hidden" onChange={handleCoverUpload} />
+                      </div>
+
+                      <div className="border-t border-border/40" />
+
+                      {/* Portal background */}
+                      <div>
+                        <p className="text-xs font-medium mb-1">Portal Background</p>
+                        <p className="text-[11px] text-muted-foreground mb-2">Background image for the public portfolio page. Default: no background.</p>
+                        {brand.portalBgUrl ? (
+                          <div className="relative rounded-xl overflow-hidden border border-border/50 aspect-[3/1] mb-2">
+                            <img src={brand.portalBgUrl} alt="Portal background" className="w-full h-full object-cover" />
+                            <button
+                              type="button"
+                              onClick={() => removeBrandAsset('portalBgUrl')}
+                              className="absolute top-2 right-2 h-6 w-6 rounded-full bg-black/60 text-white flex items-center justify-center hover:bg-black/80 transition-colors"
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="rounded-xl border border-dashed border-border/60 aspect-[3/1] flex items-center justify-center bg-muted/20 mb-2">
+                            <p className="text-xs text-muted-foreground">No background image</p>
+                          </div>
+                        )}
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 gap-1.5 text-xs"
+                          onClick={() => bgImageRef.current?.click()}
+                          disabled={bgUploading}
+                        >
+                          {bgUploading
+                            ? <div className="h-3 w-3 rounded-full border-2 border-muted-foreground/30 border-t-muted-foreground animate-spin" />
+                            : <Image className="h-3 w-3" />}
+                          {bgUploading ? 'Uploading…' : brand.portalBgUrl ? 'Replace image' : 'Upload image'}
+                        </Button>
+                        <input ref={bgImageRef} type="file" accept="image/*" className="hidden" onChange={handleBgUpload} />
+                      </div>
+
                     </CardContent>
                   </Card>
 

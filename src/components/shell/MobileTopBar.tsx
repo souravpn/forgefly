@@ -23,6 +23,7 @@ export function MobileTopBar({ onMenuOpen, nudges: { nudges, unreadCount, markRe
   const bizName =
     identity?.businessName ?? identity?.name ?? business?.name ?? profile?.username ?? 'My Business'
   const initials = identity?.initials ?? bizName.slice(0, 2).toUpperCase()
+  const businessIconUrl = (extractedData as { brand?: { businessIconUrl?: string } } | undefined)?.brand?.businessIconUrl
 
   const displayName =
     profile?.username || user?.user_metadata?.name || user?.email?.split('@')[0] || ''
@@ -113,8 +114,10 @@ export function MobileTopBar({ onMenuOpen, nudges: { nudges, unreadCount, markRe
 
       {/* Center: business icon */}
       <div className="flex-1 flex justify-center">
-        <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center select-none">
-          <span className="text-xs font-bold text-primary">{initials}</span>
+        <div className="h-8 w-8 rounded-lg overflow-hidden bg-primary/10 flex items-center justify-center select-none">
+          {businessIconUrl
+            ? <img src={businessIconUrl} alt={bizName} className="w-full h-full object-cover" />
+            : <span className="text-xs font-bold text-primary">{initials}</span>}
         </div>
       </div>
 

@@ -44,6 +44,9 @@ interface Business {
       primaryColor?: string;
       secondaryColor?: string;
       keywords?: string[];
+      businessIconUrl?: string;
+      headerCoverUrl?: string;
+      portalBgUrl?: string;
     };
     services?: ExtractedService[];
   };
@@ -157,7 +160,9 @@ function PortalSectionRenderer({
   if (section.section_type === "banner") {
     const colorClass = BANNER_COLORS[section.banner_color ?? "info"];
     return (
-      <div className={`w-full border-y px-6 py-3 text-sm text-center ${colorClass}`}>
+      <div
+        className={`w-full border-y px-6 py-3 text-sm text-center ${colorClass}`}
+      >
         {section.body}
       </div>
     );
@@ -272,13 +277,16 @@ export default function PublicPortfolioPage() {
             .order("sort_order"),
           supabase
             .from("reviews")
-            .select("id, client_name, rating, comment, freelancer_reply, submitted_at")
+            .select(
+              "id, client_name, rating, comment, freelancer_reply, submitted_at",
+            )
             .eq("business_id", data.id)
             .eq("ai_selected", true)
             .eq("portal_eligible", true)
             .order("ai_selected_at", { ascending: false }),
         ]);
-        if (sectionsRes.data) setPortalSections(sectionsRes.data as PortalSection[]);
+        if (sectionsRes.data)
+          setPortalSections(sectionsRes.data as PortalSection[]);
         if (samplesRes.data) setWorkSamples(samplesRes.data as WorkSample[]);
         if (reviewsRes.data) setTestimonials(reviewsRes.data as Review[]);
       }
@@ -294,28 +302,28 @@ export default function PublicPortfolioPage() {
   const contactPhone = business?.contact_phone ?? null;
   const bizName = identity?.businessName ?? business?.name ?? "";
 
-  const portfolioUrl = `${window.location.origin}/p/${slug}`
-  const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent)
+  const portfolioUrl = `${window.location.origin}/p/${slug}`;
+  const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent);
 
   function saveContact() {
     const lines: string[] = [
-      'BEGIN:VCARD',
-      'VERSION:3.0',
+      "BEGIN:VCARD",
+      "VERSION:3.0",
       `FN:${bizName}`,
       `ORG:${bizName}`,
       `URL:${portfolioUrl}`,
-    ]
-    if (identity?.tagline) lines.push(`NOTE:${identity.tagline}`)
-    if (contactEmail) lines.push(`EMAIL:${contactEmail}`)
-    if (contactPhone) lines.push(`TEL:${contactPhone}`)
-    lines.push('END:VCARD')
-    const blob = new Blob([lines.join('\r\n')], { type: 'text/vcard' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `${slug}.vcf`
-    a.click()
-    URL.revokeObjectURL(url)
+    ];
+    if (identity?.tagline) lines.push(`NOTE:${identity.tagline}`);
+    if (contactEmail) lines.push(`EMAIL:${contactEmail}`);
+    if (contactPhone) lines.push(`TEL:${contactPhone}`);
+    lines.push("END:VCARD");
+    const blob = new Blob([lines.join("\r\n")], { type: "text/vcard" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${slug}.vcf`;
+    a.click();
+    URL.revokeObjectURL(url);
   }
 
   async function addToWallet() {
@@ -323,28 +331,35 @@ export default function PublicPortfolioPage() {
     try {
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
       const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
-      const res = await fetch(`${supabaseUrl}/functions/v1/generate-wallet-pass`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${anonKey}`,
-          apikey: anonKey,
+      const res = await fetch(
+        `${supabaseUrl}/functions/v1/generate-wallet-pass`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${anonKey}`,
+            apikey: anonKey,
+          },
+          body: JSON.stringify({ slug }),
         },
-        body: JSON.stringify({ slug }),
-      });
+      );
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error((err as { error?: string }).error ?? `HTTP ${res.status}`);
+        throw new Error(
+          (err as { error?: string }).error ?? `HTTP ${res.status}`,
+        );
       }
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
+      const a = document.createElement("a");
       a.href = url;
       a.download = `${slug}.pkpass`;
       a.click();
       URL.revokeObjectURL(url);
     } catch (err) {
-      toast.error(`Couldn't generate pass: ${err instanceof Error ? err.message : String(err)}`);
+      toast.error(
+        `Couldn't generate pass: ${err instanceof Error ? err.message : String(err)}`,
+      );
     } finally {
       setWalletLoading(false);
     }
@@ -414,45 +429,100 @@ export default function PublicPortfolioPage() {
     );
   }
 
+  const bannerSections = portalSections.filter(
+    (s) => s.section_type === "banner",
+  );
+  const customSections = portalSections.filter(
+    (s) => s.section_type !== "banner",
+  );
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
+    <div
+      className="min-h-screen bg-background"
+      style={
+        brand?.portalBgUrl
+          ? {
+              backgroundImage: `url(${brand.portalBgUrl})`,
+              backgroundSize: "cover",
+              backgroundAttachment: "fixed",
+              backgroundPosition: "center",
+            }
+          : undefined
+      }
+    >
+      {/* 1. Header */}
       <header
-        className="py-16 px-6 text-center border-b"
+        className="relative py-16 px-6 text-center border-b overflow-hidden"
         style={{ borderColor: `${primaryColor}30` }}
       >
-        <div
-          className="inline-flex h-16 w-16 rounded-2xl items-center justify-center mb-4 text-white font-bold text-2xl"
-          style={{ backgroundColor: primaryColor }}
-        >
-          {bizName.slice(0, 2).toUpperCase()}
-        </div>
-        <h1 className="text-3xl font-bold tracking-tight">{bizName}</h1>
-        {identity?.tagline && (
-          <p className="mt-2 text-lg text-muted-foreground">
-            {identity.tagline}
-          </p>
-        )}
-        {identity?.niche && (
-          <Badge variant="secondary" className="mt-3">
-            {identity.niche}
-          </Badge>
-        )}
-        {brand?.keywords && brand.keywords.length > 0 && (
-          <div className="mt-3 flex flex-wrap justify-center gap-2">
-            {brand.keywords.map((k) => (
-              <span
-                key={k}
-                className="text-xs text-muted-foreground border rounded-full px-2.5 py-0.5"
-              >
-                {k}
-              </span>
-            ))}
+        {brand?.headerCoverUrl && (
+          <div
+            className="absolute inset-0 z-0"
+            style={{
+              backgroundImage: `url(${brand.headerCoverUrl})`,
+              backgroundSize: "cover",
+              backgroundPosition: "center",
+            }}
+          >
+            <div className="absolute inset-0 bg-background/60" />
           </div>
         )}
+        <div className="relative z-10">
+          <div
+            className="inline-flex h-16 w-16 rounded-2xl items-center justify-center mb-4 overflow-hidden"
+            style={
+              brand?.businessIconUrl
+                ? undefined
+                : { backgroundColor: primaryColor }
+            }
+          >
+            {brand?.businessIconUrl ? (
+              <img
+                src={brand.businessIconUrl}
+                alt={bizName}
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <span className="text-white font-bold text-2xl">
+                {bizName.slice(0, 2).toUpperCase()}
+              </span>
+            )}
+          </div>
+          <h1 className="text-3xl font-bold tracking-tight">{bizName}</h1>
+          {identity?.tagline && (
+            <p className="mt-2 text-lg text-muted-foreground">
+              {identity.tagline}
+            </p>
+          )}
+          {identity?.niche && (
+            <Badge variant="secondary" className="mt-3">
+              {identity.niche}
+            </Badge>
+          )}
+          {brand?.keywords && brand.keywords.length > 0 && (
+            <div className="mt-3 flex flex-wrap justify-center gap-2">
+              {brand.keywords.map((k) => (
+                <span
+                  key={k}
+                  className="text-xs text-muted-foreground border rounded-full px-2.5 py-0.5"
+                >
+                  {k}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
       </header>
 
-      {/* Bio / About */}
+      {/* 2. Banner section(s) — shown immediately after header if any exist */}
+      {bannerSections.map((s) => (
+        <PortalSectionRenderer
+          key={s.id}
+          section={s}
+          primaryColor={primaryColor}
+        />
+      ))}
+
+      {/* 3. About — always shown; directly under header when no banner, after banner otherwise */}
       {bio && (
         <div className="w-full md:max-w-[60vw] mx-auto px-4 md:px-6 pt-10">
           <h2 className="text-lg font-semibold mb-3">About</h2>
@@ -460,20 +530,17 @@ export default function PublicPortfolioPage() {
         </div>
       )}
 
-      {/* Custom sections — position 1 and 2 (both above services) */}
-      {portalSections
-        .filter((s) => s.position === 1)
-        .map((s) => (
-          <PortalSectionRenderer key={s.id} section={s} primaryColor={primaryColor} />
-        ))}
-      {portalSections
-        .filter((s) => s.position === 2)
-        .map((s) => (
-          <PortalSectionRenderer key={s.id} section={s} primaryColor={primaryColor} />
-        ))}
+      {/* 4. Custom sections (non-banner), in position order */}
+      {customSections.map((s) => (
+        <PortalSectionRenderer
+          key={s.id}
+          section={s}
+          primaryColor={primaryColor}
+        />
+      ))}
 
-      {/* Services grid */}
-      <main className="w-full md:max-w-[60vw] mx-auto px-4 md:px-6 py-12">
+      {/* 5. Services */}
+      <div className="w-full md:max-w-[60vw] mx-auto px-4 md:px-6 py-12">
         {services.length > 0 ? (
           <>
             <h2 className="text-xl font-semibold mb-6">Services</h2>
@@ -521,65 +588,14 @@ export default function PublicPortfolioPage() {
             No services listed yet.
           </p>
         )}
+      </div>
 
-        {/* Global CTA */}
-        <div className="mt-12 text-center space-y-4">
-          <Button
-            size="lg"
-            className="gap-2"
-            style={{ backgroundColor: primaryColor }}
-            onClick={() => openModal()}
-          >
-            <Sparkles className="h-4 w-4" />
-            Request a Proposal
-          </Button>
-          {(contactEmail || contactPhone) && (
-            <div className="flex items-center justify-center gap-4 text-sm text-muted-foreground">
-              {contactEmail && (
-                <a href={`mailto:${contactEmail}`} className="hover:underline" style={{ color: primaryColor }}>
-                  {contactEmail}
-                </a>
-              )}
-              {contactEmail && contactPhone && <span>·</span>}
-              {contactPhone && (
-                <a href={`tel:${contactPhone}`} className="hover:underline" style={{ color: primaryColor }}>
-                  {contactPhone}
-                </a>
-              )}
-            </div>
-          )}
-
-          {/* Wallet / Save contact CTA */}
-          <div className="pt-2">
-            {isIos ? (
-              <button
-                type="button"
-                onClick={addToWallet}
-                disabled={walletLoading}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-border/60 text-sm text-muted-foreground hover:text-foreground hover:border-border transition-colors disabled:opacity-60"
-              >
-                {walletLoading
-                  ? <div className="h-4 w-4 rounded-full border-2 border-muted-foreground/30 border-t-muted-foreground animate-spin" />
-                  : <Wallet className="h-4 w-4" />}
-                {walletLoading ? 'Generating…' : 'Add to Apple Wallet'}
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={saveContact}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-border/60 text-sm text-muted-foreground hover:text-foreground hover:border-border transition-colors"
-              >
-                <Download className="h-4 w-4" />
-                Save contact
-              </button>
-            )}
-          </div>
-        </div>
-      </main>
-
-      {/* Work samples grid */}
+      {/* 6. Work samples */}
       {workSamples.length > 0 && (
-        <div className="w-full md:max-w-[60vw] mx-auto px-4 md:px-6 py-12 border-t" style={{ borderColor: `${primaryColor}20` }}>
+        <div
+          className="w-full md:max-w-[60vw] mx-auto px-4 md:px-6 py-12 border-t"
+          style={{ borderColor: `${primaryColor}20` }}
+        >
           <h2 className="text-xl font-semibold mb-6">Work</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {workSamples.map((sample) => (
@@ -607,11 +623,17 @@ export default function PublicPortfolioPage() {
 
       {/* Testimonials — only renders when ≥ 3 ai_selected reviews */}
       {testimonials.length >= 3 && (
-        <div className="w-full md:max-w-[60vw] mx-auto px-4 md:px-6 py-12 border-t" style={{ borderColor: `${primaryColor}20` }}>
+        <div
+          className="w-full md:max-w-[60vw] mx-auto px-4 md:px-6 py-12 border-t"
+          style={{ borderColor: `${primaryColor}20` }}
+        >
           <h2 className="text-xl font-semibold mb-8">What clients say</h2>
           <div className="grid gap-6 sm:grid-cols-2">
             {testimonials.map((review) => (
-              <div key={review.id} className="border rounded-xl p-5 flex flex-col gap-3">
+              <div
+                key={review.id}
+                className="border rounded-xl p-5 flex flex-col gap-3"
+              >
                 <StarRating rating={review.rating} color={primaryColor} />
                 {review.comment && (
                   <p className="text-sm text-foreground leading-relaxed">
@@ -619,7 +641,8 @@ export default function PublicPortfolioPage() {
                   </p>
                 )}
                 <p className="text-xs text-muted-foreground">
-                  — {review.client_name} · {formatReviewDate(review.submitted_at)}
+                  — {review.client_name} ·{" "}
+                  {formatReviewDate(review.submitted_at)}
                 </p>
                 {review.freelancer_reply && (
                   <p className="text-xs text-muted-foreground border-t pt-3 mt-auto">
@@ -632,8 +655,100 @@ export default function PublicPortfolioPage() {
         </div>
       )}
 
+      {/* 7. CTA + Footer */}
+      <div className="border-t" style={{ borderColor: `${primaryColor}20` }}>
+        <div className="w-full md:max-w-[60vw] mx-auto px-4 md:px-6 py-16 text-center space-y-4">
+          <Button
+            size="lg"
+            className="gap-2"
+            style={{ backgroundColor: primaryColor }}
+            onClick={() => openModal()}
+          >
+            <Sparkles className="h-4 w-4" />
+            Request a Proposal
+          </Button>
+          {(contactEmail || contactPhone) && (
+            <div className="flex items-center justify-center gap-4 text-sm text-muted-foreground">
+              {contactEmail && (
+                <a
+                  href={`mailto:${contactEmail}`}
+                  className="hover:underline"
+                  style={{ color: primaryColor }}
+                >
+                  {contactEmail}
+                </a>
+              )}
+              {contactEmail && contactPhone && <span>·</span>}
+              {contactPhone && (
+                <a
+                  href={`tel:${contactPhone}`}
+                  className="hover:underline"
+                  style={{ color: primaryColor }}
+                >
+                  {contactPhone}
+                </a>
+              )}
+            </div>
+          )}
+          <div className="pt-2">
+            {isIos ? (
+              <button
+                type="button"
+                onClick={addToWallet}
+                disabled={walletLoading}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-border/60 text-sm text-muted-foreground hover:text-foreground hover:border-border transition-colors disabled:opacity-60"
+              >
+                {walletLoading ? (
+                  <div className="h-4 w-4 rounded-full border-2 border-muted-foreground/30 border-t-muted-foreground animate-spin" />
+                ) : (
+                  <Wallet className="h-4 w-4" />
+                )}
+                {walletLoading ? "Generating…" : "Add to Apple Wallet"}
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={saveContact}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-border/60 text-sm text-muted-foreground hover:text-foreground hover:border-border transition-colors"
+              >
+                <Download className="h-4 w-4" />
+                Save contact
+              </button>
+            )}
+          </div>
+        </div>
+
+        <footer
+          className="border-t py-8 px-6 text-center text-sm text-muted-foreground"
+          style={{ borderColor: `${primaryColor}20` }}
+        >
+          <p>
+            © {new Date().getFullYear()} · {bizName} · All Rights Reserved ·
+            Powered by Forgefly
+          </p>
+          <a
+            href="https://forgefly.io?ref=portfolio_footer"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex mt-3 items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium"
+            style={{
+              background: "#E1F5EE",
+              color: "#085041",
+              border: "1px solid #5DCAA5",
+            }}
+          >
+            Have a business? Try Forgefly
+          </a>
+        </footer>
+      </div>
+
       {/* Work sample lightbox */}
-      <Dialog open={!!lightboxSample} onOpenChange={(open) => { if (!open) setLightboxSample(null); }}>
+      <Dialog
+        open={!!lightboxSample}
+        onOpenChange={(open) => {
+          if (!open) setLightboxSample(null);
+        }}
+      >
         {lightboxSample && (
           <DialogContent className="max-w-3xl p-0 overflow-hidden">
             <DialogHeader className="sr-only">
@@ -652,23 +767,6 @@ export default function PublicPortfolioPage() {
           </DialogContent>
         )}
       </Dialog>
-
-      {/* Footer */}
-      <footer className="border-t mt-8 py-8 px-6 text-center text-sm text-muted-foreground">
-        <p>
-          © {new Date().getFullYear()} · {bizName} · All Rights Reserved ·
-          Powered by Forgefly
-        </p>
-        <a
-          href="https://forgefly.io?ref=portfolio_footer"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex mt-3 items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium"
-          style={{ background: "#E1F5EE", color: "#085041", border: "1px solid #5DCAA5" }}
-        >
-          Have a business? Try Forgefly
-        </a>
-      </footer>
 
       {/* Proposal Request Modal */}
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>

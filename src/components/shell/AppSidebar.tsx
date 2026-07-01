@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import { Bell, LogOut, Settings, Sun, Moon, Globe, ExternalLink } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useBusiness } from '@/contexts/CurrentBusinessContext'
@@ -18,7 +17,6 @@ import {
 import { NavIcon } from './NavIcon'
 import { cn } from '@/lib/utils'
 import { formatDistanceToNow } from 'date-fns'
-import { PortfolioShareDialog } from '@/components/common/PortfolioShareDialog'
 
 const MAIN_NAV = [
   { id: 'overview', label: 'Overview', icon: 'layout-dashboard', route: '/dashboard' },
@@ -88,14 +86,14 @@ export function AppSidebar({ onNavigate, nudges: { nudges, unreadCount, markRead
   const { user, profile, signOut } = useAuth()
   const { business, extractedData } = useBusiness()
   const { isDark, toggleTheme } = useTheme()
-  const { navigateTo } = useAppNavigation()
-  const [shareOpen, setShareOpen] = useState(false)
+  const { navigateTo, activeNavId } = useAppNavigation()
 
   const identity = extractedData?.identity
   const bizName =
     identity?.businessName ?? identity?.name ?? business?.name ?? profile?.username ?? 'My Business'
   const initials = identity?.initials ?? bizName.slice(0, 2).toUpperCase()
   const tagline = identity?.tagline ?? 'Your business OS'
+  const businessIconUrl = (extractedData as { brand?: { businessIconUrl?: string } } | undefined)?.brand?.businessIconUrl
 
   const displayName =
     profile?.username || user?.user_metadata?.name || user?.email?.split('@')[0] || ''
@@ -105,7 +103,6 @@ export function AppSidebar({ onNavigate, nudges: { nudges, unreadCount, markRead
   const initial = displayName.charAt(0).toUpperCase()
 
   const slug = profile?.username ?? (business ? toSlug(business.name) : '')
-  const brandPrimary = business?.extracted_data?.brand?.primaryColor ?? '#10B981'
 
   function handleNudgeClick(nudge: { id: string; action_url: string | null; read: boolean }) {
     if (!nudge.read) markRead(nudge.id)
@@ -118,8 +115,10 @@ export function AppSidebar({ onNavigate, nudges: { nudges, unreadCount, markRead
         {/* Business header */}
         <div className="px-4 py-4 border-b border-sidebar-border shrink-0">
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 select-none">
-              <span className="text-sm font-bold text-primary">{initials}</span>
+            <div className="h-9 w-9 rounded-lg overflow-hidden flex items-center justify-center shrink-0 select-none bg-primary/10">
+              {businessIconUrl
+                ? <img src={businessIconUrl} alt={bizName} className="w-full h-full object-cover" />
+                : <span className="text-sm font-bold text-primary">{initials}</span>}
             </div>
             <div className="min-w-0">
               <p className="text-sm font-semibold leading-none truncate text-sidebar-foreground">
@@ -159,8 +158,13 @@ export function AppSidebar({ onNavigate, nudges: { nudges, unreadCount, markRead
             {slug && (
               <button
                 type="button"
-                onClick={() => setShareOpen(true)}
-                className="w-full flex items-center gap-2.5 px-3 py-1.5 rounded-md text-sm transition-colors text-left text-sidebar-foreground/80 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
+                onClick={() => { navigateTo('/dashboard/portfolio'); onNavigate?.() }}
+                className={cn(
+                  'w-full flex items-center gap-2.5 px-3 py-1.5 rounded-md text-sm transition-colors text-left',
+                  activeNavId === null && location.pathname === '/dashboard/portfolio'
+                    ? 'bg-primary/10 text-primary font-medium'
+                    : 'text-sidebar-foreground/80 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground',
+                )}
               >
                 <Globe className="h-3.5 w-3.5 shrink-0 opacity-70" />
                 Public Portfolio
@@ -291,18 +295,6 @@ export function AppSidebar({ onNavigate, nudges: { nudges, unreadCount, markRead
         </div>
       </aside>
 
-      {slug && (
-        <PortfolioShareDialog
-          open={shareOpen}
-          onClose={() => setShareOpen(false)}
-          slug={slug}
-          businessName={bizName}
-          brandPrimary={brandPrimary}
-          tagline={tagline}
-          contactEmail={business?.contact_email ?? null}
-          contactPhone={business?.contact_phone ?? null}
-        />
-      )}
     </>
   )
 }
