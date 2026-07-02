@@ -1,8 +1,8 @@
 import { useState } from 'react'
-import { Sparkles, X, Send } from 'lucide-react'
+import { Sparkles, Send, ArrowLeft, Check } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { ScrollArea } from '@/components/ui/scroll-area'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { supabase } from '@/db/supabase'
@@ -162,55 +162,6 @@ function buildDiffLines(old: RawData, next: RawData, sections: string[]): DiffLi
   return lines
 }
 
-function DiffConfirmModal({
-  pending,
-  onConfirm,
-  onCancel,
-  applying,
-}: {
-  pending: PendingDiff | null
-  onConfirm: () => void
-  onCancel: () => void
-  applying: boolean
-}) {
-  return (
-    <Dialog open={!!pending} onOpenChange={open => { if (!open && !applying) onCancel() }}>
-      <DialogContent className="max-w-[calc(100%-2rem)] md:max-w-lg">
-        <DialogHeader>
-          <DialogTitle>Review Changes</DialogTitle>
-          <DialogDescription>
-            These changes will be applied across all tabs of your business OS.
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="py-2 max-h-60 overflow-y-auto space-y-0.5">
-          {pending?.lines.map((line, i) => (
-            <div key={i} className="flex items-start gap-3 text-sm py-1 px-1 rounded hover:bg-muted/40">
-              <span className={cn(
-                'font-mono font-bold text-base leading-none shrink-0 mt-0.5 w-3',
-                line.type === '+' ? 'text-emerald-500' : 'text-amber-500',
-              )}>
-                {line.type}
-              </span>
-              <span className="text-muted-foreground shrink-0 w-32">{line.label}</span>
-              {line.detail && <span className="text-foreground/90 text-xs">{line.detail}</span>}
-            </div>
-          ))}
-        </div>
-
-        <DialogFooter>
-          <Button variant="outline" onClick={onCancel} disabled={applying}>
-            Cancel
-          </Button>
-          <Button onClick={onConfirm} disabled={applying} className="glow-accent">
-            {applying ? 'Applying…' : 'Apply to all tabs'}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  )
-}
-
 export function CommandBar({ onClose, business, extractedData, refetch }: CommandBarProps) {
   const [value, setValue] = useState('')
   const [isLoading, setIsLoading] = useState(false)
@@ -332,61 +283,78 @@ export function CommandBar({ onClose, business, extractedData, refetch }: Comman
     setPending(null)
   }
 
-  return (
-    <>
-      <div className="border-t border-border/60 bg-background px-4 pt-3 pb-3">
-        <div className="flex items-end gap-2">
-          <Sparkles className={cn('h-4 w-4 shrink-0 mb-[11px] text-primary', isLoading && 'animate-pulse')} />
-          <Textarea
-            autoFocus
-            value={value}
-            onChange={e => setValue(e.target.value)}
-            placeholder='Describe a change to your OS… e.g. "I now offer brand photography from $800"'
-            className="min-h-[44px] max-h-28 resize-none text-sm bg-muted/40 border-border/50 focus-visible:ring-primary/40"
-            disabled={isLoading}
-            onKeyDown={e => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault()
-                handleSubmit()
-              }
-              if (e.key === 'Escape') onClose()
-            }}
-          />
-          <div className="flex flex-col gap-1 mb-0.5">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7 shrink-0 text-muted-foreground"
-              onClick={onClose}
-              aria-label="Close command bar"
-              disabled={isLoading}
-            >
-              <X className="h-3.5 w-3.5" />
-            </Button>
-            <Button
-              size="icon"
-              className="h-7 w-7 shrink-0"
-              onClick={handleSubmit}
-              disabled={!value.trim() || isLoading}
-              aria-label="Submit"
-            >
-              <Send className="h-3 w-3" />
-            </Button>
-          </div>
+  // Review view — shown after AI extraction
+  if (pending) {
+    return (
+      <div className="flex flex-col h-full">
+        <div className="px-4 pt-4 pb-2 shrink-0">
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">Review changes</p>
+          <p className="text-xs text-muted-foreground">These will be applied across all tabs of your OS.</p>
         </div>
-        {isLoading && (
-          <p className="text-xs text-muted-foreground mt-1.5 ml-6 animate-pulse">
-            Updating your business OS…
-          </p>
-        )}
-      </div>
 
-      <DiffConfirmModal
-        pending={pending}
-        onConfirm={applyDiff}
-        onCancel={cancelDiff}
-        applying={applying}
+        <ScrollArea className="flex-1 px-4">
+          <div className="space-y-0.5 py-2">
+            {pending.lines.map((line, i) => (
+              <div key={i} className="flex items-start gap-3 text-sm py-1.5 px-2 rounded-lg hover:bg-muted/40">
+                <span className={cn(
+                  'font-mono font-bold text-sm leading-none shrink-0 mt-0.5 w-3',
+                  line.type === '+' ? 'text-emerald-500' : 'text-amber-500',
+                )}>
+                  {line.type}
+                </span>
+                <span className="text-muted-foreground shrink-0 w-28 text-xs leading-relaxed">{line.label}</span>
+                {line.detail && <span className="text-foreground/90 text-xs leading-relaxed">{line.detail}</span>}
+              </div>
+            ))}
+          </div>
+        </ScrollArea>
+
+        <div className="px-4 pb-4 pt-3 border-t flex gap-2 shrink-0">
+          <Button variant="outline" size="sm" onClick={cancelDiff} disabled={applying} className="gap-1.5">
+            <ArrowLeft className="h-3.5 w-3.5" />
+            Back
+          </Button>
+          <Button onClick={applyDiff} disabled={applying} className="flex-1 gap-2">
+            <Check className="h-3.5 w-3.5" />
+            {applying ? 'Applying…' : 'Apply to all tabs'}
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
+  // Input view
+  return (
+    <div className="flex flex-col h-full px-4 pt-4 pb-4 gap-3">
+      <Textarea
+        autoFocus
+        value={value}
+        onChange={e => setValue(e.target.value)}
+        placeholder='Describe a change… e.g. "I now offer brand photography from $800, updated my niche to luxury brands"'
+        className="flex-1 resize-none text-sm bg-muted/40 border-border/50 focus-visible:ring-primary/40 min-h-[120px]"
+        disabled={isLoading}
+        onKeyDown={e => {
+          if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault()
+            handleSubmit()
+          }
+          if (e.key === 'Escape') onClose()
+        }}
       />
-    </>
+      {isLoading && (
+        <p className="text-xs text-muted-foreground animate-pulse flex items-center gap-1.5">
+          <Sparkles className="h-3 w-3" />
+          Analysing changes…
+        </p>
+      )}
+      <Button
+        onClick={handleSubmit}
+        disabled={!value.trim() || isLoading}
+        className="w-full gap-2"
+      >
+        <Send className="h-3.5 w-3.5" />
+        {isLoading ? 'Thinking…' : 'Update OS'}
+      </Button>
+    </div>
   )
 }

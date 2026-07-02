@@ -26,6 +26,7 @@ import { toast } from 'sonner';
 import { supabase } from '@/db/supabase';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useBusiness } from '@/contexts/CurrentBusinessContext';
+import { useAuth } from '@/contexts/AuthContext';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -219,7 +220,7 @@ function StageColumn({
   const cfg = STAGE_CONFIG[stage];
 
   return (
-    <div className="flex flex-col w-[220px] shrink-0 lg:flex-1 lg:w-auto lg:min-w-0">
+    <div className="flex flex-col w-[270px] shrink-0">
       {/* Column header */}
       <div className="flex items-center justify-between mb-3 px-1">
         <div className="flex items-center gap-2 min-w-0">
@@ -392,6 +393,7 @@ export default function PipelinePage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { business, extractedData, isLoading: bizLoading } = useBusiness();
+  const { user } = useAuth();
 
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loaded, setLoaded] = useState(false);
@@ -580,6 +582,21 @@ export default function PipelinePage() {
           .single();
         if (!pl) throw new Error('Failed to create lead');
 
+        // Also create a client record with Lead status so it appears in Clients
+        if (user) {
+          await supabase.from('clients').insert({
+            user_id: user.id,
+            name: data.name,
+            status: 'lead',
+            total_value: 0,
+            email: null,
+            company: null,
+            phone: null,
+            notes: data.service ? `Pipeline lead – service: ${data.service}` : null,
+            last_interaction: new Date().toISOString(),
+          });
+        }
+
         setLeads(prev => [...prev, {
           _id: pl.id, contactId: contact.id, name: data.name,
           stage: data.stage, value: data.value, service: data.service,
@@ -701,7 +718,7 @@ export default function PipelinePage() {
           onDragEnd={handleDragEnd}
         >
           <div className="overflow-x-auto pb-4 -mx-4 px-4">
-            <div className="flex gap-3 min-w-max lg:min-w-0 lg:grid lg:grid-cols-6">
+            <div className="flex gap-4 min-w-max">
               {STAGES.map(stage => (
                 <StageColumn
                   key={stage}

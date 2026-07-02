@@ -93,21 +93,39 @@ interface OverviewData {
   proposalsSentThisMonth: number;
   recentLeads: { name: string; value: string | null; stage: string }[];
   upcoming: UpcomingItem[];
+  // Analytics
+  winRate: number | null;
+  avgProjectValue: number | null;
+  repeatClientPct: number | null;
+  reviewScore: number | null;
+  reviewCount: number;
+  portalVisits30d: number;
+  projectsThisMonth: number;
+  projectsCompleted: number;
 }
 
-async function loadOverviewData(userId: string): Promise<OverviewData> {
+async function loadOverviewData(userId: string, businessId?: string): Promise<OverviewData> {
   const monthStart = startOfMonth();
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
 
   const [
     { data: invoices },
     { data: projects },
     { data: proposals },
     { data: pipelineLeads },
+    { data: reviews },
+    { count: portalVisits },
   ] = await Promise.all([
     supabase.from("invoices").select("*, client:clients(name)").eq("user_id", userId),
     supabase.from("projects").select("*, client:clients(name)").eq("user_id", userId).order("created_at", { ascending: false }),
     supabase.from("proposals").select("*, client:clients(name)").eq("user_id", userId).order("updated_at", { ascending: false }),
     supabase.from("pipeline_leads").select("id, stage, value, contact_id").order("created_at", { ascending: false }),
+    businessId
+      ? supabase.from("reviews").select("rating").eq("business_id", businessId).eq("portal_eligible", true)
+      : Promise.resolve({ data: [] as { rating: number }[] }),
+    businessId
+      ? supabase.from("portal_events").select("id", { count: "exact", head: true }).eq("business_id", businessId).gte("created_at", thirtyDaysAgo)
+      : Promise.resolve({ count: 0 }),
   ]);
 
   const allInvoices: Invoice[] = invoices ?? [];
@@ -165,7 +183,42 @@ async function loadOverviewData(userId: string): Promise<OverviewData> {
 
   upcoming.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
-  return { receivedThisMonth, outstanding, overdueTotal, activeProjects, viewedProposals, overdueInvoices, pipelineLeadCount, proposalsSentThisMonth, recentLeads, upcoming: upcoming.slice(0, 5) };
+  // ── Analytics ──────────────────────────────────────────────────────────────
+  const decidedProposals = allProposals.filter(p => p.status === 'accepted' || p.status === 'declined');
+  const winRate = decidedProposals.length >= 2
+    ? Math.round((allProposals.filter(p => p.status === 'accepted').length / decidedProposals.length) * 100)
+    : null;
+
+  const paidInvoices = allInvoices.filter(i => i.payment_status === 'paid');
+  const avgProjectValue = paidInvoices.length >= 2
+    ? paidInvoices.reduce((s, i) => s + Number(i.amount), 0) / paidInvoices.length
+    : null;
+
+  const projectsByClient = new Map<string, number>();
+  for (const p of allProjects.filter(p => p.client_id)) {
+    projectsByClient.set(p.client_id!, (projectsByClient.get(p.client_id!) ?? 0) + 1);
+  }
+  const repeatClientPct = projectsByClient.size >= 2
+    ? Math.round(([...projectsByClient.values()].filter(c => c > 1).length / projectsByClient.size) * 100)
+    : null;
+
+  const allReviews = (reviews ?? []) as { rating: number }[];
+  const reviewScore = allReviews.length > 0
+    ? Math.round((allReviews.reduce((s, r) => s + r.rating, 0) / allReviews.length) * 10) / 10
+    : null;
+
+  const projectsThisMonth = allProjects.filter(p => p.created_at >= monthStart).length;
+  const projectsCompleted = allProjects.filter(p => p.status === 'completed').length;
+
+  return {
+    receivedThisMonth, outstanding, overdueTotal, activeProjects, viewedProposals,
+    overdueInvoices, pipelineLeadCount, proposalsSentThisMonth, recentLeads,
+    upcoming: upcoming.slice(0, 5),
+    winRate, avgProjectValue, repeatClientPct,
+    reviewScore, reviewCount: allReviews.length,
+    portalVisits30d: portalVisits ?? 0,
+    projectsThisMonth, projectsCompleted,
+  };
 }
 
 // ─── Styling helpers ──────────────────────────────────────────────────────────
@@ -216,8 +269,8 @@ export default function DashboardPage() {
   }, []);
 
   useEffect(() => {
-    if (user) loadOverviewData(user.id).then(setData);
-  }, [user]);
+    if (user) loadOverviewData(user.id, business?.id ?? undefined).then(setData);
+  }, [user, business?.id]);
 
   const identity = extractedData?.identity;
   const milestonesComplete = !bizLoading && !!business && milestonesAllDone(business);
@@ -388,7 +441,8 @@ export default function DashboardPage() {
           );
         })()}
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {/* ── Row 1: 2-col ─────────────────────────────────────────────────── */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
           {/* 1 — Cash position */}
           <Card>
@@ -474,7 +528,10 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
 
-          {/* 3 — Quick win */}
+        </div>
+
+        {/* ── Quick win row card ────────────────────────────────────────────── */}
+        {(showMilestone || (showNudge && nudgeContext) || milestonesComplete) && (
           <Card>
             <CardHeader className="pb-2">
               <div className="flex items-center justify-between">
@@ -487,15 +544,19 @@ export default function DashboardPage() {
                 <MilestoneCard />
               ) : showNudge && nudgeContext ? (
                 <QuickWinNudge businessId={business!.id} context={nudgeContext} />
-              ) : milestonesComplete ? (
-                <p className="text-sm text-muted-foreground text-center py-4 leading-relaxed text-pretty">
+              ) : (
+                <p className="text-sm text-muted-foreground leading-relaxed text-pretty">
                   You're making progress. Check back in a few days.
                 </p>
-              ) : null}
+              )}
             </CardContent>
           </Card>
+        )}
 
-          {/* 4 — Active work */}
+        {/* ── Row 2: 3-col ─────────────────────────────────────────────────── */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+
+          {/* Active work */}
           <Card>
             <CardHeader className="pb-2">
               <div className="flex items-center justify-between">
@@ -637,6 +698,106 @@ export default function DashboardPage() {
           </Card>
 
         </div>
+
+        {/* ── Analytics chips row ───────────────────────────────────────────── */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          {/* Win rate */}
+          <Card className="bg-muted/30">
+            <CardContent className="pt-4 pb-4 px-4">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-1">Win Rate</p>
+              <p className="text-2xl font-bold">
+                {data?.winRate != null ? `${data.winRate}%` : '—'}
+              </p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">proposals accepted</p>
+            </CardContent>
+          </Card>
+
+          {/* Avg project value */}
+          <Card className="bg-muted/30">
+            <CardContent className="pt-4 pb-4 px-4">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-1">Avg Deal</p>
+              <p className="text-2xl font-bold">
+                {data?.avgProjectValue != null ? fmt(data.avgProjectValue) : '—'}
+              </p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">per paid invoice</p>
+            </CardContent>
+          </Card>
+
+          {/* Repeat client rate */}
+          <Card className="bg-muted/30">
+            <CardContent className="pt-4 pb-4 px-4">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-1">Repeat Clients</p>
+              <p className="text-2xl font-bold">
+                {data?.repeatClientPct != null ? `${data.repeatClientPct}%` : '—'}
+              </p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">clients who returned</p>
+            </CardContent>
+          </Card>
+
+          {/* Review score */}
+          <Card className="bg-muted/30">
+            <CardContent className="pt-4 pb-4 px-4">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-1">Review Score</p>
+              <p className="text-2xl font-bold">
+                {data?.reviewScore != null ? `★ ${data.reviewScore}` : '—'}
+              </p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">
+                {data?.reviewCount ? `${data.reviewCount} reviews` : 'no reviews yet'}
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* ── Portal funnel row card ────────────────────────────────────────── */}
+        <Card>
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Portfolio funnel · last 30 days</CardTitle>
+              <TrendingUp className="w-3.5 h-3.5 text-muted-foreground" />
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center gap-2 flex-wrap">
+              {/* Visits */}
+              <div className="flex flex-col items-center px-5 py-3 rounded-xl bg-muted/40 min-w-[90px]">
+                <p className="text-2xl font-bold">{data?.portalVisits30d ?? '—'}</p>
+                <p className="text-[10px] text-muted-foreground mt-0.5">visits</p>
+              </div>
+
+              <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
+
+              {/* Proposals */}
+              <div className="flex flex-col items-center px-5 py-3 rounded-xl bg-muted/40 min-w-[90px]">
+                <p className="text-2xl font-bold">{data?.proposalsSentThisMonth ?? '—'}</p>
+                <p className="text-[10px] text-muted-foreground mt-0.5">proposals</p>
+                {data && data.portalVisits30d > 0 && data.proposalsSentThisMonth > 0 && (
+                  <p className="text-[10px] text-primary font-medium mt-1">
+                    {Math.round((data.proposalsSentThisMonth / data.portalVisits30d) * 100)}% cvr
+                  </p>
+                )}
+              </div>
+
+              <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
+
+              {/* Projects */}
+              <div className="flex flex-col items-center px-5 py-3 rounded-xl bg-muted/40 min-w-[90px]">
+                <p className="text-2xl font-bold">{data?.projectsThisMonth ?? '—'}</p>
+                <p className="text-[10px] text-muted-foreground mt-0.5">projects started</p>
+                {data && data.proposalsSentThisMonth > 0 && data.projectsThisMonth > 0 && (
+                  <p className="text-[10px] text-primary font-medium mt-1">
+                    {Math.round((data.projectsThisMonth / data.proposalsSentThisMonth) * 100)}% close
+                  </p>
+                )}
+              </div>
+
+              <div className="ml-auto pl-4 text-right hidden sm:block">
+                <p className="text-xs text-muted-foreground">All-time completed</p>
+                <p className="text-lg font-semibold">{data?.projectsCompleted ?? '—'} projects</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
       </div>
     </>
   );

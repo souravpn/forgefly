@@ -1,8 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
-import { MessageSquare, X, Send, Sparkles, FileText, DollarSign, TrendingUp, Users, Crown, Loader2, type LucideIcon } from 'lucide-react';
+import { X, Send, Sparkles, FileText, DollarSign, TrendingUp, Users, Crown, Loader2, type LucideIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { Card } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -23,12 +22,14 @@ interface AIResponse {
   suggestions?: string[];
 }
 
-export function AICopilot() {
-  const [isOpen, setIsOpen] = useState(false);
+interface AICopilotProps {
+  onClose: () => void;
+}
+
+export function AICopilot({ onClose }: AICopilotProps) {
   const location = useLocation();
   const navigate = useNavigate();
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
+  const [messages, setMessages] = useState<ChatMessage[]>([    {
       id: '1',
       role: 'assistant',
       content: "Hi! I'm your AI Copilot. I have full awareness of your business, clients, projects, and proposals. Ask me anything or try a quick action below!",
@@ -228,34 +229,20 @@ export function AICopilot() {
 
   return (
     <>
-      {/* Floating button - Always visible */}
-      <Button
-        size="lg"
-        className={`fixed bottom-8 right-6 z-50 rounded-full w-14 h-14 shadow-2xl bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 transition-all ${
-          isOpen ? 'scale-0 opacity-0' : 'scale-100 opacity-100 animate-pulse-glow'
-        }`}
-        onClick={() => setIsOpen(true)}
-      >
-        <Sparkles className="w-6 h-6" />
-      </Button>
-
-      {/* Chat panel */}
-      {isOpen && (
-        <Card className="fixed bottom-8 right-6 z-50 w-96 h-[600px] shadow-2xl flex flex-col animate-scale-in border-emerald-500/20">
-          <div className="flex items-center justify-between p-4 border-b bg-gradient-to-r from-emerald-500/10 to-transparent">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-full bg-gradient-to-r from-emerald-500 to-emerald-600 flex items-center justify-center">
-                <Sparkles className="w-4 h-4 text-white" />
-              </div>
-              <div>
-                <h3 className="font-semibold text-sm">AI Copilot</h3>
-                <p className="text-xs text-emerald-600 dark:text-emerald-400">Context-aware assistant</p>
-              </div>
-            </div>
-            <Button variant="ghost" size="icon" onClick={() => setIsOpen(false)}>
-              <X className="w-4 h-4" />
-            </Button>
+      <div className="flex items-center justify-between p-4 border-b bg-gradient-to-r from-emerald-500/10 to-transparent shrink-0">
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 rounded-full bg-gradient-to-r from-emerald-500 to-emerald-600 flex items-center justify-center">
+            <Sparkles className="w-4 h-4 text-white" />
           </div>
+          <div>
+            <h3 className="font-semibold text-sm">AI Copilot</h3>
+            <p className="text-xs text-emerald-600 dark:text-emerald-400">Context-aware assistant</p>
+          </div>
+        </div>
+        <Button variant="ghost" size="icon" onClick={onClose}>
+          <X className="w-4 h-4" />
+        </Button>
+      </div>
 
           <ScrollArea className="flex-1 p-4">
             <div className="space-y-4">
@@ -332,35 +319,33 @@ export function AICopilot() {
             </div>
           )}
 
-          <div className="p-4 border-t">
-            <div className="flex gap-2">
-              <Textarea
-                placeholder="Ask me anything... (Shift+Enter for new line)"
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={handleKeyPress}
-                disabled={isTyping}
-                className="min-h-[60px] resize-none"
-              />
-              <Button 
-                onClick={handleSend} 
-                size="icon" 
-                className="shrink-0 bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700"
-                disabled={isTyping || !input.trim()}
-              >
-                {isTyping ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <Send className="w-4 h-4" />
-                )}
-              </Button>
-            </div>
-            <p className="text-xs text-muted-foreground mt-2">
-              💡 Powered by Claude with full business context
-            </p>
-          </div>
-        </Card>
-      )}
+      <div className="p-4 border-t shrink-0">
+        <div className="flex gap-2">
+          <Textarea
+            placeholder="Ask me anything… (Shift+Enter for new line)"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={handleKeyPress}
+            disabled={isTyping}
+            className="min-h-[60px] resize-none"
+          />
+          <Button
+            onClick={handleSend}
+            size="icon"
+            className="shrink-0 bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700"
+            disabled={isTyping || !input.trim()}
+          >
+            {isTyping ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Send className="w-4 h-4" />
+            )}
+          </Button>
+        </div>
+        <p className="text-xs text-muted-foreground mt-2">
+          Powered by Claude with full business context
+        </p>
+      </div>
     </>
   );
 }

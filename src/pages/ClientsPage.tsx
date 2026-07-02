@@ -25,6 +25,38 @@ import {
   type PortalFileItem,
 } from '@/services/portalFileService';
 
+// ─── Client badge helpers ─────────────────────────────────────────────────────
+
+type ClientBadge = { label: string; className: string }
+
+function getClientBadge(client: Client): ClientBadge {
+  const s = client.status ?? 'active';
+
+  // Cold: engaged/active but no interaction in 30+ days
+  if ((s === 'engaged' || s === 'active') && client.last_interaction) {
+    const daysSince = (Date.now() - new Date(client.last_interaction).getTime()) / 86_400_000;
+    if (daysSince > 30) {
+      return { label: 'Cold', className: 'bg-blue-500/10 text-blue-600 border-blue-500/20 dark:text-blue-400' };
+    }
+  }
+
+  switch (s) {
+    case 'lead':
+      return { label: 'Lead', className: 'bg-gray-500/10 text-gray-600 border-gray-500/20 dark:text-gray-400' };
+    case 'engaged':
+    case 'active':
+      return { label: 'Engaged', className: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20 dark:text-emerald-400' };
+    case 'cold':
+      return { label: 'Cold', className: 'bg-blue-500/10 text-blue-600 border-blue-500/20 dark:text-blue-400' };
+    case 'won':
+      return { label: 'Won', className: 'bg-amber-500/10 text-amber-600 border-amber-500/20 dark:text-amber-400' };
+    case 'repeat':
+      return { label: 'Repeat', className: 'bg-violet-500/10 text-violet-600 border-violet-500/20 dark:text-violet-400' };
+    default:
+      return { label: 'Engaged', className: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20 dark:text-emerald-400' };
+  }
+}
+
 export default function ClientsPage() {
   const { isAgency, profile, user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -397,7 +429,17 @@ export default function ClientsPage() {
                     )}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <h3 className="font-semibold text-lg mb-1 truncate">{client.name}</h3>
+                    <div className="flex items-center gap-2 mb-1 min-w-0">
+                      <h3 className="font-semibold text-lg truncate">{client.name}</h3>
+                      {(() => {
+                        const badge = getClientBadge(client);
+                        return (
+                          <span className={`shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded-full border ${badge.className}`}>
+                            {badge.label}
+                          </span>
+                        );
+                      })()}
+                    </div>
                     {client.company && (
                       <p className="text-sm text-muted-foreground truncate">{client.company}</p>
                     )}

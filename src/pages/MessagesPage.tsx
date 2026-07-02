@@ -508,11 +508,8 @@ export default function MessagesPage() {
     const last = msgs[msgs.length - 1] ?? null;
     const unread = msgs.filter(m => m.sender_role === 'client' && !m.read_at).length;
     return { ...c, lastMessage: last, unread };
-  }).sort((a, b) => {
-    if (!a.lastMessage && !b.lastMessage) return a.name.localeCompare(b.name);
-    if (!a.lastMessage) return 1;
-    if (!b.lastMessage) return -1;
-    return new Date(b.lastMessage.created_at).getTime() - new Date(a.lastMessage.created_at).getTime();
+  }).filter(c => c.lastMessage !== null).sort((a, b) => {
+    return new Date(b.lastMessage!.created_at).getTime() - new Date(a.lastMessage!.created_at).getTime();
   });
 
   const selectedContact = contacts.find(c => c.id === selectedId) ?? null;
