@@ -4,8 +4,8 @@ import { NavIcon } from './NavIcon'
 import { useAppNavigation } from '@/hooks/useAppNavigation'
 import { cn } from '@/lib/utils'
 
-// The 5 primary footer slots: Overview, Pipeline, Invoices, Clients, More
-const FOOTER_IDS = ['overview', 'pipeline', 'invoices', 'clients'] as const
+// The 5 primary footer slots: Overview, Leads, Finances, Clients, More
+const FOOTER_IDS = ['overview', 'leads', 'finances', 'clients'] as const
 const FOOTER_ITEMS = NAV_ITEMS.filter(i =>
   (FOOTER_IDS as readonly string[]).includes(i.id),
 )

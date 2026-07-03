@@ -239,20 +239,69 @@ Deno.serve(async (req) => {
     const newEngagementStatus = action === "approve" ? "active" : "proposal_sent";
     await admin.from("engagements").update({ status: newEngagementStatus }).eq("id", engagementId);
 
-    if (action === "approve" && engagement.contact_id) {
-      await admin
-        .from("proposals")
-        .update({ status: "accepted" })
-        .eq("user_id", business.user_id)
-        .eq("client_id", engagement.contact_id)
-        .eq("status", "sent");
+    if (action === "approve") {
+      // NOTE: proposals.client_id references `clients`, while engagement.contact_id
+      // references `contacts` — they are different ID spaces and must never be
+      // compared directly. Match the proposal by business + client email + title instead.
+      const clientEmail = accessRow.client_email ?? user.email ?? null;
+      let matchedProposalId: string | null = null;
 
-      await admin
-        .from("pipeline_leads")
-        .update({ stage: "Negotiating" })
-        .eq("business_id", business.id)
-        .eq("contact_id", engagement.contact_id)
-        .not("stage", "in", '("Closed Won","Lost")');
+      if (clientEmail) {
+        const proposalQuery = admin
+          .from("proposals")
+          .select("id")
+          .eq("business_id", business.id)
+          .eq("client_email", clientEmail)
+          .eq("status", "sent");
+
+        const { data: matchedProposal } = engagement.service_name
+          ? await proposalQuery.eq("title", engagement.service_name).maybeSingle()
+          : await proposalQuery.maybeSingle();
+
+        if (matchedProposal) {
+          matchedProposalId = matchedProposal.id;
+          await admin
+            .from("proposals")
+            .update({ status: "accepted", responded_at: new Date().toISOString() })
+            .eq("id", matchedProposal.id);
+        }
+      }
+
+      if (engagement.contact_id) {
+        await admin
+          .from("pipeline_leads")
+          .update({ stage: "Negotiating" })
+          .eq("business_id", business.id)
+          .eq("contact_id", engagement.contact_id)
+          .not("stage", "in", '("Closed Won","Lost")');
+
+        await admin
+          .from("contacts")
+          .update({ lifecycle_status: "engaged" })
+          .eq("id", engagement.contact_id);
+      }
+
+      // In-app nudge + notification for freelancer (legacy path was missing these)
+      const clientLabel = clientEmail ?? "A client";
+      await admin.from("nudges").insert({
+        user_id: business.user_id,
+        business_id: business.id,
+        type: "proposal_accepted",
+        title: `${clientLabel} approved a proposal`,
+        body: engagement.service_name || "A proposal was accepted.",
+        action_url: "/dashboard/proposals",
+      });
+
+      await admin.from("notifications").insert({
+        business_id: business.id,
+        client_id: engagement.contact_id ?? null,
+        recipient_role: "freelancer",
+        type: "proposal_accepted",
+        title: `${clientLabel} approved a proposal`,
+        body: engagement.service_name || "A proposal was accepted.",
+        entity_type: "proposal",
+        entity_id: matchedProposalId,
+      });
     }
 
     if (action === "approve" && RESEND_API_KEY) {

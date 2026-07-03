@@ -15,12 +15,14 @@ function toSlug(name: string) {
   return name.toLowerCase().replace(/\s+/g, '')
 }
 
-// Secondary nav: Services, Proposals, Brand Kit from NAV_ITEMS
-const SECONDARY_IDS = ['services', 'proposals', 'brandkit']
+// Secondary nav: Services, Proposals, Project, Brand Kit from NAV_ITEMS
+const SECONDARY_IDS = ['services', 'proposals', 'project', 'brandkit']
 const SHEET_NAV = NAV_ITEMS.filter(i => SECONDARY_IDS.includes(i.id))
 
 // From MORE_ITEMS, omit Automations on mobile (it's being replaced by the nudge engine)
-const SHEET_MORE = MORE_ITEMS.filter(i => i.id !== 'automations')
+// and Social (rendered manually, right after Public Portfolio)
+const SHEET_MORE = MORE_ITEMS.filter(i => i.id !== 'automations' && i.id !== 'social')
+const SOCIAL_ITEM = MORE_ITEMS.find(i => i.id === 'social')!
 
 interface MobileMoreSheetProps {
   open: boolean
@@ -85,6 +87,19 @@ export function MobileMoreSheet({ open, onClose }: MobileMoreSheetProps) {
               Public Portfolio
             </button>
           )}
+          <button
+            type="button"
+            onClick={() => go(SOCIAL_ITEM.route)}
+            className={cn(
+              'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors text-left',
+              activeNavId === SOCIAL_ITEM.id
+                ? 'bg-primary/10 text-primary font-medium'
+                : 'text-foreground hover:bg-accent',
+            )}
+          >
+            <NavIcon name={SOCIAL_ITEM.icon} className="h-4 w-4 shrink-0" />
+            {SOCIAL_ITEM.label}
+          </button>
         </nav>
 
         <Separator className="my-2" />

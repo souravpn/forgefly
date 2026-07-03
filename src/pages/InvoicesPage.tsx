@@ -45,7 +45,9 @@ export default function InvoicesPage() {
   useEffect(() => {
     if (searchParams.get('action') === 'new') {
       setIsCreateModalOpen(true);
-      setSearchParams({}, { replace: true });
+      const next = new URLSearchParams(searchParams);
+      next.delete('action');
+      setSearchParams(next, { replace: true });
     }
   }, []);
 

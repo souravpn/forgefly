@@ -2218,6 +2218,8 @@ function EngagementPortal({
       if (currentUser?.id) {
         await supabase.from("messages").insert({
           engagement_id: engagement.id,
+          business_id: engagement.business_id,
+          client_id: engagement.contact_id,
           sender_id: currentUser.id,
           sender_role: "client",
           body: `[Proposal feedback] ${changesText.trim()}`,
@@ -2240,6 +2242,8 @@ function EngagementPortal({
     try {
       const { error } = await supabase.from("messages").insert({
         engagement_id: engagement.id,
+        business_id: engagement.business_id,
+        client_id: engagement.contact_id,
         sender_id: currentUser.id,
         sender_role: "client",
         body,

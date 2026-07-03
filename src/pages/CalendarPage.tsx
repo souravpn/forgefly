@@ -700,7 +700,7 @@ export default function CalendarPage() {
                     <Button variant="outline" onClick={() => setIsModalOpen(false)}>Close</Button>
                     <Button
                       className="glow-accent"
-                      onClick={() => { setIsModalOpen(false); window.location.href = '/dashboard/invoices'; }}
+                      onClick={() => { setIsModalOpen(false); window.location.href = '/dashboard/finances?tab=invoices'; }}
                     >
                       Go to Invoices
                     </Button>

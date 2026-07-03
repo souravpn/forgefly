@@ -11,7 +11,7 @@ export default function PaymentCancelPage() {
 
   useEffect(() => {
     if (!invoiceId) {
-      navigate('/dashboard/invoices');
+      navigate('/dashboard/finances?tab=invoices');
     }
   }, [invoiceId, navigate]);
 
@@ -32,7 +32,7 @@ export default function PaymentCancelPage() {
             <Button
               size="lg"
               className="w-full glow-accent"
-              onClick={() => navigate('/dashboard/invoices')}
+              onClick={() => navigate('/dashboard/finances?tab=invoices')}
             >
               <CreditCard className="w-4 h-4 mr-2" />
               Try Again

@@ -700,7 +700,7 @@ function Step5({
 
   const tabs: { id: SequenceTab; label: string }[] = [
     { id: 'copy', label: 'Copy for this step' },
-    { id: 'pipeline', label: 'Pipeline card' },
+    { id: 'pipeline', label: 'Lead card' },
     { id: 'reply', label: 'Got a reply?' },
   ];
 
@@ -798,7 +798,7 @@ function Step5({
         </div>
       )}
 
-      {/* Tab: Pipeline card */}
+      {/* Tab: Lead card */}
       {activeTab === 'pipeline' && (
         <div className="space-y-4">
           <Card>
@@ -839,13 +839,13 @@ function Step5({
           {addedToSugar ? (
             <div className="flex items-center gap-2 text-sm text-emerald-600">
               <Check className="w-4 h-4" />
-              Added to pipeline
+              Added to leads
             </div>
           ) : (
             <Button className="glow-accent w-full" onClick={handleAddToPipeline} disabled={addingToSugar}>
               {addingToSugar
                 ? <><Loader2 className="w-4 h-4 animate-spin mr-2" />Adding…</>
-                : <><Plus className="w-4 h-4 mr-2" />Add to pipeline</>
+                : <><Plus className="w-4 h-4 mr-2" />Add to leads</>
               }
             </Button>
           )}
@@ -900,7 +900,7 @@ function Step5({
 
               {replyResult.reminder_weeks && (
                 <div className="text-xs text-muted-foreground bg-muted/40 rounded-lg p-3">
-                  Reminder set for <strong>{replyResult.reminder_weeks} weeks</strong>. Pipeline card stays in Prospect.
+                  Reminder set for <strong>{replyResult.reminder_weeks} weeks</strong>. Lead card stays in Prospect.
                 </div>
               )}
 
@@ -1056,7 +1056,7 @@ export default function OutreachKitPage() {
         .eq('id', leadId);
     }
     toast.success('Sequence closed — lead moved to Lost');
-    navigate('/dashboard/pipeline');
+    navigate('/dashboard/leads');
   }
 
   if (!business) {

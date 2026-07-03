@@ -115,6 +115,7 @@ async function loadOverviewData(userId: string, businessId?: string): Promise<Ov
     { data: pipelineLeads },
     { data: reviews },
     { count: portalVisits },
+    { data: calendarEvents },
   ] = await Promise.all([
     supabase.from("invoices").select("*, client:clients(name)").eq("user_id", userId),
     supabase.from("projects").select("*, client:clients(name)").eq("user_id", userId).order("created_at", { ascending: false }),
@@ -126,11 +127,18 @@ async function loadOverviewData(userId: string, businessId?: string): Promise<Ov
     businessId
       ? supabase.from("portal_events").select("id", { count: "exact", head: true }).eq("business_id", businessId).gte("created_at", thirtyDaysAgo)
       : Promise.resolve({ count: 0 }),
+    supabase.from("calendar_events")
+      .select("id, title, event_type, start_time, client:clients(name)")
+      .eq("user_id", userId)
+      .gte("start_time", new Date().toISOString())
+      .order("start_time", { ascending: true })
+      .limit(15),
   ]);
 
   const allInvoices: Invoice[] = invoices ?? [];
   const allProjects: Project[] = projects ?? [];
   const allProposals: Proposal[] = proposals ?? [];
+  const allCalendarEvents = calendarEvents ?? [];
 
   const receivedThisMonth = allInvoices
     .filter(i => i.payment_status === 'paid' && i.paid_at && i.paid_at >= monthStart)
@@ -170,7 +178,7 @@ async function loadOverviewData(userId: string, businessId?: string): Promise<Ov
   for (const inv of allInvoices.filter(i => i.payment_status === 'unpaid' && i.due_date)) {
     const d = daysUntil(inv.due_date);
     if (d !== null && d <= 14) {
-      upcoming.push({ label: inv.client?.name ?? 'Invoice', sublabel: `${inv.invoice_number} due`, date: inv.due_date!, urgency: d < 0 ? 'overdue' : d <= 3 ? 'soon' : 'normal', route: '/dashboard/invoices' });
+      upcoming.push({ label: inv.client?.name ?? 'Invoice', sublabel: `${inv.invoice_number} due`, date: inv.due_date!, urgency: d < 0 ? 'overdue' : d <= 3 ? 'soon' : 'normal', route: '/dashboard/finances?tab=invoices' });
     }
   }
 
@@ -178,6 +186,20 @@ async function loadOverviewData(userId: string, businessId?: string): Promise<Ov
     const d = daysUntil(prop.expires_at);
     if (d !== null && d <= 14) {
       upcoming.push({ label: prop.client_name ?? prop.client?.name ?? 'Proposal', sublabel: 'proposal expires', date: prop.expires_at!, urgency: d < 0 ? 'overdue' : d <= 3 ? 'soon' : 'normal', route: '/dashboard/proposals' });
+    }
+  }
+
+  for (const ev of allCalendarEvents as Array<{ id: string; title: string; event_type: string | null; start_time: string; client: { name: string } | null }>) {
+    const d = daysUntil(ev.start_time);
+    if (d !== null && d <= 14) {
+      const time = new Date(ev.start_time).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+      upcoming.push({
+        label: ev.title,
+        sublabel: ev.client?.name ? `${time} · ${ev.client.name}` : time,
+        date: ev.start_time,
+        urgency: d === 0 ? 'soon' : 'normal',
+        route: '/dashboard/calendar',
+      });
     }
   }
 
@@ -213,7 +235,7 @@ async function loadOverviewData(userId: string, businessId?: string): Promise<Ov
   return {
     receivedThisMonth, outstanding, overdueTotal, activeProjects, viewedProposals,
     overdueInvoices, pipelineLeadCount, proposalsSentThisMonth, recentLeads,
-    upcoming: upcoming.slice(0, 5),
+    upcoming: upcoming.slice(0, 6),
     winRate, avgProjectValue, repeatClientPct,
     reviewScore, reviewCount: allReviews.length,
     portalVisits30d: portalVisits ?? 0,
@@ -306,7 +328,7 @@ export default function DashboardPage() {
       attentionItems.push({ label: p.client_name ?? p.client?.name ?? 'Proposal', sublabel: 'viewed your proposal', badge: 'Follow up', badgeClass: 'bg-blue-500/10 text-blue-600 border-blue-500/20', route: '/dashboard/proposals' });
     }
     for (const inv of data.overdueInvoices.slice(0, 4 - attentionItems.length)) {
-      attentionItems.push({ label: inv.client?.name ?? 'Invoice', sublabel: `${inv.invoice_number} · ${fmt(Number(inv.amount))}`, badge: 'Overdue', badgeClass: 'bg-red-500/10 text-red-600 border-red-500/20', route: '/dashboard/invoices' });
+      attentionItems.push({ label: inv.client?.name ?? 'Invoice', sublabel: `${inv.invoice_number} · ${fmt(Number(inv.amount))}`, badge: 'Overdue', badgeClass: 'bg-red-500/10 text-red-600 border-red-500/20', route: '/dashboard/finances?tab=invoices' });
     }
   }
 
@@ -362,7 +384,7 @@ export default function DashboardPage() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-52">
-              <DropdownMenuItem onClick={() => navigate('/dashboard/pipeline?action=new')}>
+              <DropdownMenuItem onClick={() => navigate('/dashboard/leads?action=new')}>
                 <Users className="w-4 h-4 mr-2" />
                 New prospect
               </DropdownMenuItem>
@@ -380,7 +402,7 @@ export default function DashboardPage() {
                 New project
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => navigate('/dashboard/invoices?action=new')}>
+              <DropdownMenuItem onClick={() => navigate('/dashboard/finances?tab=invoices&action=new')}>
                 <DollarSign className="w-4 h-4 mr-2" />
                 New invoice
               </DropdownMenuItem>
@@ -484,7 +506,7 @@ export default function DashboardPage() {
               <button
                 type="button"
                 className="flex items-center justify-between w-full text-xs text-muted-foreground hover:text-foreground transition-colors"
-                onClick={() => navigate('/dashboard/invoices')}
+                onClick={() => navigate('/dashboard/finances?tab=invoices')}
               >
                 <span>View invoices</span>
                 <ChevronRight className="w-3.5 h-3.5" />
@@ -612,11 +634,11 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
 
-          {/* 5 — Pipeline momentum */}
+          {/* 5 — Lead momentum */}
           <Card>
             <CardHeader className="pb-2">
               <div className="flex items-center justify-between">
-                <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Pipeline momentum</CardTitle>
+                <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Lead momentum</CardTitle>
                 <TrendingUp className="w-3.5 h-3.5 text-muted-foreground" />
               </div>
             </CardHeader>
@@ -654,9 +676,9 @@ export default function DashboardPage() {
               <button
                 type="button"
                 className="flex items-center justify-between w-full text-xs text-muted-foreground hover:text-foreground transition-colors"
-                onClick={() => navigate('/dashboard/pipeline')}
+                onClick={() => navigate('/dashboard/leads')}
               >
-                <span>Open pipeline</span>
+                <span>Open leads</span>
                 <ChevronRight className="w-3.5 h-3.5" />
               </button>
             </CardContent>
@@ -669,6 +691,9 @@ export default function DashboardPage() {
                 <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Upcoming</CardTitle>
                 <Calendar className="w-3.5 h-3.5 text-muted-foreground" />
               </div>
+              <p className="text-sm font-semibold mt-1">
+                {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+              </p>
             </CardHeader>
             <CardContent>
               {!data || data.upcoming.length === 0 ? (

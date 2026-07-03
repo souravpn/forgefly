@@ -55,7 +55,7 @@ const GEN_STEPS = [
   { label: 'Extracting services and pricing',  artifact: 'services' },
   { label: 'Generating brand kit',             artifact: 'brand'    },
   { label: 'Drafting proposal template',       artifact: 'proposal' },
-  { label: 'Building your pipeline',           artifact: 'pipeline' },
+  { label: 'Building your leads',              artifact: 'pipeline' },
   { label: 'Your business OS is ready',        artifact: 'portal'   },
 ] as const;
 
@@ -188,7 +188,7 @@ function ArtifactCard({ step, data, brandColor, seed }: {
     ),
     pipeline: (
       <div className="flex flex-col gap-2">
-        <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Pipeline stages</p>
+        <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Lead stages</p>
         <div className="flex items-center gap-1.5 flex-wrap">
           {data ? stages.map((s, i) => (
             <div key={i} className="flex items-center gap-1">
@@ -739,7 +739,7 @@ function PortalPreview({ data, brandColor, seed, onSave }: {
 
       {/* Nav tabs */}
       <div className="flex gap-5 px-5 border-b shrink-0">
-        {['Services', 'Proposals', 'Invoices', 'Pipeline'].map((tab, i) => (
+        {['Services', 'Proposals', 'Finances', 'Leads'].map((tab, i) => (
           <span
             key={tab}
             className={`text-xs pb-2.5 ${i === 0 ? 'font-semibold' : 'text-muted-foreground'}`}

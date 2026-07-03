@@ -14,6 +14,8 @@ import {
   MessageSquare,
   Landmark,
   Star,
+  Layers,
+  Share2,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -33,6 +35,8 @@ const ICON_MAP: Record<string, LucideIcon> = {
   'message-square': MessageSquare,
   'landmark': Landmark,
   'star': Star,
+  'layers': Layers,
+  'share2': Share2,
 }
 
 export function NavIcon({ name, className }: { name: string; className?: string }) {

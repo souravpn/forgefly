@@ -15,7 +15,7 @@ import { Switch } from '@/components/ui/switch';
 import {
   Plus, Trash2, Car, Users, Receipt, TrendingUp, TrendingDown,
   AlertTriangle, Clock, BarChart3, FileDown, DollarSign, ScanLine, Loader2,
-  Link2, Unplug, RefreshCw, X,
+  Link2, Unplug, RefreshCw, X, FileText,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, TooltipProps } from 'recharts';
@@ -43,6 +43,7 @@ import { useBusiness } from '@/contexts/CurrentBusinessContext';
 import { getTimeEntries, getProjectTimeSummaries } from '@/services/timeService';
 import { getProjects } from '@/services/projectService';
 import LogTimeDialog from '@/components/common/LogTimeDialog';
+import InvoicesPage from '@/pages/InvoicesPage';
 
 // ─── Cashflow chart tooltip ───────────────────────────────────────────────────
 
@@ -1117,6 +1118,7 @@ td{padding:5px 8px;border-bottom:1px solid #f3f4f6}
         <TabsList>
           <TabsTrigger value="overview"><BarChart3 className="w-4 h-4 mr-1.5" />Overview</TabsTrigger>
           <TabsTrigger value="income"><TrendingUp className="w-4 h-4 mr-1.5" />Income</TabsTrigger>
+          <TabsTrigger value="invoices"><FileText className="w-4 h-4 mr-1.5" />Invoices</TabsTrigger>
           <TabsTrigger value="expenses"><Receipt className="w-4 h-4 mr-1.5" />Expenses</TabsTrigger>
           <TabsTrigger value="time"><Clock className="w-4 h-4 mr-1.5" />Time</TabsTrigger>
           <TabsTrigger value="tax"><DollarSign className="w-4 h-4 mr-1.5" />Tax</TabsTrigger>
@@ -1412,6 +1414,11 @@ td{padding:5px 8px;border-bottom:1px solid #f3f4f6}
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* ─── Invoices ──────────────────────────────────────────────────────── */}
+        <TabsContent value="invoices" className="mt-6">
+          <InvoicesPage />
         </TabsContent>
 
         {/* ─── Expenses ──────────────────────────────────────────────────────── */}

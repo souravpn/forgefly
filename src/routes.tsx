@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { Navigate } from 'react-router-dom';
 import LandingPage from './pages/LandingPage';
 import AuthCallbackPage from './pages/AuthCallbackPage';
 import GeneratedPortalPage from './pages/GeneratedPortalPage';
@@ -12,7 +13,6 @@ import PackagesPage from './pages/PackagesPage';
 import FinancesPage from './pages/FinancesPage';
 import CalendarPage from './pages/CalendarPage';
 import ProposalsPage from './pages/ProposalsPage';
-import InvoicesPage from './pages/InvoicesPage';
 import AutomationsPage from './pages/AutomationsPage';
 import SettingsPage from './pages/SettingsPage';
 import PipelinePage from './pages/PipelinePage';
@@ -28,6 +28,8 @@ import MessagesPage from './pages/MessagesPage';
 import ReviewSubmitPage from './pages/ReviewSubmitPage';
 import ReviewsPage from './pages/ReviewsPage';
 import PortfolioPage from './pages/PortfolioPage';
+import ProjectPage from './pages/ProjectPage';
+import SocialPage from './pages/SocialPage';
 
 export interface RouteConfig {
   name: string;
@@ -106,14 +108,19 @@ export const routes: RouteConfig[] = [
     element: <PackagesPage />,
   },
   {
-    name: 'Pipeline',
-    path: '/dashboard/pipeline',
+    name: 'Leads',
+    path: '/dashboard/leads',
     element: <PipelinePage />,
+  },
+  {
+    name: 'Pipeline (legacy)',
+    path: '/dashboard/pipeline',
+    element: <Navigate to="/dashboard/leads" replace />,
   },
   {
     name: 'Invoices',
     path: '/dashboard/invoices',
-    element: <InvoicesPage />,
+    element: <Navigate to="/dashboard/finances?tab=invoices" replace />,
   },
   {
     name: 'Clients',
@@ -159,6 +166,16 @@ export const routes: RouteConfig[] = [
     name: 'Finances',
     path: '/dashboard/finances',
     element: <FinancesPage />,
+  },
+  {
+    name: 'Project',
+    path: '/dashboard/project',
+    element: <ProjectPage />,
+  },
+  {
+    name: 'Social',
+    path: '/dashboard/social',
+    element: <SocialPage />,
   },
   {
     name: 'Requests',

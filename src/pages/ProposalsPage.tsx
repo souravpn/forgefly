@@ -121,6 +121,93 @@ function buildRequestContext(p: Proposal) {
   };
 }
 
+// engagements.contact_id is a FK into the business-scoped `contacts` table —
+// never the user-scoped `clients` table. Resolve or create the matching
+// contact so the portal (and its engagement_access grant) can actually link.
+async function resolveContactId(businessId: string, name: string, email: string | null): Promise<string> {
+  if (email) {
+    const { data: existingContact } = await supabase
+      .from('contacts')
+      .select('id')
+      .eq('business_id', businessId)
+      .ilike('email', email)
+      .maybeSingle();
+
+    if (existingContact?.id) return existingContact.id;
+  }
+
+  const { data: newContact, error: contactErr } = await supabase
+    .from('contacts')
+    .insert({ business_id: businessId, name, email })
+    .select('id')
+    .single();
+
+  if (contactErr || !newContact) throw new Error('Failed to create contact');
+  return newContact.id;
+}
+
+// Every proposal (freelancer- or client-initiated) should have a matching
+// `clients` row so it shows up in the Clients list — not just a name/email
+// stashed on the proposal row.
+async function resolveClientId(userId: string, name: string, email: string | null): Promise<string> {
+  if (email) {
+    const { data: existingClient } = await supabase.from('clients').select('id').eq('email', email).maybeSingle();
+    if (existingClient?.id) return existingClient.id;
+  }
+
+  const { data: newClient, error: clientErr } = await supabase
+    .from('clients')
+    .insert({
+      user_id: userId,
+      name,
+      email,
+      company: null,
+      status: 'prospect',
+      total_value: 0,
+      last_interaction: new Date().toISOString(),
+      notes: null,
+      avatar_url: null,
+      stripe_customer_id: null,
+    })
+    .select('id')
+    .single();
+
+  if (clientErr || !newClient) throw new Error('Failed to create client');
+  return newClient.id;
+}
+
+const LEAD_STAGE_ORDER = ['Prospect', 'Qualified', 'Contacted', 'Proposal Sent', 'Negotiating', 'Closed Won', 'Lost'] as const;
+type LeadStage = typeof LEAD_STAGE_ORDER[number];
+
+function leadStageRank(stage: string): number {
+  const i = LEAD_STAGE_ORDER.indexOf(stage as LeadStage);
+  return i === -1 ? 0 : i;
+}
+
+// Ensures a pipeline lead card exists for this contact and reflects at least
+// `minStage` — creates one if missing, advances it if it's behind, and never
+// regresses a lead that's already further along (or closed).
+async function ensureLeadStage(businessId: string, contactId: string, serviceName: string | null, minStage: LeadStage): Promise<void> {
+  const { data: existingLead } = await supabase
+    .from('pipeline_leads')
+    .select('id, stage')
+    .eq('business_id', businessId)
+    .eq('contact_id', contactId)
+    .not('stage', 'in', '("Closed Won","Lost")')
+    .maybeSingle();
+
+  if (!existingLead) {
+    await supabase.from('pipeline_leads').insert({
+      business_id: businessId,
+      contact_id: contactId,
+      stage: minStage,
+      service_name: serviceName,
+    });
+  } else if (leadStageRank(minStage) > leadStageRank(existingLead.stage)) {
+    await supabase.from('pipeline_leads').update({ stage: minStage }).eq('id', existingLead.id);
+  }
+}
+
 // ─── Status helpers ───────────────────────────────────────────────────────────
 
 function statusLabel(s: ProposalStatus): string {
@@ -518,7 +605,7 @@ export default function ProposalsPage() {
   }
 
   async function handleSendClientDraft() {
-    if (!draftModal || !business) return;
+    if (!draftModal || !business || !profile) return;
     const { proposal, fields } = draftModal;
     const clientEmail = getClientEmail(proposal);
     const clientName = getClientDisplay(proposal);
@@ -542,32 +629,52 @@ export default function ProposalsPage() {
 
       let clientId = proposal.client_id;
       if (!clientId) {
-        const { data: existing } = await supabase.from('clients').select('id').eq('email', clientEmail).maybeSingle();
-        if (existing?.id) {
-          clientId = existing.id;
+        const { data: existingClient } = await supabase.from('clients').select('id').eq('email', clientEmail).maybeSingle();
+        if (existingClient?.id) {
+          clientId = existingClient.id;
         } else {
           const ctx = buildRequestContext(proposal);
-          const { data: c } = await supabase
+          const { data: c, error: clientErr } = await supabase
             .from('clients')
-            .insert({ name: clientName, email: clientEmail, company: ctx.company ?? undefined, status: 'prospect' })
+            .insert({
+              user_id: profile.id,
+              name: clientName,
+              email: clientEmail,
+              company: ctx.company ?? null,
+              status: 'prospect',
+              total_value: 0,
+              last_interaction: null,
+              notes: null,
+              avatar_url: null,
+              stripe_customer_id: null,
+            })
             .select('id')
             .single();
-          clientId = c?.id ?? null;
+          if (clientErr || !c) throw new Error('Failed to create client');
+          clientId = c.id;
         }
       }
 
+      // engagements.contact_id references the business-scoped `contacts` table,
+      // not `clients` — resolve/create that contact so the portal actually links.
+      const contactId = await resolveContactId(business.id, clientName, clientEmail);
+
+      // Track this send in the Leads pipeline — create the card if missing,
+      // advance it to "Proposal Sent" if it hasn't gotten there yet.
+      await ensureLeadStage(business.id, contactId, fields.title, 'Proposal Sent');
+
       // Upsert engagement
-      const { data: existing } = await supabase
+      const { data: existingEngagement } = await supabase
         .from('engagements')
         .select('id')
         .eq('business_id', business.id)
-        .eq('contact_id', clientId)
+        .eq('contact_id', contactId)
         .eq('service_name', fields.title)
         .maybeSingle();
 
       let engagementId: string;
-      if (existing?.id) {
-        engagementId = existing.id;
+      if (existingEngagement?.id) {
+        engagementId = existingEngagement.id;
         await supabase
           .from('engagements')
           .update({ status: 'proposal_sent', scope: { proposal: proposalScope } })
@@ -577,7 +684,7 @@ export default function ProposalsPage() {
           .from('engagements')
           .insert({
             business_id: business.id,
-            contact_id: clientId,
+            contact_id: contactId,
             service_name: fields.title,
             status: 'proposal_sent',
             scope: { proposal: proposalScope },
@@ -655,11 +762,26 @@ export default function ProposalsPage() {
         nextSteps: [],
       };
 
+      // engagements.contact_id references the business-scoped `contacts` table,
+      // not `clients` — resolve/create that contact so the portal actually links.
+      const contactId = await resolveContactId(business.id, clientName, clientEmail);
+
+      // Backfill a `clients` row if this proposal was created without one
+      // (e.g. a "new client" wizard proposal never sent through the draft flow).
+      if (!proposal.client_id && profile) {
+        const newClientId = await resolveClientId(profile.id, clientName, clientEmail);
+        await supabase.from('proposals').update({ client_id: newClientId }).eq('id', proposal.id);
+      }
+
+      // Track this send in the Leads pipeline — create the card if missing,
+      // advance it to "Proposal Sent" if it hasn't gotten there yet.
+      await ensureLeadStage(business.id, contactId, proposal.title, 'Proposal Sent');
+
       const { data: existingEng } = await supabase
         .from('engagements')
         .select('id')
         .eq('business_id', business.id)
-        .eq('contact_id', proposal.client_id)
+        .eq('contact_id', contactId)
         .eq('service_name', proposal.title)
         .maybeSingle();
 
@@ -675,7 +797,7 @@ export default function ProposalsPage() {
           .from('engagements')
           .insert({
             business_id: business.id,
-            contact_id: proposal.client_id,
+            contact_id: contactId,
             service_name: proposal.title,
             status: 'proposal_sent',
             scope: { proposal: proposalScope },
@@ -713,14 +835,9 @@ export default function ProposalsPage() {
         .update({ status: 'sent', sent_at: new Date().toISOString() })
         .eq('id', proposal.id);
 
-      // Advance pipeline lead to "Proposal Sent"
+      // Advance the specific originating lead card too, if this proposal came from one
       if (proposal.pipeline_lead_id) {
         supabase.from('pipeline_leads').update({ stage: 'Proposal Sent' }).eq('id', proposal.pipeline_lead_id);
-      } else if (proposal.client_id) {
-        supabase.from('pipeline_leads').update({ stage: 'Proposal Sent' })
-          .eq('business_id', business.id)
-          .eq('contact_id', proposal.client_id)
-          .in('stage', ['Prospect', 'Qualified', 'Contacted']);
       }
 
       const isResend = proposal.status !== 'draft';
@@ -840,6 +957,17 @@ export default function ProposalsPage() {
 
       if (insertErr || !newProposal) throw insertErr ?? new Error('Failed to create proposal');
 
+      // Track this proposal in the Leads pipeline, and add a `clients` row
+      // if this is a brand-new client (existing clients are left as-is).
+      if (client.name) {
+        const clientId = client.id ?? await resolveClientId(profile.id, client.name, client.email || null);
+        if (!client.id) {
+          await supabase.from('proposals').update({ client_id: clientId }).eq('id', newProposal.id);
+        }
+        const contactId = await resolveContactId(business.id, client.name, client.email || null);
+        await ensureLeadStage(business.id, contactId, newProposal.title, 'Prospect');
+      }
+
       const { data: rawData, error: genErr } = await supabase.functions.invoke('ai-gateway', {
         body: {
           mode: 'generate_proposal',
@@ -950,6 +1078,12 @@ export default function ProposalsPage() {
         toast.success('Proposal created');
       }
 
+      // Make sure this client has a lead card tracking the proposal.
+      if (business && client?.email) {
+        const contactId = await resolveContactId(business.id, client.name, client.email);
+        await ensureLeadStage(business.id, contactId, payload.title, 'Prospect');
+      }
+
       setCreateModal(false);
       await loadProposals();
     } catch {
@@ -1037,7 +1171,8 @@ export default function ProposalsPage() {
     if (p.client_id) params.set('client_id', p.client_id);
     if (p.total_amount ?? p.pricing) params.set('amount', String(p.total_amount ?? p.pricing));
     params.set('description', p.title);
-    navigate(`/dashboard/invoices?${params.toString()}`);
+    params.set('tab', 'invoices');
+    navigate(`/dashboard/finances?${params.toString()}`);
   }
 
   // ── Row action buttons ─────────────────────────────────────────────────────

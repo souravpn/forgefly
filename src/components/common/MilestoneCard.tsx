@@ -40,8 +40,8 @@ const MILESTONE_CONFIG: Record<Exclude<MilestoneKey, 'business_created'>, Milest
   prospect_added: {
     label: 'Add your first prospect',
     description: "Who would you love to work with? Add them as a lead — even a long shot counts.",
-    action: 'Open Pipeline',
-    route: '/dashboard/pipeline',
+    action: 'Open Leads',
+    route: '/dashboard/leads',
   },
   proposal_sent: {
     label: 'Send your first proposal',

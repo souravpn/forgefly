@@ -48,7 +48,9 @@ serve(async (req) => {
 
     const proposalTitle = service_name ? `${service_name} request` : 'Proposal request'
 
-    // ── Look up existing client record for FK link ────────────────────────────
+    // ── Look up (or create) the client record for FK link ─────────────────────
+    // Every proposal — client- or freelancer-initiated — should have a real
+    // `clients` row, so a brand-new lead actually shows up in the Clients list.
     const { data: existingClient } = await supabase
       .from('clients')
       .select('id')
@@ -56,13 +58,31 @@ serve(async (req) => {
       .eq('email', email)
       .maybeSingle()
 
+    let clientId: string | null = existingClient?.id ?? null
+    if (!clientId) {
+      const { data: newClient } = await supabase
+        .from('clients')
+        .insert({
+          user_id: business.user_id,
+          name,
+          email,
+          company: company || null,
+          status: 'prospect',
+          total_value: 0,
+          last_interaction: new Date().toISOString(),
+        })
+        .select('id')
+        .single()
+      clientId = newClient?.id ?? null
+    }
+
     // Insert directly into proposals with initiated_by='client'
     const { data: request, error: insertErr } = await supabase
       .from('proposals')
       .insert({
         business_id,
         user_id: business.user_id,
-        client_id: existingClient?.id ?? null,
+        client_id: clientId,
         client_name: name,
         client_email: email,
         title: proposalTitle,

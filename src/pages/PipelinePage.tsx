@@ -3,6 +3,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import {
   Dialog, DialogContent, DialogDescription,
   DialogFooter, DialogHeader, DialogTitle,
@@ -21,12 +22,13 @@ import {
 } from '@dnd-kit/core';
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Plus, Edit, Trash2, DollarSign, Briefcase, Sparkles, Link2, ExternalLink, ChevronRight } from 'lucide-react';
+import { Plus, Edit, Trash2, DollarSign, Briefcase, Sparkles, Link2, ExternalLink, ChevronRight, UserPlus, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/db/supabase';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useBusiness } from '@/contexts/CurrentBusinessContext';
-import { useAuth } from '@/contexts/AuthContext';
+import type { Client } from '@/types/types';
+import { getClients, createClient, uploadAvatar } from '@/services/clientService';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -53,15 +55,29 @@ interface Lead {
   portalToken: string | null;
 }
 
+type NewClientFields = {
+  name: string;
+  email: string;
+  company: string;
+  phone: string;
+  notes: string;
+};
+
+const EMPTY_NEW_CLIENT: NewClientFields = { name: '', email: '', company: '', phone: '', notes: '' };
+
 type LeadFormData = {
   name: string;
   stage: Stage;
   value: string;
   service: string;
+  clientMode: 'existing' | 'new';
+  existingClientId: string;
+  newClient: NewClientFields;
 };
 
 const EMPTY_FORM: LeadFormData = {
   name: '', stage: 'Prospect', value: '', service: '',
+  clientMode: 'existing', existingClientId: '', newClient: { ...EMPTY_NEW_CLIENT },
 };
 
 // ─── Stage config ─────────────────────────────────────────────────────────────
@@ -283,49 +299,172 @@ function LeadModal({
   initial,
   saving,
   services,
+  clients,
 }: {
   open: boolean;
   onClose: () => void;
-  onSave: (data: LeadFormData) => void;
+  onSave: (data: LeadFormData, avatarFile: File | null) => void;
   initial: LeadFormData;
   saving: boolean;
   services: string[];
+  clients: Client[];
 }) {
   const [form, setForm] = useState<LeadFormData>(initial);
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
 
   useEffect(() => {
-    if (open) setForm(initial);
+    if (open) { setForm(initial); setAvatarFile(null); }
   }, [open, initial]);
 
   const isEdit = !!initial.name;
 
+  const canSubmit = isEdit
+    ? !!form.name.trim()
+    : form.clientMode === 'existing'
+      ? !!form.existingClientId
+      : !!form.newClient.name.trim();
+
+  function handleAvatarChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('File size must be less than 5MB');
+      return;
+    }
+    setAvatarFile(file);
+  }
+
   return (
     <Dialog open={open} onOpenChange={o => !o && onClose()}>
-      <DialogContent className="max-w-[calc(100%-2rem)] md:max-w-sm">
+      <DialogContent className="max-w-[calc(100%-2rem)] md:max-w-sm max-h-[90dvh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{isEdit ? 'Edit Lead' : 'Add Lead'}</DialogTitle>
           <DialogDescription>
-            {isEdit ? 'Update this pipeline lead.' : 'Add a new prospect to your pipeline.'}
+            {isEdit ? 'Update this lead.' : 'Add a new prospect to your leads.'}
           </DialogDescription>
         </DialogHeader>
         <form
           onSubmit={e => {
             e.preventDefault();
-            if (!form.name.trim()) return;
-            onSave(form);
+            if (!canSubmit) return;
+            onSave(form, avatarFile);
           }}
         >
           <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label>Name / Company *</Label>
-              <Input
-                value={form.name}
-                onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-                placeholder="e.g., Acme Corp"
-                required
-                autoFocus
-              />
-            </div>
+            {isEdit ? (
+              <div className="space-y-2">
+                <Label>Name / Company *</Label>
+                <Input
+                  value={form.name}
+                  onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+                  placeholder="e.g., Acme Corp"
+                  required
+                  autoFocus
+                />
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <Label>Client *</Label>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={form.clientMode === 'existing' ? 'default' : 'outline'}
+                    className="flex-1"
+                    onClick={() => setForm(f => ({ ...f, clientMode: 'existing' }))}
+                  >
+                    <Users className="w-3.5 h-3.5 mr-1.5" />
+                    Existing client
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={form.clientMode === 'new' ? 'default' : 'outline'}
+                    className="flex-1"
+                    onClick={() => setForm(f => ({ ...f, clientMode: 'new' }))}
+                  >
+                    <UserPlus className="w-3.5 h-3.5 mr-1.5" />
+                    New client
+                  </Button>
+                </div>
+
+                {form.clientMode === 'existing' ? (
+                  clients.length > 0 ? (
+                    <Select
+                      value={form.existingClientId}
+                      onValueChange={v => setForm(f => ({ ...f, existingClientId: v }))}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select a client" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {clients.map(c => (
+                          <SelectItem key={c.id} value={c.id}>
+                            {c.name}{c.company ? ` — ${c.company}` : ''}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">No existing clients yet — switch to "New client".</p>
+                  )
+                ) : (
+                  <div className="space-y-3 rounded-lg border p-3 bg-muted/30">
+                    <div className="space-y-2">
+                      <Label htmlFor="lead-client-name">Name *</Label>
+                      <Input
+                        id="lead-client-name"
+                        value={form.newClient.name}
+                        onChange={e => setForm(f => ({ ...f, newClient: { ...f.newClient, name: e.target.value } }))}
+                        placeholder="e.g., Acme Corp"
+                        required
+                        autoFocus
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="lead-client-email">Email</Label>
+                      <Input
+                        id="lead-client-email"
+                        type="email"
+                        value={form.newClient.email}
+                        onChange={e => setForm(f => ({ ...f, newClient: { ...f.newClient, email: e.target.value } }))}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="lead-client-company">Company</Label>
+                      <Input
+                        id="lead-client-company"
+                        value={form.newClient.company}
+                        onChange={e => setForm(f => ({ ...f, newClient: { ...f.newClient, company: e.target.value } }))}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="lead-client-phone">Phone</Label>
+                      <Input
+                        id="lead-client-phone"
+                        type="tel"
+                        value={form.newClient.phone}
+                        onChange={e => setForm(f => ({ ...f, newClient: { ...f.newClient, phone: e.target.value } }))}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="lead-client-avatar">Avatar</Label>
+                      <Input id="lead-client-avatar" type="file" accept="image/*" onChange={handleAvatarChange} />
+                      <p className="text-xs text-muted-foreground">Max file size: 5MB</p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="lead-client-notes">Notes</Label>
+                      <Textarea
+                        id="lead-client-notes"
+                        value={form.newClient.notes}
+                        onChange={e => setForm(f => ({ ...f, newClient: { ...f.newClient, notes: e.target.value } }))}
+                        rows={2}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
             <div className="space-y-2">
               <Label>Stage</Label>
@@ -377,7 +516,7 @@ function LeadModal({
             <Button type="button" variant="outline" onClick={onClose} disabled={saving}>
               Cancel
             </Button>
-            <Button type="submit" disabled={saving || !form.name.trim()} className="glow-accent">
+            <Button type="submit" disabled={saving || !canSubmit} className="glow-accent">
               {saving ? 'Saving…' : isEdit ? 'Save changes' : 'Add lead'}
             </Button>
           </DialogFooter>
@@ -393,12 +532,12 @@ export default function PipelinePage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { business, extractedData, isLoading: bizLoading } = useBusiness();
-  const { user } = useAuth();
 
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [clients, setClients] = useState<Client[]>([]);
 
   const [leadModal, setLeadModal] = useState<{
     open: boolean;
@@ -493,6 +632,10 @@ export default function PipelinePage() {
     if (business && !loaded) loadLeads();
   }, [business, loaded, loadLeads]);
 
+  useEffect(() => {
+    getClients().then(setClients).catch(() => {});
+  }, []);
+
   // ── DnD ──────────────────────────────────────────────────────────────────
 
   const sensors = useSensors(
@@ -539,11 +682,11 @@ export default function PipelinePage() {
     setLeadModal({
       open: true,
       editId: lead._id,
-      initial: { name: lead.name, stage: lead.stage, value: lead.value, service: lead.service },
+      initial: { ...EMPTY_FORM, name: lead.name, stage: lead.stage, value: lead.value, service: lead.service },
     });
   }
 
-  async function handleSaveLead(data: LeadFormData) {
+  async function handleSaveLead(data: LeadFormData, avatarFile: File | null) {
     if (!business) return;
     setSaving(true);
     try {
@@ -561,19 +704,64 @@ export default function PipelinePage() {
           : l));
         toast.success('Lead updated');
       } else {
-        const portalToken = generatePortalToken();
-        const { data: contact } = await supabase
-          .from('contacts')
-          .insert({ business_id: business.id, name: data.name, portal_token: portalToken })
-          .select('id')
-          .single();
-        if (!contact) throw new Error('Failed to create contact');
+        // ── Resolve the client for this lead (existing pick, or create new) ──
+        let name: string;
+        let email: string | null;
+
+        if (data.clientMode === 'existing') {
+          const client = clients.find(c => c.id === data.existingClientId);
+          if (!client) throw new Error('Select a client');
+          name = client.name;
+          email = client.email;
+        } else {
+          const avatarUrl = avatarFile ? await uploadAvatar(avatarFile) : null;
+          await createClient({
+            name: data.newClient.name,
+            email: data.newClient.email || null,
+            company: data.newClient.company || null,
+            phone: data.newClient.phone || null,
+            notes: data.newClient.notes || null,
+            avatar_url: avatarUrl,
+            status: 'lead',
+            total_value: 0,
+            last_interaction: new Date().toISOString(),
+            stripe_customer_id: null,
+          });
+          name = data.newClient.name;
+          email = data.newClient.email || null;
+        }
+
+        // ── Resolve or create a business-scoped contact (portal/messaging) ──
+        let contactId: string | null = null;
+        let portalToken: string | null = null;
+        if (email) {
+          const { data: existingContact } = await supabase
+            .from('contacts')
+            .select('id, portal_token')
+            .eq('business_id', business.id)
+            .ilike('email', email)
+            .maybeSingle();
+          if (existingContact) {
+            contactId = existingContact.id;
+            portalToken = existingContact.portal_token;
+          }
+        }
+        if (!contactId) {
+          portalToken = generatePortalToken();
+          const { data: contact } = await supabase
+            .from('contacts')
+            .insert({ business_id: business.id, name, email, portal_token: portalToken })
+            .select('id')
+            .single();
+          if (!contact) throw new Error('Failed to create contact');
+          contactId = contact.id;
+        }
 
         const { data: pl } = await supabase
           .from('pipeline_leads')
           .insert({
             business_id: business.id,
-            contact_id: contact.id,
+            contact_id: contactId,
             stage: data.stage,
             value: data.value || null,
             service_name: data.service || null,
@@ -582,27 +770,14 @@ export default function PipelinePage() {
           .single();
         if (!pl) throw new Error('Failed to create lead');
 
-        // Also create a client record with Lead status so it appears in Clients
-        if (user) {
-          await supabase.from('clients').insert({
-            user_id: user.id,
-            name: data.name,
-            status: 'lead',
-            total_value: 0,
-            email: null,
-            company: null,
-            phone: null,
-            notes: data.service ? `Pipeline lead – service: ${data.service}` : null,
-            last_interaction: new Date().toISOString(),
-          });
-        }
-
         setLeads(prev => [...prev, {
-          _id: pl.id, contactId: contact.id, name: data.name,
+          _id: pl.id, contactId, name,
           stage: data.stage, value: data.value, service: data.service,
           lifecycleStatus: 'prospect', portalToken,
         }]);
         toast.success('Lead added');
+        // Refresh clients list in case a new one was created
+        getClients().then(setClients).catch(() => {});
         // Milestone beacon: fire-and-forget
         if (!business.onboarding_milestones?.prospect_added) {
           supabase.functions.invoke('mark-milestone', { body: { milestone: 'prospect_added' } });
@@ -645,11 +820,11 @@ export default function PipelinePage() {
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
-          <h1 className="text-3xl md:text-4xl font-bold text-balance mb-1">Pipeline</h1>
+          <h1 className="text-3xl md:text-4xl font-bold text-balance mb-1">Leads</h1>
           <p className="text-sm md:text-base text-muted-foreground">
             {hasBusiness
               ? `${leads.length} lead${leads.length !== 1 ? 's' : ''}${totalValueStr ? ` · ${totalValueStr} total value` : ''}`
-              : 'Pre-sales CRM — track prospects through your pipeline'}
+              : 'Pre-sales CRM — track prospects through your leads'}
           </p>
         </div>
         {hasBusiness && (
@@ -680,7 +855,7 @@ export default function PipelinePage() {
           <div>
             <h3 className="text-xl font-semibold mb-2">Generate your Business OS first</h3>
             <p className="text-muted-foreground max-w-sm text-pretty">
-              Your pipeline is pre-populated from your business description. Generate your OS to get started.
+              Your leads are pre-populated from your business description. Generate your OS to get started.
             </p>
           </div>
           <Button onClick={() => navigate('/')}>
@@ -754,7 +929,7 @@ export default function PipelinePage() {
           <div>
             <h3 className="text-lg font-semibold mb-1">No leads yet</h3>
             <p className="text-sm text-muted-foreground max-w-xs text-pretty">
-              Add your first prospect or update your Business OS prompt to seed the pipeline.
+              Add your first prospect or update your Business OS prompt to seed your leads.
             </p>
           </div>
           <Button onClick={() => openAdd()} className="glow-accent">
@@ -772,6 +947,7 @@ export default function PipelinePage() {
         initial={leadModal.initial}
         saving={saving}
         services={serviceNames}
+        clients={clients}
       />
 
       {/* Delete confirm */}
@@ -780,7 +956,7 @@ export default function PipelinePage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Remove Lead</AlertDialogTitle>
             <AlertDialogDescription>
-              Remove "{deleteTarget?.name}" from your pipeline? This cannot be undone.
+              Remove "{deleteTarget?.name}" from your leads? This cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

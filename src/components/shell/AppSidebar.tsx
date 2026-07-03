@@ -36,12 +36,14 @@ const CLIENTELE_NAV = [
 ]
 
 const PROJECT_NAV = [
-  { id: 'pipeline',  label: 'Pipeline',  icon: 'chart-arrows', route: '/dashboard/pipeline' },
+  { id: 'leads',     label: 'Leads',     icon: 'chart-arrows', route: '/dashboard/leads' },
   { id: 'services',  label: 'Services',  icon: 'package',      route: '/dashboard/services' },
   { id: 'proposals', label: 'Proposals', icon: 'file-text',    route: '/dashboard/proposals' },
-  { id: 'invoices',  label: 'Invoices',  icon: 'receipt',      route: '/dashboard/invoices' },
   { id: 'finances',  label: 'Finances',  icon: 'landmark',     route: '/dashboard/finances' },
+  { id: 'project',   label: 'Project',   icon: 'layers',       route: '/dashboard/project' },
 ]
+
+const SOCIAL_ITEM = { id: 'social', label: 'Social', icon: 'share2', route: '/dashboard/social' }
 
 type NavEntry = { id: string; label: string; icon: string; route: string }
 
@@ -111,7 +113,7 @@ export function AppSidebar({ onNavigate, nudges: { nudges, unreadCount, markRead
 
   return (
     <>
-      <aside className="hidden md:flex flex-col w-64 bg-sidebar rounded-2xl border border-sidebar-border/40 shrink-0 overflow-hidden">
+      <aside className="hidden md:flex flex-col w-64 bg-sidebar/10 backdrop-blur-md rounded-2xl border border-sidebar-border/40 shadow-lg shrink-0 overflow-hidden">
         {/* Business header */}
         <div className="px-4 py-4 border-b border-sidebar-border shrink-0">
           <div className="flex items-center gap-2.5 min-w-0">
@@ -170,6 +172,7 @@ export function AppSidebar({ onNavigate, nudges: { nudges, unreadCount, markRead
                 Public Portfolio
               </button>
             )}
+            <NavLink item={SOCIAL_ITEM} onClick={onNavigate} />
           </div>
         </nav>
 

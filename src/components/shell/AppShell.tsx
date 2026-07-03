@@ -1,25 +1,25 @@
-import { useState, type ReactNode } from 'react'
-import { X, Sparkles, Send } from 'lucide-react'
-import { AppSidebar } from './AppSidebar'
-import { MobileTopBar } from './MobileTopBar'
-import { BusinessBand } from './BusinessBand'
-import { MobileFooterNav } from './MobileFooterNav'
-import { MobileMoreSheet } from './MobileMoreSheet'
-import { AICopilot } from '@/components/layouts/AICopilot'
-import { CurrentBusinessProvider } from '@/contexts/CurrentBusinessContext'
-import { useBusiness } from '@/contexts/CurrentBusinessContext'
-import { useReviewNotification } from '@/hooks/useReviewNotification'
-import { useNudges } from '@/hooks/useNudges'
-import { Button } from '@/components/ui/button'
-import { Textarea } from '@/components/ui/textarea'
-import { cn } from '@/lib/utils'
-import { CommandBar } from './CommandBar'
-import NoBusinessPage from '@/pages/NoBusinessPage'
+import { useState, type ReactNode } from "react";
+import { X, Sparkles, Send } from "lucide-react";
+import { AppSidebar } from "./AppSidebar";
+import { MobileTopBar } from "./MobileTopBar";
+import { BusinessBand } from "./BusinessBand";
+import { MobileFooterNav } from "./MobileFooterNav";
+import { MobileMoreSheet } from "./MobileMoreSheet";
+import { AICopilot } from "@/components/layouts/AICopilot";
+import { CurrentBusinessProvider } from "@/contexts/CurrentBusinessContext";
+import { useBusiness } from "@/contexts/CurrentBusinessContext";
+import { useReviewNotification } from "@/hooks/useReviewNotification";
+import { useNudges } from "@/hooks/useNudges";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
+import { CommandBar } from "./CommandBar";
+import NoBusinessPage from "@/pages/NoBusinessPage";
 
-type PanelType = 'copilot' | 'upgrade'
+type PanelType = "copilot" | "upgrade";
 
 function UpgradePanel({ onClose }: { onClose: () => void }) {
-  const { business, extractedData, refetch } = useBusiness()
+  const { business, extractedData, refetch } = useBusiness();
 
   return (
     <div className="flex flex-col h-full">
@@ -31,7 +31,9 @@ function UpgradePanel({ onClose }: { onClose: () => void }) {
           </div>
           <div>
             <h3 className="font-semibold text-sm">Update OS</h3>
-            <p className="text-xs text-muted-foreground">Describe a change — AI updates your profile</p>
+            <p className="text-xs text-muted-foreground">
+              Describe a change — AI updates your profile
+            </p>
           </div>
         </div>
         <Button variant="ghost" size="icon" onClick={onClose}>
@@ -49,35 +51,43 @@ function UpgradePanel({ onClose }: { onClose: () => void }) {
         />
       </div>
     </div>
-  )
+  );
 }
 
 function AppShellContent({ children }: { children: ReactNode }) {
-  const [moreOpen, setMoreOpen] = useState(false)
-  const [panelType, setPanelType] = useState<PanelType | null>(null)
-  const { business, isLoading } = useBusiness()
-  const nudges = useNudges()
-  useReviewNotification()
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [panelType, setPanelType] = useState<PanelType | null>(null);
+  const { business, extractedData, isLoading } = useBusiness();
+  const nudges = useNudges();
+  useReviewNotification();
 
   if (!isLoading && !business) {
-    return <NoBusinessPage />
+    return <NoBusinessPage />;
   }
 
   function openPanel(type: PanelType) {
-    setPanelType(prev => (prev === type ? null : type))
+    setPanelType((prev) => (prev === type ? null : type));
   }
 
   function closePanel() {
-    setPanelType(null)
+    setPanelType(null);
   }
 
+  const secondaryColor = extractedData?.brand?.secondaryColor;
+
   return (
-    <div className="flex h-screen p-2 gap-2 bg-muted/60">
+    <div
+      className={cn(
+        "flex h-screen p-2 gap-2",
+        !secondaryColor && "bg-muted/60",
+      )}
+      style={secondaryColor ? { backgroundColor: secondaryColor } : undefined}
+    >
       {/* Desktop sidebar */}
       <AppSidebar nudges={nudges} />
 
       {/* Content column */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden rounded-2xl bg-background border border-border/40 relative">
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden rounded-2xl bg-background/30 backdrop-blur-md border border-border/40 shadow-lg relative">
         {/* Mobile top bar */}
         <MobileTopBar onMenuOpen={() => setMoreOpen(true)} nudges={nudges} />
 
@@ -86,21 +96,19 @@ function AppShellContent({ children }: { children: ReactNode }) {
 
         {/* Page content */}
         <main className="flex-1 overflow-y-auto pb-16 md:pb-0">
-          <div className="px-4 md:px-6 py-4 md:py-6">
-            {children}
-          </div>
+          <div className="px-4 md:px-6 py-4 md:py-6">{children}</div>
         </main>
 
         {/* Right-side panel overlay (copilot or upgrade) */}
         {panelType && (
           <div
             className={cn(
-              'absolute right-2 top-[48px] bottom-2 z-40 w-[360px] flex flex-col',
-              'bg-background border border-border/40 shadow-2xl rounded-xl overflow-hidden',
-              'transition-all duration-200',
+              "absolute right-2 top-[48px] bottom-2 z-40 w-[360px] flex flex-col",
+              "bg-background border border-border/40 shadow-2xl rounded-xl overflow-hidden",
+              "transition-all duration-200",
             )}
           >
-            {panelType === 'copilot' ? (
+            {panelType === "copilot" ? (
               <AICopilot onClose={closePanel} />
             ) : (
               <UpgradePanel onClose={closePanel} />
@@ -116,7 +124,7 @@ function AppShellContent({ children }: { children: ReactNode }) {
       />
       <MobileMoreSheet open={moreOpen} onClose={() => setMoreOpen(false)} />
     </div>
-  )
+  );
 }
 
 export function AppShell({ children }: { children: ReactNode }) {
@@ -124,5 +132,5 @@ export function AppShell({ children }: { children: ReactNode }) {
     <CurrentBusinessProvider>
       <AppShellContent>{children}</AppShellContent>
     </CurrentBusinessProvider>
-  )
+  );
 }

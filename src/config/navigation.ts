@@ -2,9 +2,9 @@ export const NAV_ITEMS = [
   { id: 'overview',    label: 'Overview',    icon: 'layout-dashboard', route: '/dashboard' },
   { id: 'services',    label: 'Services',    icon: 'package',          route: '/dashboard/services' },
   { id: 'visibility',  label: 'Visibility',  icon: 'sparkles',         route: '/dashboard/visibility' },
-  { id: 'pipeline',    label: 'Pipeline',    icon: 'chart-arrows',     route: '/dashboard/pipeline' },
-  { id: 'invoices',    label: 'Invoices',    icon: 'receipt',          route: '/dashboard/invoices' },
+  { id: 'leads',       label: 'Leads',       icon: 'chart-arrows',     route: '/dashboard/leads' },
   { id: 'finances',    label: 'Finances',    icon: 'landmark',         route: '/dashboard/finances' },
+  { id: 'project',     label: 'Project',     icon: 'layers',           route: '/dashboard/project' },
   { id: 'clients',     label: 'Clients',     icon: 'users',            route: '/dashboard/clients' },
   { id: 'proposals',   label: 'Proposals',   icon: 'file-text',        route: '/dashboard/proposals' },
   { id: 'brandkit',    label: 'Brand Kit',   icon: 'palette',          route: '/dashboard/brand' },
@@ -15,6 +15,7 @@ export const MORE_ITEMS = [
   { id: 'messages',    label: 'Messages',    icon: 'message-square',   route: '/dashboard/messages' },
   { id: 'calendar',    label: 'Calendar',    icon: 'calendar',         route: '/dashboard/calendar' },
   { id: 'automations', label: 'Automations', icon: 'bolt',             route: '/dashboard/automations' },
+  { id: 'social',      label: 'Social',      icon: 'share2',           route: '/dashboard/social' },
   { id: 'settings',    label: 'Settings',    icon: 'settings',         route: '/dashboard/settings' },
 ] as const
 
