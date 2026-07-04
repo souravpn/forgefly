@@ -345,3 +345,41 @@ export interface ContractorPayment {
   threshold_flag: boolean;
   created_at: string;
 }
+
+export type SocialPostStatus = 'draft' | 'approved' | 'archived';
+export type SocialPostSource = 'ai_generated' | 'manual';
+
+export interface SocialPost {
+  id: string;
+  business_id: string;
+  platform: string;
+  caption: string;
+  status: SocialPostStatus;
+  source: SocialPostSource;
+  created_at: string;
+  approved_at: string | null;
+}
+
+export type CompetitorSource = 'ai_suggested' | 'manual';
+export type CompetitorStatus = 'suggested' | 'tracking' | 'dismissed';
+
+export interface CompetitorProfile {
+  id: string;
+  business_id: string;
+  handle: string;
+  platform: string;
+  website_url: string | null;
+  source: CompetitorSource;
+  status: CompetitorStatus;
+  created_at: string;
+}
+
+export interface CompetitorSiteIntel {
+  id: string;
+  competitor_id: string;
+  pricing_notes: string | null;
+  turnaround_notes: string | null;
+  review_summary: string | null;
+  raw_extract: Record<string, unknown> | null;
+  scraped_at: string;
+}

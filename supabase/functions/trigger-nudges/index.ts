@@ -67,6 +67,8 @@ const NUDGE_PROMPTS: Record<string, (ctx: Record<string, string>) => string> = {
   contractor_threshold: (c) =>
     `Contractor ${c.name} has been paid $${c.ytd} YTD in ${c.year}. They've crossed the $600 IRS threshold. ` +
     `Write a short nudge to collect their W-9 and remind the freelancer they may need to file a 1099-NEC.`,
+  social_drafts_ready: (c) =>
+    `${c.count} AI-drafted Instagram caption(s) are waiting for review in the Social tab. Write a nudge to go review them.`,
 }
 
 const FALLBACK_COPY: Record<string, (ctx: Record<string, string>) => { title: string; body: string }> = {
@@ -93,6 +95,10 @@ const FALLBACK_COPY: Record<string, (ctx: Record<string, string>) => { title: st
   contractor_threshold: (c) => ({
     title: `1099-NEC may be required: ${c.name}`,
     body: `$${c.ytd} paid YTD in ${c.year}. Collect their W-9 if you haven't already. This is not tax advice.`,
+  }),
+  social_drafts_ready: (c) => ({
+    title: `${c.count} social draft${Number(c.count) === 1 ? '' : 's'} ready to review`,
+    body: `AI-drafted Instagram captions are waiting in the Social tab.`,
   }),
 }
 
@@ -513,6 +519,46 @@ serve(async (req) => {
               action_url: '/dashboard/finances?tab=expenses',
             })
             nudgesCreated.push(`contractor_threshold:${name}`)
+          }
+        }
+      }
+
+      // ── 8. Social drafts ready to review (agency-tier only) ───────────────
+      if (isEnabled(settings, 'social_drafts_ready')) {
+        const { data: subscription } = await supabase
+          .from('subscriptions')
+          .select('tier, status')
+          .eq('user_id', userId)
+          .maybeSingle()
+
+        const isAgency = subscription?.tier === 'agency' && subscription?.status === 'active'
+
+        if (isAgency) {
+          const { count: draftCount } = await supabase
+            .from('social_posts')
+            .select('id', { count: 'exact', head: true })
+            .eq('business_id', bizId)
+            .eq('status', 'draft')
+
+          if ((draftCount ?? 0) > 0) {
+            // One nudge per day while drafts remain unreviewed
+            const { count: alreadyFired } = await supabase
+              .from('nudges')
+              .select('id', { count: 'exact', head: true })
+              .eq('business_id', bizId)
+              .eq('type', 'social_drafts_ready')
+              .gte('created_at', new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString())
+
+            if ((alreadyFired ?? 0) === 0) {
+              const copy = await generateNudgeCopy('social_drafts_ready', { count: String(draftCount) })
+
+              await supabase.from('nudges').insert({
+                user_id: userId, business_id: bizId,
+                type: 'social_drafts_ready', title: copy.title, body: copy.body,
+                action_url: '/dashboard/social',
+              })
+              nudgesCreated.push(`social_drafts_ready:${bizId}`)
+            }
           }
         }
       }

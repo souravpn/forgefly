@@ -800,6 +800,119 @@ ${extra_context ? `\nContext for this proposal: ${extra_context}` : ''}`;
   });
 }
 
+// ─── Social content generation ──────────────────────────────────────────────
+
+async function handleGenerateSocialContent(
+  supabase: ReturnType<typeof createClient>,
+  userId: string,
+): Promise<Response> {
+  const { data: business } = await supabase
+    .from('businesses')
+    .select('id, name, slug, extracted_data')
+    .eq('user_id', userId)
+    .eq('status', 'active')
+    .maybeSingle();
+
+  if (!business) {
+    return new Response(JSON.stringify({ error: 'No active business found' }), {
+      status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+
+  const extracted = business.extracted_data as Record<string, unknown> | null;
+  const identity = extracted?.identity as Record<string, string> | null;
+  const brand = extracted?.brand as Record<string, unknown> | null;
+  const tone = (brand?.tone as string) || 'warm and professional';
+  const keywords = (brand?.keywords as string[] | null) ?? [];
+  const businessName = identity?.businessName || business.name || 'this business';
+  const niche = identity?.niche || 'freelance services';
+  const portfolioUrl = business.slug ? `${SITE_URL}/p/${business.slug}?src=ig_promo` : null;
+
+  // Pull one recent completed project to give the draft something concrete to reference
+  const { data: recentProject } = await supabase
+    .from('projects')
+    .select('name, client:clients(name)')
+    .eq('user_id', userId)
+    .eq('status', 'completed')
+    .order('updated_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const winLine = recentProject
+    ? `Recent completed work: "${recentProject.name}"${(recentProject.client as { name?: string } | null)?.name ? ` for ${(recentProject.client as { name?: string }).name}` : ''}`
+    : 'No recent completed project on file — write a general availability/booking post instead.';
+
+  const systemPrompt = `You are a social media copywriter drafting Instagram captions for a freelancer/small agency.
+
+Write ORGANIC captions only — these are for the business's own feed/story, not paid ads. Never write ad copy, never mention installing an app, never use a "Learn More"/"Shop Now" style CTA.
+Every caption must end with a natural "link in bio" style call-to-action (do not include the actual URL — Instagram doesn't allow clickable links in captions).
+
+Tone: ${tone}
+Brand keywords to weave in naturally (don't force all of them): ${keywords.join(', ') || 'none specified'}
+
+Return ONLY valid JSON, no markdown fences:
+{
+  "captions": [string, string, string]
+}
+Each caption should be 2-4 short sentences, no more than 2 emoji, no hashtag spam (max 3 relevant hashtags at the end).`;
+
+  const userContent = `Business: ${businessName}
+Niche: ${niche}
+${winLine}
+
+Draft 3 distinct caption options promoting this business and driving profile visitors to check out their work / request a proposal.`;
+
+  const aiResponse = await callAnthropic({
+    model: HAIKU,
+    max_tokens: 800,
+    temperature: 0.7,
+    system: systemPrompt,
+    messages: [{ role: 'user', content: userContent }],
+  });
+
+  await logUsage(supabase, userId, business.id, HAIKU, 'generate_social_content', aiResponse.usage.input_tokens, aiResponse.usage.output_tokens);
+
+  const raw = aiResponse.content[0]?.text ?? '{}';
+  let parsed: { captions?: string[] };
+  try {
+    parsed = JSON.parse(raw.replace(/```(?:json)?\n?/g, '').replace(/```/g, '').trim());
+  } catch {
+    return new Response(JSON.stringify({ error: 'Failed to parse AI response' }), {
+      status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+
+  const captions = (parsed.captions ?? []).filter((c) => typeof c === 'string' && c.trim().length > 0);
+  if (captions.length === 0) {
+    return new Response(JSON.stringify({ error: 'No captions generated' }), {
+      status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+
+  const rows = captions.map((caption) => ({
+    business_id: business.id,
+    platform: 'instagram',
+    caption: portfolioUrl ? `${caption}\n\n---\n📌 Reminder: set your Instagram bio link to ${portfolioUrl} before posting this (don't paste the URL into the caption itself).` : caption,
+    status: 'draft',
+    source: 'ai_generated',
+  }));
+
+  const { data: inserted, error: insertError } = await supabase
+    .from('social_posts')
+    .insert(rows)
+    .select();
+
+  if (insertError) {
+    return new Response(JSON.stringify({ error: insertError.message }), {
+      status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+
+  return new Response(JSON.stringify({ posts: inserted }), {
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  });
+}
+
 // ─── Chat mode ───────────────────────────────────────────────────────────────
 
 async function fetchUserContext(supabase: ReturnType<typeof createClient>, userId: string) {
@@ -997,6 +1110,16 @@ serve(async (req) => {
         );
       }
       return await handleChat(body, supabase, userId);
+    }
+
+    if (mode === 'generate_social_content') {
+      if (!userId) {
+        return new Response(
+          JSON.stringify({ error: 'Unauthorized' }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        );
+      }
+      return await handleGenerateSocialContent(supabase, userId);
     }
 
     if (mode === 'nudge') {
