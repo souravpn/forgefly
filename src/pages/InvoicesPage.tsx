@@ -16,8 +16,69 @@ import type { Invoice, InvoiceStatus, PaymentStatus, Client, Project } from '@/t
 import { getInvoices, createInvoice, updateInvoice, sendInvoice, markInvoiceAsPaid, deleteInvoice, subscribeToInvoices } from '@/services/invoiceService';
 import { getClients } from '@/services/clientService';
 import { getProjects } from '@/services/projectService';
+import { useBusiness } from '@/contexts/CurrentBusinessContext';
+
+// Finds (or creates) the `contacts` row matching this client, mirroring the
+// resolution pattern used in ProposalsPage — invoices only carry a `clients.id`,
+// but portal links are generated per-contact.
+async function resolveContactId(businessId: string, name: string, email: string | null): Promise<string> {
+  if (email) {
+    const { data: existing } = await supabase
+      .from('contacts')
+      .select('id')
+      .eq('business_id', businessId)
+      .ilike('email', email)
+      .maybeSingle();
+    if (existing?.id) return existing.id;
+  }
+
+  const { data: created, error } = await supabase
+    .from('contacts')
+    .insert({ business_id: businessId, name, email })
+    .select('id')
+    .single();
+  if (error || !created) throw new Error('Failed to create contact');
+  return created.id;
+}
+
+// generate-portal-link is keyed by engagement, not by client/contact directly —
+// reuse an existing engagement for this contact if one exists, else create one.
+async function resolveEngagementId(businessId: string, contactId: string, serviceName: string): Promise<string> {
+  const { data: existing } = await supabase
+    .from('engagements')
+    .select('id')
+    .eq('business_id', businessId)
+    .eq('contact_id', contactId)
+    .maybeSingle();
+  if (existing?.id) return existing.id;
+
+  const { data: created, error } = await supabase
+    .from('engagements')
+    .insert({ business_id: businessId, contact_id: contactId, service_name: serviceName, status: 'active' })
+    .select('id')
+    .single();
+  if (error || !created) throw new Error('Failed to create engagement');
+  return created.id;
+}
+
+// A project attached to an invoice should be visible to the client in their
+// portal's Projects tab. The portal only shows projects with a non-null
+// client_visible_status, so surface it here rather than requiring a separate
+// manual toggle on the Projects page. Never overwrites a status the
+// freelancer has already set intentionally.
+async function ensureProjectVisible(projectId: string): Promise<void> {
+  const { data: project } = await supabase
+    .from('projects')
+    .select('client_visible_status')
+    .eq('id', projectId)
+    .maybeSingle();
+  if (project && !project.client_visible_status) {
+    await supabase.from('projects').update({ client_visible_status: 'in_progress' }).eq('id', projectId);
+  }
+}
 
 export default function InvoicesPage() {
+  const { business } = useBusiness();
   const [searchParams, setSearchParams] = useSearchParams();
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
@@ -127,9 +188,26 @@ export default function InvoicesPage() {
     setSubmitting(true);
 
     try {
+      // Auto-resolve contact_id from the selected client's email → contacts table
+      // (mirrors ProjectsPage.tsx) — the portal reads invoices by contact_id, so
+      // without this the client can never see their own invoice.
+      let contactId: string | null = null;
+      if (formData.client_id) {
+        const client = clients.find(c => c.id === formData.client_id);
+        if (client?.email) {
+          const { data: match } = await supabase
+            .from('contacts')
+            .select('id')
+            .eq('email', client.email)
+            .maybeSingle();
+          contactId = match?.id ?? null;
+        }
+      }
+
       const invoiceData = {
         client_id: formData.client_id || null,
         project_id: formData.project_id || null,
+        contact_id: contactId,
         amount: parseFloat(formData.amount),
         description: formData.description || null,
         issue_date: formData.issue_date || null,
@@ -151,6 +229,10 @@ export default function InvoicesPage() {
         await createInvoice(invoiceData);
         toast.success('Invoice created successfully!');
         setIsCreateModalOpen(false);
+      }
+
+      if (invoiceData.project_id) {
+        await ensureProjectVisible(invoiceData.project_id);
       }
 
       loadInvoices();
@@ -178,15 +260,42 @@ export default function InvoicesPage() {
       return;
     }
 
+    if (!business) {
+      toast.error('Business not loaded — please try again');
+      return;
+    }
+
     const isResend = selectedInvoice.status !== 'draft';
     setSendingEmail(true);
     try {
-      // Generate a fresh portal link (30-day, no-login URL for the client)
-      const { data: portalData } = await supabase.functions.invoke('generate-portal-link', {
-        body: { clientId: selectedInvoice.client_id, expiresInDays: 30 },
+      // Resolve (or create) the contact + engagement this client maps to, then
+      // generate a fresh portal link (30-day, no-login URL) scoped to it.
+      const contactId = await resolveContactId(business.id, selectedInvoice.client.name, selectedInvoice.client.email);
+      const engagementId = await resolveEngagementId(business.id, contactId, `Invoice ${selectedInvoice.invoice_number}`);
+
+      // Backfill contact_id on the invoice itself if missing — the portal's
+      // Invoices tab reads by contact_id, so invoices created before this was
+      // wired up would otherwise never show up for the client.
+      if (selectedInvoice.contact_id !== contactId) {
+        await updateInvoice(selectedInvoice.id, { contact_id: contactId });
+      }
+
+      // Backfill the linked project's portal visibility too, for invoices
+      // created before this was wired up.
+      if (selectedInvoice.project_id) {
+        await ensureProjectVisible(selectedInvoice.project_id);
+      }
+
+      const { data: portalData, error: portalErr } = await supabase.functions.invoke('generate-portal-link', {
+        body: { engagementId, clientEmail: selectedInvoice.client.email },
       });
 
-      const paymentLink = portalData?.portalUrl ?? `${window.location.origin}/portal`;
+      if (portalErr || !portalData?.portalUrl) {
+        toast.error('Failed to generate a payment link. Please try again.');
+        return;
+      }
+
+      const paymentLink = portalData.portalUrl;
 
       const dueDate = selectedInvoice.due_date
         ? new Date(selectedInvoice.due_date).toLocaleDateString('en-US', {

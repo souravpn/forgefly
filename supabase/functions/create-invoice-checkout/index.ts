@@ -5,8 +5,8 @@ const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
 const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-const successUrlPath = '/payment/success?session_id={CHECKOUT_SESSION_ID}';
-const cancelUrlPath = '/invoices';
+const defaultSuccessUrlPath = '/payment/success?session_id={CHECKOUT_SESSION_ID}';
+const defaultCancelUrlPath = '/invoices';
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -48,20 +48,48 @@ Deno.serve(async (req) => {
       return new Response("Method not allowed", { status: 405 });
     }
 
-    const { invoiceId } = await req.json();
+    const { invoiceId, portalToken } = await req.json();
     if (!invoiceId) {
       throw new Error("Invoice ID is required");
     }
 
-    // Get user from auth header
-    const authHeader = req.headers.get("Authorization");
-    const token = authHeader?.replace("Bearer ", "");
-    const { data: { user }, error: authError } = token
-      ? await supabase.auth.getUser(token)
-      : { data: { user: null }, error: null };
+    // Two callers hit this function: the freelancer paying/testing from inside
+    // the app (own session, invoice.user_id === caller.id), and the client
+    // paying from their portal (no freelancer session — access is proven by
+    // portalToken instead, resolved via the contact → business → owner chain).
+    let ownerUserId: string;
 
-    if (!user) {
-      throw new Error("Authentication required");
+    if (portalToken) {
+      const { data: contact, error: contactErr } = await supabase
+        .from("contacts")
+        .select("business_id")
+        .eq("portal_token", portalToken)
+        .maybeSingle();
+      if (contactErr || !contact) {
+        throw new Error("Invalid portal link");
+      }
+
+      const { data: biz, error: bizErr } = await supabase
+        .from("businesses")
+        .select("user_id")
+        .eq("id", contact.business_id)
+        .maybeSingle();
+      if (bizErr || !biz) {
+        throw new Error("Invalid portal link");
+      }
+
+      ownerUserId = biz.user_id;
+    } else {
+      const authHeader = req.headers.get("Authorization");
+      const token = authHeader?.replace("Bearer ", "");
+      const { data: { user } } = token
+        ? await supabase.auth.getUser(token)
+        : { data: { user: null } };
+
+      if (!user) {
+        throw new Error("Authentication required");
+      }
+      ownerUserId = user.id;
     }
 
     // Get invoice details
@@ -69,7 +97,7 @@ Deno.serve(async (req) => {
       .from("invoices")
       .select("*, clients(name, email)")
       .eq("id", invoiceId)
-      .eq("user_id", user.id)
+      .eq("user_id", ownerUserId)
       .single();
 
     if (invoiceError || !invoice) {
@@ -92,6 +120,10 @@ Deno.serve(async (req) => {
 
     // Create Stripe checkout session
     const origin = req.headers.get("origin") || "";
+    const successUrlPath = portalToken
+      ? `/portal/${portalToken}?payment=success&session_id={CHECKOUT_SESSION_ID}`
+      : defaultSuccessUrlPath;
+    const cancelUrlPath = portalToken ? `/portal/${portalToken}?payment=cancelled` : defaultCancelUrlPath;
     const session = await stripe.checkout.sessions.create({
       line_items: [
         {
@@ -112,7 +144,7 @@ Deno.serve(async (req) => {
       customer_email: invoice.clients?.email || undefined,
       metadata: {
         invoice_id: invoice.id,
-        user_id: user.id,
+        user_id: ownerUserId,
         invoice_number: invoice.invoice_number,
       },
     });
@@ -130,7 +162,7 @@ Deno.serve(async (req) => {
     await supabase
       .from("payments")
       .insert({
-        user_id: user.id,
+        user_id: ownerUserId,
         client_id: invoice.client_id,
         invoice_id: invoice.id,
         amount: invoice.amount,

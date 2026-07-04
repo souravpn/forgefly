@@ -23,10 +23,11 @@ const MAIN_NAV = [
 ]
 
 const TOOLS_NAV = [
-  { id: 'calendar',    label: 'Calendar',    icon: 'calendar',    route: '/dashboard/calendar' },
-  { id: 'visibility',  label: 'Visibility',  icon: 'sparkles',    route: '/dashboard/visibility' },
-  { id: 'automations', label: 'Automations', icon: 'bolt',        route: '/dashboard/automations' },
-  { id: 'brandkit',    label: 'Brand Kit',   icon: 'palette',     route: '/dashboard/brand' },
+  { id: 'calendar',    label: 'Calendar',      icon: 'calendar',    route: '/dashboard/calendar' },
+  { id: 'visibility',  label: 'Visibility',    icon: 'sparkles',    route: '/dashboard/visibility' },
+  { id: 'automations', label: 'Automations',   icon: 'bolt',        route: '/dashboard/automations' },
+  { id: 'brandkit',    label: 'Brand Kit',     icon: 'palette',     route: '/dashboard/brand' },
+  { id: 'outreach',    label: 'Outreach Kit',  icon: 'send',        route: '/dashboard/outreach' },
 ]
 
 const CLIENTELE_NAV = [

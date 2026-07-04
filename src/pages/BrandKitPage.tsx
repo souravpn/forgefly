@@ -5,6 +5,7 @@ import {
   Check,
   Copy,
   Download,
+  Globe,
   GripVertical,
   Image,
   Loader2,
@@ -1057,11 +1058,19 @@ export default function BrandKitPage() {
               : "Your brand colors, fonts, and voice"}
           </p>
         </div>
-        {saving && (
-          <span className="text-xs text-muted-foreground animate-pulse">
-            Saving…
-          </span>
-        )}
+        <div className="flex items-center gap-3">
+          {saving && (
+            <span className="text-xs text-muted-foreground animate-pulse">
+              Saving…
+            </span>
+          )}
+          {hasBusiness && (
+            <Button variant="outline" onClick={() => navigate("/dashboard/portfolio")}>
+              <Globe className="w-4 h-4 mr-2" />
+              Public Portfolio
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* No business CTA */}

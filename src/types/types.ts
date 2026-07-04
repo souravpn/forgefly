@@ -110,6 +110,7 @@ export interface Invoice {
   user_id: string;
   client_id: string | null;
   project_id: string | null;
+  contact_id: string | null;
   invoice_number: string;
   status: InvoiceStatus;
   payment_status: PaymentStatus;

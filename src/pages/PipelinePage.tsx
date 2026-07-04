@@ -22,7 +22,7 @@ import {
 } from '@dnd-kit/core';
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Plus, Edit, Trash2, DollarSign, Briefcase, Sparkles, Link2, ExternalLink, ChevronRight, UserPlus, Users } from 'lucide-react';
+import { Plus, Edit, Trash2, DollarSign, Briefcase, Sparkles, Link2, ExternalLink, ChevronRight, UserPlus, Users, Send } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/db/supabase';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -835,8 +835,8 @@ export default function PipelinePage() {
               className="flex-1 md:flex-none"
               onClick={() => navigate('/dashboard/outreach')}
             >
-              <Sparkles className="w-4 h-4 mr-2" />
-              Research a company
+              <Send className="w-4 h-4 mr-2" />
+              Outreach Kit
             </Button>
             <Button size="lg" className="glow-accent flex-1 md:flex-none" onClick={() => openAdd()}>
               <Plus className="w-5 h-5 mr-2" />

@@ -554,25 +554,21 @@ export default function DashboardPage() {
 
         {/* ── Quick win row card ────────────────────────────────────────────── */}
         {(showMilestone || (showNudge && nudgeContext) || milestonesComplete) && (
-          <Card>
-            <CardHeader className="pb-2">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Quick win</CardTitle>
-                <Sparkles className="w-3.5 h-3.5 text-muted-foreground" />
-              </div>
-            </CardHeader>
-            <CardContent>
-              {showMilestone ? (
-                <MilestoneCard />
-              ) : showNudge && nudgeContext ? (
-                <QuickWinNudge businessId={business!.id} context={nudgeContext} />
-              ) : (
-                <p className="text-sm text-muted-foreground leading-relaxed text-pretty">
-                  You're making progress. Check back in a few days.
-                </p>
-              )}
-            </CardContent>
-          </Card>
+          <div className="rounded-lg border border-primary/20 bg-primary/5 p-4 space-y-3">
+            <div className="flex items-center justify-end gap-1.5 text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
+              <Sparkles className="w-3.5 h-3.5" />
+              Quick Wins
+            </div>
+            {showMilestone ? (
+              <MilestoneCard />
+            ) : showNudge && nudgeContext ? (
+              <QuickWinNudge businessId={business!.id} context={nudgeContext} />
+            ) : (
+              <p className="text-sm text-muted-foreground leading-relaxed text-pretty">
+                You're making progress. Check back in a few days.
+              </p>
+            )}
+          </div>
         )}
 
         {/* ── Row 2: 3-col ─────────────────────────────────────────────────── */}

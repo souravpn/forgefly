@@ -1044,8 +1044,53 @@ Return this shape exactly:
       });
     }
 
+    if (mode === 'target_personas') {
+      const { niche, services } = body as { niche?: string; services?: string[] };
+
+      const system = `You are a go-to-market strategist helping a freelancer who just signed up figure out who to reach out to first. Given their niche and services, produce 3-4 distinct target personas.
+
+CRITICAL: Do NOT invent specific company names, contact names, or claim to have researched real companies. Only describe company ARCHETYPES/categories and where to look for them. This is a directional brainstorm, not a verified lead list.
+
+Keep every field to one concise sentence (under 25 words). Brevity matters more than exhaustiveness — this must fit a strict token budget.
+
+Return ONLY valid JSON (no markdown) with this exact shape:
+{
+  "personas": [
+    {
+      "persona_label": "short name for this persona, e.g. 'Seed-stage founder without a design hire'",
+      "company_profile": "company stage/size/vertical description, one sentence",
+      "buyer_role": "who typically signs off on hiring a freelancer here, one sentence",
+      "trigger": "what situation makes them likely to hire right now, one sentence",
+      "where_to_find": "a concrete channel or search strategy, one sentence — e.g. a platform, search string, or community, not a named company"
+    }
+  ]
+}`;
+
+      const userMsg = `Niche: ${niche || 'general freelance services'}\nServices offered: ${(services ?? []).join(', ') || 'not specified'}`;
+
+      const res = await callAnthropic({
+        model: SONNET,
+        max_tokens: 2000,
+        temperature: 0.5,
+        system,
+        messages: [{ role: 'user', content: userMsg }],
+      });
+
+      const raw = res.content[0]?.text?.trim() ?? '{}';
+      let parsed: Record<string, unknown> = {};
+      try {
+        parsed = JSON.parse(raw.replace(/```(?:json)?\n?/g, '').replace(/```/g, '').trim());
+      } catch { /* fall through to empty */ }
+
+      await logUsage(supabase, userId, null, SONNET, 'target_personas', res.usage.input_tokens, res.usage.output_tokens);
+
+      return new Response(JSON.stringify({ personas: parsed.personas ?? [] }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     return new Response(
-      JSON.stringify({ error: 'mode must be "extract", "classify", "generate_proposal", "chat", or "nudge"' }),
+      JSON.stringify({ error: 'mode must be "extract", "classify", "generate_proposal", "chat", "nudge", or "target_personas"' }),
       { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
     );
   } catch (error) {

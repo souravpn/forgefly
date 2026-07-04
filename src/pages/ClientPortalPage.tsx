@@ -813,7 +813,7 @@ function ContactHub({
         },
       );
       if (error) throw error;
-      if (data?.url) window.location.href = data.url;
+      if (data?.data?.url) window.location.href = data.data.url;
       else throw new Error("No checkout URL returned");
     } catch (err: unknown) {
       toast.error((err as Error).message || "Payment failed");
@@ -2268,7 +2268,7 @@ function EngagementPortal({
         },
       );
       if (error) throw error;
-      if (data?.url) window.location.href = data.url;
+      if (data?.data?.url) window.location.href = data.data.url;
       else throw new Error("No checkout URL returned");
     } catch (err: unknown) {
       toast.error((err as Error).message || "Failed to initiate payment");

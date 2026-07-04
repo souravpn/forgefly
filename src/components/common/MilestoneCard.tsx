@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
 import { supabase } from '@/db/supabase'
 import { useBusiness } from '@/contexts/CurrentBusinessContext'
 import type { OnboardingMilestones } from '@/hooks/useCurrentBusiness'
@@ -107,26 +106,31 @@ export function MilestoneCard() {
   }
 
   return (
-    <Card className="border-primary/20 bg-primary/5">
-      <CardContent className="p-4 space-y-3">
-        <div>
-          <p className="text-sm font-semibold">{config.label}</p>
-          <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{config.description}</p>
-        </div>
-        <div className="flex items-center justify-between gap-3">
+    <div className="space-y-3">
+      <div>
+        <p className="text-sm font-semibold">{config.label}</p>
+        <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{config.description}</p>
+      </div>
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
           <Button size="sm" className="text-xs" onClick={handleGo}>
             {config.action}
             <ArrowRight className="w-3.5 h-3.5 ml-1" />
           </Button>
-          <button
-            type="button"
-            onClick={handleSkip}
-            className="text-xs text-muted-foreground hover:text-foreground transition-colors underline-offset-2 hover:underline"
-          >
-            skip for now
-          </button>
+          {activeMilestone === 'portfolio_shared' && (
+            <Button size="sm" variant="outline" className="text-xs" onClick={() => navigate('/dashboard/outreach')}>
+              Open Outreach Kit
+            </Button>
+          )}
         </div>
-      </CardContent>
-    </Card>
+        <button
+          type="button"
+          onClick={handleSkip}
+          className="text-xs text-muted-foreground hover:text-foreground transition-colors underline-offset-2 hover:underline"
+        >
+          skip for now
+        </button>
+      </div>
+    </div>
   )
 }

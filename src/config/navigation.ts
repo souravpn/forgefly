@@ -15,6 +15,7 @@ export const MORE_ITEMS = [
   { id: 'messages',    label: 'Messages',    icon: 'message-square',   route: '/dashboard/messages' },
   { id: 'calendar',    label: 'Calendar',    icon: 'calendar',         route: '/dashboard/calendar' },
   { id: 'automations', label: 'Automations', icon: 'bolt',             route: '/dashboard/automations' },
+  { id: 'outreach',    label: 'Outreach Kit', icon: 'send',            route: '/dashboard/outreach' },
   { id: 'social',      label: 'Social',      icon: 'share2',           route: '/dashboard/social' },
   { id: 'settings',    label: 'Settings',    icon: 'settings',         route: '/dashboard/settings' },
 ] as const

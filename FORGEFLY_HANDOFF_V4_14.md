@@ -95,12 +95,12 @@ Also fixed `supabase/functions/submit-proposal-request/index.ts` (external/clien
 
 ## Pending / not yet done
 
-- [ ] **Commit all uncommitted changes** (23 files — `tsc --noEmit` and `vite build` both pass; only pre-existing `biome` organize-imports notices, not new)
-- [ ] **Deploy 2 edge functions:** `portal-approve-proposal`, `submit-proposal-request` (code changed, not yet deployed)
+- [x] **Commit all uncommitted changes** (23 files) — done 2026-07-03
+- [x] **Deploy 2 edge functions:** `portal-approve-proposal`, `submit-proposal-request` — deployed 2026-07-03
 - [ ] **Run 2 one-off SQL backfills given to user** (status unconfirmed):
   - Link/grant fix for the specific broken engagement (`portal_token = '65bd9b34de483e3f'`) — contact link + `engagement_access` grant
   - Backfill for Freeda's already-approved proposal + already-sent message (status, messages `business_id`/`client_id`, nudge/notification)
-- [ ] **DB webhook for `schedule-review-request`** — SQL command given (pg_net trigger, mirrors `00033_toggl_sync_cron.sql`); Dashboard-UI alternative also given; run status unconfirmed (carried forward from V4.13)
+- [x] **DB webhook for `schedule-review-request`** — ran 2026-07-03 (carried forward from V4.13)
 - [ ] Confirm blur/shadow strength on the transparent panels reads well in practice (only eyeballed via description, not a live browser session)
 - [ ] Old proposals/engagements created before the Section 8/9/10 fixes may still have broken links — not retroactively fixed except the two specific one-off cases above
 - [ ] Phase I still not specced (carried forward from V4.13)
