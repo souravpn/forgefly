@@ -16,6 +16,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { UpgradeModal } from "@/components/common/UpgradeModal";
 import { useAuth } from "@/contexts/AuthContext";
+import { useBusiness } from "@/contexts/CurrentBusinessContext";
 import {
   addCompetitor,
   approveSocialPost,
@@ -419,32 +420,69 @@ function SocialWorkspace() {
   );
 }
 
-export default function SocialPage() {
-  const { isAgency } = useAuth();
+function SocialLocked({
+  message,
+  showUpgradeCta,
+}: {
+  message: string;
+  showUpgradeCta: boolean;
+}) {
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
 
-  if (!isAgency) {
-    return (
-      <div className="space-y-6 md:space-y-8">
-        <div>
-          <h1 className="text-3xl md:text-4xl font-bold text-balance mb-1">Social</h1>
-        </div>
-        <Card className="border-dashed">
-          <CardContent className="flex flex-col items-center justify-center py-20 text-center gap-4">
-            <div className="w-16 h-16 rounded-full bg-accent/10 flex items-center justify-center">
-              <Share2 className="w-8 h-8 text-accent" />
-            </div>
-            <p className="text-muted-foreground max-w-md text-pretty">
-              AI-drafted Instagram captions and competitor tracking are an agency-tier feature.
-            </p>
+  return (
+    <div className="space-y-6 md:space-y-8">
+      <div>
+        <h1 className="text-3xl md:text-4xl font-bold text-balance mb-1">Social</h1>
+      </div>
+      <Card className="border-dashed">
+        <CardContent className="flex flex-col items-center justify-center py-20 text-center gap-4">
+          <div className="w-16 h-16 rounded-full bg-accent/10 flex items-center justify-center">
+            <Share2 className="w-8 h-8 text-accent" />
+          </div>
+          <p className="text-muted-foreground max-w-md text-pretty">{message}</p>
+          {showUpgradeCta && (
             <Button onClick={() => setShowUpgradeModal(true)}>
               <Crown className="w-4 h-4 mr-2" />
               Upgrade to Agency
             </Button>
-          </CardContent>
-        </Card>
+          )}
+        </CardContent>
+      </Card>
+      {showUpgradeCta && (
         <UpgradeModal open={showUpgradeModal} onOpenChange={setShowUpgradeModal} />
-      </div>
+      )}
+    </div>
+  );
+}
+
+export default function SocialPage() {
+  const { isAgency } = useAuth();
+  const { extractedData, isLoading } = useBusiness();
+
+  if (isLoading) return null;
+
+  if (!isAgency) {
+    return (
+      <SocialLocked
+        message="AI-drafted Instagram captions and competitor tracking are an agency-tier feature."
+        showUpgradeCta
+      />
+    );
+  }
+
+  // Private beta gate — Instagram/WhatsApp publishing is still being tested against a personal
+  // Meta developer account, so this stays hidden from agency-tier beta users until that's further along.
+  const settings = (extractedData as Record<string, unknown> | null)?.settings as
+    | Record<string, unknown>
+    | undefined;
+  const betaEnabled = settings?.social_beta_enabled === true;
+
+  if (!betaEnabled) {
+    return (
+      <SocialLocked
+        message="Social is in private beta while we finish testing Instagram and WhatsApp integration. It'll open up to everyone soon."
+        showUpgradeCta={false}
+      />
     );
   }
 
