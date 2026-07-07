@@ -457,6 +457,19 @@ export default function SignupPage() {
               Sign in
             </Link>
           </p>
+
+          <p
+            className="text-center text-sm mt-3"
+            style={{ color: "rgba(255,255,255,0.35)" }}
+          >
+            <Link
+              to="/"
+              className="hover:underline"
+              style={{ color: "rgba(255,255,255,0.5)" }}
+            >
+              ← Back to home
+            </Link>
+          </p>
         </div>
       </motion.div>
     </div>

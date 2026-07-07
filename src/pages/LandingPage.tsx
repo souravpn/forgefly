@@ -162,15 +162,6 @@ export default function LandingPage() {
   const [navScrolled, setNavScrolled] = useState(false);
   const [activeHowStep, setActiveHowStep] = useState(0);
 
-  const [typeTarget, setTypeTarget] = useState<{ text: string; nonce: number }>(
-    {
-      text: SEED_EXAMPLES[0],
-      nonce: 0,
-    },
-  );
-
-  const typingRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
   const stepRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const howPanelRefs = useRef<(HTMLDivElement | null)[]>([]);
 
@@ -189,28 +180,6 @@ export default function LandingPage() {
       document.head.removeChild(link);
     };
   }, []);
-
-  // Typewriter — reruns when a chip is clicked (nonce changes)
-  useEffect(() => {
-    let charIndex = 0;
-    let cancelled = false;
-    const { text } = typeTarget;
-    const typeNext = () => {
-      if (cancelled) return;
-      setSeedPrompt(text.slice(0, charIndex));
-      if (charIndex <= text.length) {
-        charIndex++;
-        typingRef.current = setTimeout(typeNext, 18);
-      }
-    };
-    // Short delay on chip-triggered retypes; longer on initial load
-    const isDefault = typeTarget.nonce === 0;
-    typingRef.current = setTimeout(typeNext, isDefault ? 600 : 30);
-    return () => {
-      cancelled = true;
-      if (typingRef.current) clearTimeout(typingRef.current);
-    };
-  }, [typeTarget]);
 
   // Nav scroll
   useEffect(() => {
@@ -579,10 +548,7 @@ export default function LandingPage() {
                   type="button"
                   onClick={() => {
                     setActiveChip(i);
-                    setTypeTarget({
-                      text: SEED_EXAMPLES[i + 1],
-                      nonce: Date.now(),
-                    });
+                    setSeedPrompt(SEED_EXAMPLES[i + 1]);
                   }}
                   className={`px-4 py-2 rounded-full text-sm border transition-colors ${
                     activeChip === i
@@ -593,6 +559,18 @@ export default function LandingPage() {
                   {chip}
                 </button>
               ))}
+              {(activeChip !== null || seedPrompt.trim().length > 0) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveChip(null);
+                    setSeedPrompt("");
+                  }}
+                  className="px-4 py-2 rounded-full text-sm border border-white/10 text-gray-500 hover:border-white/30 hover:text-gray-300 transition-colors"
+                >
+                  Cancel
+                </button>
+              )}
             </div>
           </div>
           {/* ── END SEED SECTION ──────────────────────────────────────────── */}
