@@ -30,6 +30,8 @@ import ReviewsPage from './pages/ReviewsPage';
 import PortfolioPage from './pages/PortfolioPage';
 import ProjectPage from './pages/ProjectPage';
 import SocialPage from './pages/SocialPage';
+import ContactPage from './pages/ContactPage';
+import DocumentationPage from './pages/DocumentationPage';
 
 export interface RouteConfig {
   name: string;
@@ -88,6 +90,18 @@ export const routes: RouteConfig[] = [
     name: 'Review Submit',
     path: '/review/:token',
     element: <ReviewSubmitPage />,
+    public: true,
+  },
+  {
+    name: 'Contact',
+    path: '/contact',
+    element: <ContactPage />,
+    public: true,
+  },
+  {
+    name: 'Documentation',
+    path: '/documentation',
+    element: <DocumentationPage />,
     public: true,
   },
 

@@ -4,6 +4,8 @@ import { Button } from "@/components/ui/button";
 import { ArrowRight, AlertTriangle, Star } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/db/supabase";
+import { SiteHeader } from "@/components/marketing/SiteHeader";
+import { SiteFooter } from "@/components/marketing/SiteFooter";
 
 function validatePrompt(prompt: string): string | null {
   const trimmed = prompt.trim();
@@ -86,6 +88,18 @@ const PAGE_CSS = `
 
   .ff-hero-content { position: relative; z-index: 1; }
 
+  .ff-cta-section { position: relative; }
+
+  .ff-cta-section::before {
+    content: '';
+    position: absolute; inset: 0; pointer-events: none; z-index: 0;
+    background-image: url('/CTA-bg.png');
+    background-size: cover;
+    background-position: bottom 25% center;
+    background-repeat: no-repeat;
+    opacity: 0.2;
+  }
+
   .ff-how-panel {
     opacity: 0; transform: translateY(20px);
     transition: opacity 0.6s ease, transform 0.6s ease;
@@ -127,6 +141,7 @@ const PAGE_CSS = `
     .ff-feature-pair { display: flex !important; flex-direction: column !important; margin-bottom: 56px !important; }
     .ff-feature-pair > * { order: unset !important; }
     .ff-pricing-grid { grid-template-columns: 1fr !important; max-width: 420px !important; margin: 0 auto !important; }
+    .ff-cta-section::before { background-position: bottom 25% center !important; background-size: cover !important; }
   }
 
   @media (prefers-reduced-motion: reduce) {
@@ -159,15 +174,31 @@ export default function LandingPage() {
   const [activeChip, setActiveChip] = useState<number | null>(null);
   const [generating, setGenerating] = useState(false);
   const [genStep, setGenStep] = useState(0);
-  const [navScrolled, setNavScrolled] = useState(false);
   const [activeHowStep, setActiveHowStep] = useState(0);
 
   const stepRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const howPanelRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const seedTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  const focusSeedPrompt = () => {
+    seedTextareaRef.current?.scrollIntoView({
+      behavior: "smooth",
+      block: "center",
+    });
+    seedTextareaRef.current?.focus();
+  };
 
   useEffect(() => {
     if (user) navigate("/dashboard");
   }, [user, navigate]);
+
+  // Scroll to section when arriving via a cross-page hash link (e.g. /#pricing from Contact)
+  useEffect(() => {
+    if (!window.location.hash) return;
+    const id = window.location.hash.slice(1);
+    const el = document.getElementById(id);
+    if (el) setTimeout(() => el.scrollIntoView({ behavior: "smooth" }), 100);
+  }, []);
 
   // Inject Sora font
   useEffect(() => {
@@ -179,13 +210,6 @@ export default function LandingPage() {
     return () => {
       document.head.removeChild(link);
     };
-  }, []);
-
-  // Nav scroll
-  useEffect(() => {
-    const h = () => setNavScrolled(window.scrollY > 40);
-    window.addEventListener("scroll", h, { passive: true });
-    return () => window.removeEventListener("scroll", h);
   }, []);
 
   // How-it-works IntersectionObserver
@@ -340,107 +364,7 @@ export default function LandingPage() {
     >
       <style>{PAGE_CSS}</style>
 
-      {/* ── Nav ─────────────────────────────────────────────────────────────── */}
-      <nav
-        style={{
-          position: "fixed",
-          top: 0,
-          left: 0,
-          right: 0,
-          zIndex: 100,
-          transition: "background 0.3s ease, border-color 0.3s ease",
-          background: navScrolled ? "rgba(8,13,11,0.85)" : "transparent",
-          backdropFilter: navScrolled ? "blur(16px)" : "none",
-          borderBottom: navScrolled
-            ? `1px solid ${S.border}`
-            : "1px solid transparent",
-        }}
-      >
-        <div
-          style={{
-            maxWidth: "1152px",
-            margin: "0 auto",
-            padding: "0 24px",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            height: "64px",
-          }}
-        >
-          {/* Logo */}
-          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-            <img
-              src="/forgefly-icon.png"
-              alt="Forgefly"
-              style={{ width: "32px", height: "32px", borderRadius: "8px" }}
-            />
-            <span
-              style={{
-                fontFamily: sora,
-                fontWeight: 600,
-                fontSize: "1.05rem",
-                color: S.text,
-              }}
-            >
-              Forgefly
-            </span>
-          </div>
-
-          {/* Center links */}
-          <div className="hidden md:flex" style={{ gap: "32px" }}>
-            {[
-              { label: "How it works", id: "how" },
-              { label: "Features", id: "features" },
-              { label: "Pricing", id: "pricing" },
-            ].map(({ label, id }) => (
-              <button
-                key={id}
-                type="button"
-                onClick={() =>
-                  document
-                    .getElementById(id)
-                    ?.scrollIntoView({ behavior: "smooth" })
-                }
-                style={{
-                  background: "none",
-                  border: "none",
-                  cursor: "pointer",
-                  color: S.mid,
-                  fontSize: "0.875rem",
-                  transition: "color 0.2s",
-                }}
-                onMouseEnter={(e) => (e.currentTarget.style.color = S.text)}
-                onMouseLeave={(e) => (e.currentTarget.style.color = S.mid)}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-
-          {/* Right actions */}
-          <div style={{ display: "flex", alignItems: "center", gap: "18px" }}>
-            <button
-              type="button"
-              onClick={() => navigate("/login")}
-              style={{
-                background: `linear-gradient(135deg, ${S.em}, ${S.em2})`,
-                color: "#fff",
-                border: "none",
-                borderRadius: "9999px",
-                padding: "8px 20px",
-                fontSize: "0.875rem",
-                fontWeight: 500,
-                cursor: "pointer",
-                transition: "opacity 0.2s",
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.85")}
-              onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
-            >
-              Sign in
-            </button>
-          </div>
-        </div>
-      </nav>
+      <SiteHeader />
 
       {/* ── Hero ────────────────────────────────────────────────────────────── */}
       <section
@@ -501,14 +425,16 @@ export default function LandingPage() {
           <div className="max-w-3xl mx-auto animate-in fade-in slide-in-from-bottom-6 duration-700 delay-400">
             <div className="rounded-2xl border border-white/15 bg-white/5 backdrop-blur-sm shadow-2xl overflow-hidden">
               <textarea
+                ref={seedTextareaRef}
                 value={seedPrompt}
                 onChange={(e) => {
                   setSeedPrompt(e.target.value);
                   setActiveChip(null);
                 }}
                 placeholder="Describe your business - For Example: What do you do? Where are you based? Who is your potential clientele? What Services/Packagaes/Options you provide? Any Brand specific color?  ** You can always add/edit these after creating the Business OS."
-                className="w-full bg-transparent text-white text-base italic leading-relaxed p-6 pb-4 resize-none outline-none placeholder:text-gray-500 placeholder:not-italic min-h-[100px]"
+                className="w-full bg-transparent text-white text-base italic leading-relaxed p-6 pb-4 resize-none outline-none placeholder:text-gray-500 placeholder:italic min-h-[100px]"
                 rows={3}
+                a
               />
               {/* Fixed-height warning row — always reserves space */}
               <div className="h-8 flex items-center px-6">
@@ -1679,7 +1605,7 @@ export default function LandingPage() {
               Start free. Scale when you're ready.
             </h2>
             <p style={{ color: S.mid }}>
-              14-day free trial on all plans. No credit card required.
+              30-day free trial on all plans. No credit card required.
             </p>
           </div>
 
@@ -1695,7 +1621,7 @@ export default function LandingPage() {
             {[
               {
                 name: "Solo",
-                price: "$19",
+                price: "$9.99",
                 period: "/mo",
                 desc: "Core ops for solo freelancers",
                 featured: false,
@@ -1712,8 +1638,8 @@ export default function LandingPage() {
                 ],
               },
               {
-                name: "Studio",
-                price: "$49",
+                name: "Pro",
+                price: "$14.99",
                 period: "/mo",
                 desc: "Full AI suite for serious freelancers",
                 featured: true,
@@ -1726,24 +1652,25 @@ export default function LandingPage() {
                   "Time tracking + profitability",
                   "Testimonial engine",
                   "Advanced AI copilot",
-                  "–",
+                  "Priority support",
                 ],
               },
               {
-                name: "Pro",
-                price: "$89",
-                period: "/mo",
-                desc: "Power users & growing agencies",
+                name: "Agency",
+                price: "Contact for Pricing",
+                period: "",
+                desc: "For teams who want a customized business OS",
                 featured: false,
                 delay: "0.2s",
+                contactSales: true,
                 features: [
-                  "Everything in Studio",
+                  "Everything in Pro",
                   "Opus-tier AI (highest accuracy)",
                   "Custom domain",
                   "Demand signals",
                   "Tax export (CSV)",
                   "White-label portals",
-                  "Priority support",
+                  "Team member management",
                   "API access",
                 ],
               },
@@ -1809,16 +1736,18 @@ export default function LandingPage() {
                     style={{
                       fontFamily: sora,
                       fontWeight: 600,
-                      fontSize: "2.8rem",
+                      fontSize: plan.contactSales ? "1.5rem" : "2.8rem",
                       color: S.text,
-                      lineHeight: 1,
+                      lineHeight: 1.2,
                     }}
                   >
                     {plan.price}
                   </span>
-                  <span style={{ color: S.dim, marginBottom: "6px" }}>
-                    {plan.period}
-                  </span>
+                  {plan.period && (
+                    <span style={{ color: S.dim, marginBottom: "6px" }}>
+                      {plan.period}
+                    </span>
+                  )}
                 </div>
                 <p
                   style={{
@@ -1870,7 +1799,9 @@ export default function LandingPage() {
                 </ul>
                 <button
                   type="button"
-                  onClick={() => navigate("/login")}
+                  onClick={() =>
+                    navigate(plan.contactSales ? "/contact" : "/login")
+                  }
                   style={{
                     width: "100%",
                     padding: "12px",
@@ -1888,7 +1819,7 @@ export default function LandingPage() {
                   onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.82")}
                   onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
                 >
-                  Start free trial
+                  {plan.contactSales ? "Contact sales" : "Start free trial"}
                 </button>
               </div>
             ))}
@@ -1909,6 +1840,7 @@ export default function LandingPage() {
       {/* ── Closing CTA ─────────────────────────────────────────────────────── */}
       <section
         id="closing"
+        className="ff-cta-section"
         style={{
           padding: "120px 0",
           background: S.bg,
@@ -2028,48 +1960,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── Footer ──────────────────────────────────────────────────────────── */}
-      <footer
-        style={{
-          borderTop: `1px solid ${S.border2}`,
-          padding: "32px 24px",
-          background: S.bg,
-        }}
-      >
-        <div
-          style={{
-            maxWidth: "1152px",
-            margin: "0 auto",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            flexWrap: "wrap",
-            gap: "16px",
-          }}
-        >
-          <p style={{ color: S.dim, fontSize: "0.82rem" }}>
-            © {new Date().getFullYear()} Forgefly. Built for the solo operator.
-          </p>
-          <div style={{ display: "flex", gap: "24px" }}>
-            {["Privacy", "Terms", "Contact"].map((link) => (
-              <a
-                key={link}
-                href="#"
-                style={{
-                  color: S.dim,
-                  fontSize: "0.82rem",
-                  textDecoration: "none",
-                  transition: "color 0.2s",
-                }}
-                onMouseEnter={(e) => (e.currentTarget.style.color = S.mid)}
-                onMouseLeave={(e) => (e.currentTarget.style.color = S.dim)}
-              >
-                {link}
-              </a>
-            ))}
-          </div>
-        </div>
-      </footer>
+      <SiteFooter />
     </div>
   );
 }

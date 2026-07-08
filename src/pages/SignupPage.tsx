@@ -187,19 +187,20 @@ export default function SignupPage() {
         {/* Logo */}
         <div className="text-center mb-8">
           <motion.div
-            className="inline-flex items-center gap-3 mb-3"
             initial={{ scale: 0.9, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             transition={{ delay: 0.1 }}
           >
-            <img
-              src="/forgefly-icon.png"
-              alt="Forgefly Logo"
-              className="w-10 h-10 rounded-lg"
-            />
-            <span className="text-2xl font-black text-white tracking-tight">
-              Forgefly
-            </span>
+            <Link to="/" className="inline-flex items-center gap-3 mb-3">
+              <img
+                src="/forgefly-icon.png"
+                alt="Forgefly Logo"
+                className="w-10 h-10 rounded-lg"
+              />
+              <span className="text-2xl font-black text-white tracking-tight">
+                Forgefly
+              </span>
+            </Link>
           </motion.div>
           <p className="text-sm" style={{ color: "rgba(139,92,246,0.9)" }}>
             Create your account

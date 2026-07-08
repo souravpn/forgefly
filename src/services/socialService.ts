@@ -39,7 +39,32 @@ export async function generateSocialDrafts(): Promise<SocialPost[]> {
   return (data?.posts as SocialPost[]) ?? [];
 }
 
-export async function approveSocialPost(id: string): Promise<SocialPost> {
+export async function uploadSocialImage(postId: string, file: File): Promise<string> {
+  const user = await currentUser();
+  const businessId = await resolveBusinessId(user.id);
+  const ext = file.name.split('.').pop();
+  const filename = `social/${businessId}/${postId}/${Date.now()}.${ext}`;
+
+  const { error: uploadError } = await supabase.storage
+    .from('work-samples')
+    .upload(filename, file, { upsert: true });
+  if (uploadError) throw uploadError;
+
+  const { data: publicUrlData } = supabase.storage.from('work-samples').getPublicUrl(filename);
+  const imageUrl = publicUrlData.publicUrl;
+
+  const { error } = await supabase
+    .from('social_posts')
+    .update({ image_url: imageUrl })
+    .eq('id', postId);
+  if (error) throw error;
+
+  return imageUrl;
+}
+
+export async function approveSocialPost(id: string, imageUrl: string | null): Promise<SocialPost> {
+  if (!imageUrl) throw new Error('Attach an image before approving — Instagram requires media on every post');
+
   const { data, error } = await supabase
     .from('social_posts')
     .update({ status: 'approved', approved_at: new Date().toISOString() })
@@ -58,6 +83,14 @@ export async function archiveSocialPost(id: string): Promise<void> {
     .eq('id', id);
 
   if (error) throw error;
+}
+
+export async function publishSocialPost(id: string): Promise<{ published: boolean; platform_post_id: string }> {
+  const { data, error } = await supabase.functions.invoke('social-publish-instagram', {
+    body: { social_post_id: id },
+  });
+  if (error) throw error;
+  return data;
 }
 
 // ─── Competitors ────────────────────────────────────────────────────────────

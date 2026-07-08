@@ -21,6 +21,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useBusiness } from "@/contexts/CurrentBusinessContext";
 import { supabase } from "@/db/supabase";
 import type { BusinessProfile } from "@/types/types";
+import { UpgradeModal } from "@/components/common/UpgradeModal";
 
 const TIMEZONES = [
   { value: 'Pacific/Honolulu',    label: 'Hawaii (UTC-10)' },
@@ -52,7 +53,7 @@ type ConnectStatus = {
 };
 
 export default function SettingsPage() {
-  const { user, profile, signOut } = useAuth();
+  const { user, profile, signOut, subscription } = useAuth();
   const { business } = useBusiness();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -62,6 +63,8 @@ export default function SettingsPage() {
   const [connectStatus, setConnectStatus] = useState<ConnectStatus | null>(null);
   const [connectLoading, setConnectLoading] = useState(false);
   const [connectStatusLoading, setConnectStatusLoading] = useState(false);
+  const [nextBillingDate, setNextBillingDate] = useState<string | null>(null);
+  const [upgradeModalOpen, setUpgradeModalOpen] = useState(false);
 
   // Public identity (writes to businesses table)
   const [publicIdent, setPublicIdent] = useState({
@@ -106,6 +109,16 @@ export default function SettingsPage() {
       loadBusinessProfile();
       loadConnectStatus();
     }
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) return;
+    supabase
+      .from('subscriptions')
+      .select('current_period_end')
+      .eq('user_id', user.id)
+      .maybeSingle()
+      .then(({ data }) => setNextBillingDate(data?.current_period_end ?? null));
   }, [user]);
 
   useEffect(() => {
@@ -794,6 +807,49 @@ export default function SettingsPage() {
             </CardContent>
           </Card>
 
+          {/* Billing & Subscription */}
+          <Card className="mt-6">
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <CreditCard className="w-5 h-5 text-accent" />
+                <CardTitle className="text-balance">Billing and Subscription</CardTitle>
+              </div>
+              <CardDescription>
+                Your current plan and billing details
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between p-4 rounded-lg border bg-muted/30">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <p className="font-semibold capitalize">
+                      {subscription?.tier ?? "Freelancer"} plan
+                    </p>
+                    <Badge variant={subscription?.status === "active" ? "default" : "secondary"} className="capitalize">
+                      {subscription?.status ?? "active"}
+                    </Badge>
+                  </div>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    {subscription?.tier === "agency"
+                      ? `$${subscription.billing_cycle === "yearly" ? "290/yr" : "29/mo"}`
+                      : "Free"}
+                    {subscription?.billing_cycle && subscription.tier === "agency" && (
+                      <span className="capitalize"> · billed {subscription.billing_cycle}</span>
+                    )}
+                  </p>
+                  {nextBillingDate && (
+                    <p className="text-sm text-muted-foreground">
+                      Next billing date: {new Date(nextBillingDate).toLocaleDateString()}
+                    </p>
+                  )}
+                </div>
+                <Button onClick={() => setUpgradeModalOpen(true)}>
+                  {subscription?.tier === "agency" ? "Manage plan" : "Upgrade your plan"}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
           {/* Delete Account danger zone */}
           <Card className="border-destructive/30 mt-6">
             <CardHeader
@@ -1210,6 +1266,8 @@ function AIHistoryTab() {
           )}
         </CardContent>
       </Card>
+
+      <UpgradeModal open={upgradeModalOpen} onOpenChange={setUpgradeModalOpen} />
     </div>
   );
 }

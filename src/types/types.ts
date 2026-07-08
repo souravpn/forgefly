@@ -346,7 +346,7 @@ export interface ContractorPayment {
   created_at: string;
 }
 
-export type SocialPostStatus = 'draft' | 'approved' | 'archived';
+export type SocialPostStatus = 'draft' | 'approved' | 'archived' | 'published';
 export type SocialPostSource = 'ai_generated' | 'manual';
 
 export interface SocialPost {
@@ -358,6 +358,9 @@ export interface SocialPost {
   source: SocialPostSource;
   created_at: string;
   approved_at: string | null;
+  image_url: string | null;
+  platform_post_id: string | null;
+  published_at: string | null;
 }
 
 export type CompetitorSource = 'ai_suggested' | 'manual';

@@ -1,6 +1,7 @@
 import {
   Crown,
   ExternalLink,
+  ImagePlus,
   Loader2,
   Search,
   Share2,
@@ -8,7 +9,7 @@ import {
   ThumbsDown,
   X,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -27,7 +28,9 @@ import {
   getCompetitors,
   getCompetitorIntel,
   getSocialPosts,
+  publishSocialPost,
   suggestCompetitors,
+  uploadSocialImage,
 } from "@/services/socialService";
 import type { CompetitorProfile, CompetitorSiteIntel, SocialPost } from "@/types/types";
 
@@ -64,6 +67,145 @@ function CompeteRow({
         </Button>
       </div>
     </div>
+  );
+}
+
+function DraftPostCard({
+  post,
+  onApprove,
+  onArchive,
+  onImageUploaded,
+}: {
+  post: SocialPost;
+  onApprove: (id: string, imageUrl: string | null) => void;
+  onArchive: (id: string) => void;
+  onImageUploaded: (id: string, imageUrl: string) => void;
+}) {
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      const url = await uploadSocialImage(post.id, file);
+      onImageUploaded(post.id, url);
+    } catch {
+      toast.error("Failed to upload image");
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }
+
+  return (
+    <Card>
+      <CardContent className="p-4 space-y-3">
+        <p className="text-sm whitespace-pre-wrap">{post.caption}</p>
+
+        {post.image_url ? (
+          <img
+            src={post.image_url}
+            alt="Post attachment"
+            className="w-full max-w-xs rounded-lg border"
+          />
+        ) : (
+          <p className="text-xs text-amber-600">
+            Instagram requires an image on every post — attach one before approving.
+          </p>
+        )}
+
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={handleFileChange}
+        />
+
+        <div className="flex gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={uploading}
+            onClick={() => fileInputRef.current?.click()}
+          >
+            {uploading ? (
+              <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+            ) : (
+              <ImagePlus className="w-3.5 h-3.5 mr-1.5" />
+            )}
+            {post.image_url ? "Replace image" : "Add image"}
+          </Button>
+          <Button
+            size="sm"
+            disabled={!post.image_url}
+            onClick={() => onApprove(post.id, post.image_url)}
+          >
+            Approve
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => onArchive(post.id)}>
+            <ThumbsDown className="w-3.5 h-3.5 mr-1.5" />
+            Dismiss
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function PublishablePostCard({
+  post,
+  onPublished,
+}: {
+  post: SocialPost;
+  onPublished: (id: string, platformPostId: string) => void;
+}) {
+  const [publishing, setPublishing] = useState(false);
+
+  async function handlePublish() {
+    setPublishing(true);
+    try {
+      const result = await publishSocialPost(post.id);
+      onPublished(post.id, result.platform_post_id);
+      toast.success("Published to Instagram");
+    } catch (err: unknown) {
+      toast.error((err as Error).message || "Failed to publish");
+    } finally {
+      setPublishing(false);
+    }
+  }
+
+  const isPublished = post.status === "published";
+
+  return (
+    <Card className={isPublished ? "border-emerald-500/30" : undefined}>
+      <CardContent className="p-4 space-y-3">
+        <p className="text-sm whitespace-pre-wrap">{post.caption}</p>
+        {post.image_url && (
+          <img
+            src={post.image_url}
+            alt="Post attachment"
+            className="w-full max-w-xs rounded-lg border"
+          />
+        )}
+        {isPublished ? (
+          <p className="text-xs text-emerald-600">
+            Published — post ID {post.platform_post_id}
+          </p>
+        ) : (
+          <Button size="sm" disabled={publishing} onClick={handlePublish}>
+            {publishing ? (
+              <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+            ) : (
+              <Sparkles className="w-3.5 h-3.5 mr-1.5" />
+            )}
+            {publishing ? "Publishing…" : "Publish to Instagram"}
+          </Button>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -171,12 +313,12 @@ function SocialWorkspace() {
     }
   }
 
-  async function handleApprove(id: string) {
+  async function handleApprove(id: string, imageUrl: string | null) {
     try {
-      const updated = await approveSocialPost(id);
+      const updated = await approveSocialPost(id, imageUrl);
       setPosts((prev) => prev.map((p) => (p.id === id ? updated : p)));
-    } catch {
-      toast.error("Failed to approve");
+    } catch (err: unknown) {
+      toast.error((err as Error).message || "Failed to approve");
     }
   }
 
@@ -187,6 +329,20 @@ function SocialWorkspace() {
     } catch {
       toast.error("Failed to dismiss");
     }
+  }
+
+  function handleImageUploaded(id: string, imageUrl: string) {
+    setPosts((prev) => prev.map((p) => (p.id === id ? { ...p, image_url: imageUrl } : p)));
+  }
+
+  function handlePublished(id: string, platformPostId: string) {
+    setPosts((prev) =>
+      prev.map((p) =>
+        p.id === id
+          ? { ...p, status: "published", platform_post_id: platformPostId, published_at: new Date().toISOString() }
+          : p,
+      ),
+    );
   }
 
   async function handleSuggest() {
@@ -242,7 +398,7 @@ function SocialWorkspace() {
   }
 
   const draftPosts = posts.filter((p) => p.status === "draft");
-  const approvedPosts = posts.filter((p) => p.status === "approved");
+  const approvedPosts = posts.filter((p) => p.status === "approved" || p.status === "published");
 
   return (
     <div className="space-y-6 md:space-y-8">
@@ -301,20 +457,13 @@ function SocialWorkspace() {
                     Drafts
                   </p>
                   {draftPosts.map((post) => (
-                    <Card key={post.id}>
-                      <CardContent className="p-4 space-y-3">
-                        <p className="text-sm whitespace-pre-wrap">{post.caption}</p>
-                        <div className="flex gap-2">
-                          <Button size="sm" onClick={() => handleApprove(post.id)}>
-                            Approve
-                          </Button>
-                          <Button size="sm" variant="outline" onClick={() => handleArchive(post.id)}>
-                            <ThumbsDown className="w-3.5 h-3.5 mr-1.5" />
-                            Dismiss
-                          </Button>
-                        </div>
-                      </CardContent>
-                    </Card>
+                    <DraftPostCard
+                      key={post.id}
+                      post={post}
+                      onApprove={handleApprove}
+                      onArchive={handleArchive}
+                      onImageUploaded={handleImageUploaded}
+                    />
                   ))}
                 </div>
               )}
@@ -322,17 +471,10 @@ function SocialWorkspace() {
               {approvedPosts.length > 0 && (
                 <div className="space-y-3">
                   <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Approved — ready to post manually
+                    Approved
                   </p>
                   {approvedPosts.map((post) => (
-                    <Card key={post.id} className="border-emerald-500/30">
-                      <CardContent className="p-4 space-y-2">
-                        <p className="text-sm whitespace-pre-wrap">{post.caption}</p>
-                        <p className="text-xs text-muted-foreground">
-                          Approved — copy this into Instagram yourself for now. Direct publishing is coming once Instagram integration is connected.
-                        </p>
-                      </CardContent>
-                    </Card>
+                    <PublishablePostCard key={post.id} post={post} onPublished={handlePublished} />
                   ))}
                 </div>
               )}

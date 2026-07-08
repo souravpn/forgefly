@@ -17,6 +17,7 @@ import {
   Layers,
   Share2,
   Send,
+  BookOpen,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -39,6 +40,7 @@ const ICON_MAP: Record<string, LucideIcon> = {
   'layers': Layers,
   'share2': Share2,
   'send': Send,
+  'book-open': BookOpen,
 }
 
 export function NavIcon({ name, className }: { name: string; className?: string }) {
