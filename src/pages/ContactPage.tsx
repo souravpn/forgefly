@@ -1,4 +1,4 @@
-import { Clock, HeadphonesIcon, Mail, Users } from "lucide-react";
+import { Clock, HeadphonesIcon, Mail, MapPin, Users } from "lucide-react";
 import { useState } from "react";
 import { SiteHeader } from "@/components/marketing/SiteHeader";
 import { SiteFooter } from "@/components/marketing/SiteFooter";
@@ -264,6 +264,84 @@ export default function ContactPage() {
               Send message
             </button>
           </form>
+        </div>
+
+        {/* Location / map */}
+        <div className="ff-contact-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "48px", marginBottom: "96px", alignItems: "center" }}>
+          <div
+            style={{
+              borderRadius: "16px",
+              overflow: "hidden",
+              border: `1px solid ${S.border2}`,
+              aspectRatio: "1 / 1",
+            }}
+          >
+            <iframe
+              title="Forgefly headquarters map"
+              src="https://maps.google.com/maps?q=Watsonville+Rd+%26+Monterey+Rd%2C+Morgan+Hill%2C+CA+95037&output=embed"
+              width="100%"
+              height="100%"
+              style={{ border: 0, filter: "grayscale(0.3) invert(0.92) contrast(0.9)" }}
+              loading="lazy"
+              referrerPolicy="no-referrer-when-downgrade"
+            />
+          </div>
+
+          <div>
+            <span
+              style={{
+                display: "inline-block",
+                background: "rgba(16,185,129,0.1)",
+                color: S.em,
+                fontSize: "0.72rem",
+                fontWeight: 600,
+                padding: "5px 14px",
+                borderRadius: "9999px",
+                marginBottom: "20px",
+              }}
+            >
+              Our location
+            </span>
+            <h2
+              style={{
+                fontFamily: sora,
+                fontWeight: 600,
+                fontSize: "clamp(1.5rem, 3vw, 2rem)",
+                letterSpacing: "-0.02em",
+                marginBottom: "12px",
+              }}
+            >
+              Find our headquarter
+            </h2>
+            <p style={{ color: S.mid, marginBottom: "24px", maxWidth: "420px", lineHeight: 1.6 }}>
+              Where ideas meet innovation. Come visit us in Morgan Hill, or connect
+              with us online.
+            </p>
+            <div style={{ display: "flex", alignItems: "flex-start", gap: "12px" }}>
+              <span
+                style={{
+                  width: "32px",
+                  height: "32px",
+                  borderRadius: "8px",
+                  background: "rgba(16,185,129,0.1)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  flexShrink: 0,
+                }}
+              >
+                <MapPin className="w-4 h-4" style={{ color: S.em }} />
+              </span>
+              <div>
+                <p style={{ fontWeight: 600, fontSize: "0.9rem" }}>Forgefly headquarters</p>
+                <p style={{ color: S.mid, fontSize: "0.85rem" }}>
+                  Watsonville Rd &amp; Monterey Rd
+                  <br />
+                  Morgan Hill, CA 95037
+                </p>
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* Help cards */}
