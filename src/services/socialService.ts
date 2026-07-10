@@ -93,6 +93,74 @@ export async function publishSocialPost(id: string): Promise<{ published: boolea
   return data;
 }
 
+// ─── Connections (Instagram / WhatsApp OAuth) ──────────────────────────────
+
+export interface SocialConnectionStatus {
+  platform: 'instagram' | 'whatsapp';
+  status: 'connected' | 'disconnected';
+  external_id: string;
+  extra: { username?: string; waba_id?: string; display_phone_number?: string } | null;
+}
+
+const OAUTH_REDIRECT_PATH = '/settings?tab=account';
+
+export async function getSocialConnections(businessId: string): Promise<SocialConnectionStatus[]> {
+  const { data, error } = await supabase.functions.invoke('get-social-status', {
+    body: { business_id: businessId },
+  });
+  if (error) throw error;
+  return data?.connections ?? [];
+}
+
+export function startInstagramConnect(businessId: string): void {
+  const appId = import.meta.env.VITE_INSTAGRAM_APP_ID as string;
+  const redirectUri = `${window.location.origin}${OAUTH_REDIRECT_PATH}`;
+  const params = new URLSearchParams({
+    client_id: appId,
+    redirect_uri: redirectUri,
+    response_type: 'code',
+    scope: 'instagram_business_basic,instagram_business_content_publish',
+    state: `instagram:${businessId}`,
+  });
+  window.location.href = `https://www.instagram.com/oauth/authorize?${params}`;
+}
+
+export function startWhatsappConnect(businessId: string): void {
+  const appId = import.meta.env.VITE_META_APP_ID as string;
+  const redirectUri = `${window.location.origin}${OAUTH_REDIRECT_PATH}`;
+  const params = new URLSearchParams({
+    client_id: appId,
+    redirect_uri: redirectUri,
+    response_type: 'code',
+    scope: 'whatsapp_business_management,whatsapp_business_messaging',
+    state: `whatsapp:${businessId}`,
+  });
+  window.location.href = `https://www.facebook.com/v21.0/dialog/oauth?${params}`;
+}
+
+export async function completeSocialOauth(
+  platform: 'instagram' | 'whatsapp',
+  code: string,
+  businessId: string,
+): Promise<{ connected: boolean; extra: SocialConnectionStatus['extra'] }> {
+  const redirectUri = `${window.location.origin}${OAUTH_REDIRECT_PATH}`;
+  const { data, error } = await supabase.functions.invoke('social-oauth-callback', {
+    body: { platform, code, business_id: businessId, redirect_uri: redirectUri },
+  });
+  if (error) throw error;
+  return data;
+}
+
+export async function disconnectSocialPlatform(
+  platform: 'instagram' | 'whatsapp',
+  businessId: string,
+): Promise<void> {
+  const { error } = await supabase.functions.invoke('social-disconnect', {
+    body: { platform, business_id: businessId },
+  });
+  if (error) throw error;
+}
+
 // ─── Competitors ────────────────────────────────────────────────────────────
 
 export async function getCompetitors(): Promise<CompetitorProfile[]> {

@@ -1,8 +1,9 @@
-import QRCode from 'qrcode';
 import { AlertCircle, AlertTriangle, Bell, CheckCircle2, ChevronDown, Clock, CreditCard, Download, ExternalLink, Eye, Globe, Loader2, Trash2, Wallet } from "lucide-react";
+import QRCode from 'qrcode';
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
+import { UpgradeModal } from "@/components/common/UpgradeModal";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -20,8 +21,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/contexts/AuthContext";
 import { useBusiness } from "@/contexts/CurrentBusinessContext";
 import { supabase } from "@/db/supabase";
+import { completeSocialOauth } from "@/services/socialService";
 import type { BusinessProfile } from "@/types/types";
-import { UpgradeModal } from "@/components/common/UpgradeModal";
 
 const TIMEZONES = [
   { value: 'Pacific/Honolulu',    label: 'Hawaii (UTC-10)' },
@@ -59,7 +60,6 @@ export default function SettingsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [businessProfile, setBusinessProfile] =
     useState<BusinessProfile | null>(null);
-  const [loading, setLoading] = useState(false);
   const [connectStatus, setConnectStatus] = useState<ConnectStatus | null>(null);
   const [connectLoading, setConnectLoading] = useState(false);
   const [connectStatusLoading, setConnectStatusLoading] = useState(false);
@@ -110,6 +110,28 @@ export default function SettingsPage() {
       loadConnectStatus();
     }
   }, [user]);
+
+  // Handle the Meta OAuth redirect back to this page (?code=&state=platform:business_id) —
+  // the Connect Instagram/WhatsApp UI lives on the Social page, but the registered Meta
+  // redirect_uri still points here, so this page finishes the exchange then forwards there.
+  useEffect(() => {
+    const code = searchParams.get('code');
+    const state = searchParams.get('state');
+    const oauthError = searchParams.get('error_description') || searchParams.get('error');
+    if (oauthError) {
+      toast.error(`Connection failed: ${oauthError}`);
+      navigate('/dashboard/social');
+      return;
+    }
+    if (code && state && business) {
+      const [platform, businessId] = state.split(':') as ['instagram' | 'whatsapp', string];
+      if (businessId !== business.id) { navigate('/dashboard/social'); return; }
+      completeSocialOauth(platform, code, businessId)
+        .then(() => toast.success(`${platform === 'instagram' ? 'Instagram' : 'WhatsApp'} connected`))
+        .catch((err) => toast.error(err instanceof Error ? err.message : 'Failed to complete connection'))
+        .finally(() => navigate('/dashboard/social'));
+    }
+  }, [business]);
 
   useEffect(() => {
     if (!user) return;
@@ -286,6 +308,16 @@ export default function SettingsPage() {
         contact_phone: publicIdent.contact_phone || null,
       })
       .eq('id', business.id);
+
+    if (user && businessProfile) {
+      await supabase.from('business_profiles').upsert({
+        ...businessProfile,
+        business_description: businessProfile.business_description || null,
+        user_id: user.id,
+        updated_at: new Date().toISOString(),
+      });
+    }
+
     if (error) {
       toast.error('Failed to save public identity');
     } else {
@@ -339,24 +371,6 @@ export default function SettingsPage() {
       toast.success('Tax settings saved');
     }
     setSavingTax(false);
-  };
-
-  const handleSaveBusinessProfile = async () => {
-    if (!user || !businessProfile) return;
-
-    setLoading(true);
-    const { error } = await supabase.from("business_profiles").upsert({
-      ...businessProfile,
-      user_id: user.id,
-      updated_at: new Date().toISOString(),
-    });
-
-    if (error) {
-      toast.error("Failed to save business profile");
-    } else {
-      toast.success("Business profile updated successfully");
-    }
-    setLoading(false);
   };
 
   const handleDeleteBusiness = async () => {
@@ -489,6 +503,25 @@ export default function SettingsPage() {
                 <p className="text-xs text-muted-foreground text-right">{publicIdent.bio.length}/500</p>
               </div>
 
+              <div className="space-y-2">
+                <Label htmlFor="businessDescription">
+                  Business Description <span className="text-muted-foreground font-normal">(optional)</span>
+                </Label>
+                <Textarea
+                  id="businessDescription"
+                  value={businessProfile?.business_description || ""}
+                  onChange={(e) =>
+                    setBusinessProfile((prev) =>
+                      prev
+                        ? { ...prev, business_description: e.target.value }
+                        : null,
+                    )
+                  }
+                  placeholder="Describe what your business does…"
+                  className="min-h-[100px]"
+                />
+              </div>
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="publicEmail">Contact Email (public)</Label>
@@ -597,84 +630,6 @@ export default function SettingsPage() {
             );
           })()}
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-balance">
-                Business Information
-              </CardTitle>
-              <CardDescription>
-                Update your business details and branding
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="businessName">Business Name</Label>
-                <Input
-                  id="businessName"
-                  value={businessProfile?.business_name || ""}
-                  onChange={(e) =>
-                    setBusinessProfile((prev) =>
-                      prev ? { ...prev, business_name: e.target.value } : null,
-                    )
-                  }
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="businessDescription">
-                  Business Description
-                </Label>
-                <Textarea
-                  id="businessDescription"
-                  value={businessProfile?.business_description || ""}
-                  onChange={(e) =>
-                    setBusinessProfile((prev) =>
-                      prev
-                        ? { ...prev, business_description: e.target.value }
-                        : null,
-                    )
-                  }
-                  className="min-h-[100px]"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="serviceType">Service Type</Label>
-                <Input
-                  id="serviceType"
-                  value={businessProfile?.service_type || ""}
-                  onChange={(e) =>
-                    setBusinessProfile((prev) =>
-                      prev ? { ...prev, service_type: e.target.value } : null,
-                    )
-                  }
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="hourlyRate">Hourly Rate ($)</Label>
-                <Input
-                  id="hourlyRate"
-                  type="number"
-                  value={businessProfile?.hourly_rate || ""}
-                  onChange={(e) =>
-                    setBusinessProfile((prev) =>
-                      prev
-                        ? {
-                            ...prev,
-                            hourly_rate: Number.parseFloat(e.target.value),
-                          }
-                        : null,
-                    )
-                  }
-                />
-              </div>
-
-              <Button onClick={handleSaveBusinessProfile} disabled={loading}>
-                {loading ? "Saving..." : "Save Changes"}
-              </Button>
-            </CardContent>
-          </Card>
           {/* Notification Preferences */}
           <Card>
             <CardHeader>
@@ -1108,6 +1063,8 @@ export default function SettingsPage() {
           <AIHistoryTab />
         </TabsContent>
       </Tabs>
+
+      <UpgradeModal open={upgradeModalOpen} onOpenChange={setUpgradeModalOpen} />
     </div>
   );
 }
@@ -1132,7 +1089,21 @@ interface PromptSessionRow {
   extracted_data_snapshot: { diff_summary?: { sections_updated?: string[] } } | null;
 }
 
+// Computes the current usage-cycle window anchored to the day-of-month the
+// user signed up (e.g. signed up on the 21st → cycle runs 21st to 20th),
+// rather than a plain calendar month.
+function getUsageCycle(signupDate: Date, now: Date): { start: Date; end: Date } {
+  const anchorDay = signupDate.getDate();
+  let start = new Date(now.getFullYear(), now.getMonth(), anchorDay);
+  if (start > now) {
+    start = new Date(now.getFullYear(), now.getMonth() - 1, anchorDay);
+  }
+  const end = new Date(start.getFullYear(), start.getMonth() + 1, start.getDate() - 1);
+  return { start, end };
+}
+
 function AIHistoryTab() {
+  const { profile } = useAuth();
   const [usageLogs, setUsageLogs] = useState<UsageRow[]>([]);
   const [promptSessions, setPromptSessions] = useState<PromptSessionRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1161,10 +1132,12 @@ function AIHistoryTab() {
   }, []);
 
   const now = new Date();
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-  const thisMonthLogs = usageLogs.filter(r => new Date(r.created_at) >= monthStart);
+  const signupDate = profile?.created_at ? new Date(profile.created_at) : now;
+  const cycle = getUsageCycle(signupDate, now);
+  const thisMonthLogs = usageLogs.filter(r => new Date(r.created_at) >= cycle.start);
   const monthTokens = thisMonthLogs.reduce((s, r) => s + r.input_tokens + r.output_tokens, 0);
   const monthCost = thisMonthLogs.reduce((s, r) => s + Number(r.cost_usd), 0);
+  const cycleLabel = `${cycle.start.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })} to ${cycle.end.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}`;
 
   const modelLabel = (m: string) => m.includes('haiku') ? 'Haiku' : m.includes('sonnet') ? 'Sonnet' : m.includes('opus') ? 'Opus' : m;
 
@@ -1174,6 +1147,11 @@ function AIHistoryTab() {
 
   return (
     <div className="space-y-6">
+      {/* Current usage cycle */}
+      <div className="w-full rounded-lg bg-primary/10 text-primary text-sm font-medium text-center py-2 px-4">
+        {cycleLabel}
+      </div>
+
       {/* This month summary */}
       <div className="grid grid-cols-2 gap-4">
         <Card>
@@ -1266,8 +1244,6 @@ function AIHistoryTab() {
           )}
         </CardContent>
       </Card>
-
-      <UpgradeModal open={upgradeModalOpen} onOpenChange={setUpgradeModalOpen} />
     </div>
   );
 }

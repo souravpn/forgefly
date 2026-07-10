@@ -1,11 +1,15 @@
+import { ArrowLeft, Download, FileText, Folder, Loader2, MessageSquare, Paperclip, Send, Trash2, UserPlus } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, Download, FileText, Folder, Loader2, MessageSquare, Paperclip, Send, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-// @ts-ignore
-import { supabase } from '@/db/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { useBusiness } from '@/contexts/CurrentBusinessContext';
+// @ts-ignore
+import { supabase } from '@/db/supabase';
 
 const SITE_URL = import.meta.env.VITE_SITE_URL ?? 'https://www.forgefly.io';
 const MAX_FILE_BYTES = 50 * 1024 * 1024; // 50 MB
@@ -16,6 +20,7 @@ interface Contact {
   id: string
   name: string
   email: string
+  phone: string | null
   company: string | null
   lifecycle_status: string
   portal_token: string | null
@@ -24,12 +29,22 @@ interface Contact {
 interface Message {
   id: string
   business_id: string
-  client_id: string
+  client_id: string | null
   sender_id: string
   sender_role: 'freelancer' | 'client'
+  channel: 'portal' | 'whatsapp' | 'email'
+  wa_phone: string | null
   body: string
   read_at: string | null
   created_at: string
+}
+
+// A thread from an unrecognized WhatsApp number — no contact row yet.
+interface UnknownThread {
+  isUnknown: true
+  id: string // `wa:${phone}`
+  waPhone: string
+  name: string // just the raw phone number, used as the display label
 }
 
 interface PortalFile {
@@ -157,6 +172,9 @@ function ThreadPane({
 
       setFiles(prev => [fileRow as PortalFile, ...prev]);
       toast.success(`${file.name} shared with ${contact.name}`);
+      supabase.functions.invoke('notify-portal-file-shared', {
+        body: { contact_id: contact.id, file_name: file.name },
+      });
     } catch (err: unknown) {
       toast.error((err as Error).message || 'Upload failed');
     } finally {
@@ -389,6 +407,10 @@ export default function MessagesPage() {
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [mobileShowThread, setMobileShowThread] = useState(false);
+  const [saveAsClientPhone, setSaveAsClientPhone] = useState<string | null>(null);
+  const [saveAsClientName, setSaveAsClientName] = useState('');
+  const [saveAsClientEmail, setSaveAsClientEmail] = useState('');
+  const [savingAsClient, setSavingAsClient] = useState(false);
 
   useEffect(() => {
     if (!business) return;
@@ -398,7 +420,7 @@ export default function MessagesPage() {
       const [{ data: contactData }, { data: msgData }] = await Promise.all([
         supabase
           .from('contacts')
-          .select('id, name, email, company, lifecycle_status, portal_token')
+          .select('id, name, email, phone, company, lifecycle_status, portal_token')
           .eq('business_id', business!.id)
           .order('name'),
         supabase
@@ -507,13 +529,67 @@ export default function MessagesPage() {
     const msgs = messages.filter(m => m.client_id === c.id);
     const last = msgs[msgs.length - 1] ?? null;
     const unread = msgs.filter(m => m.sender_role === 'client' && !m.read_at).length;
-    return { ...c, lastMessage: last, unread };
-  }).filter(c => c.lastMessage !== null).sort((a, b) => {
-    return new Date(b.lastMessage!.created_at).getTime() - new Date(a.lastMessage!.created_at).getTime();
+    return { ...c, lastMessage: last, unread, isUnknown: false as const };
+  }).filter(c => c.lastMessage !== null);
+
+  // Messages from a WhatsApp number with no matching contact yet
+  const unknownPhones = Array.from(new Set(
+    messages.filter(m => m.channel === 'whatsapp' && !m.client_id && m.wa_phone).map(m => m.wa_phone as string),
+  ));
+  const unknownThreadsWithMeta = unknownPhones.map(phone => {
+    const msgs = messages.filter(m => m.wa_phone === phone && !m.client_id);
+    const last = msgs[msgs.length - 1] ?? null;
+    const unread = msgs.filter(m => m.sender_role === 'client' && !m.read_at).length;
+    return { id: `wa:${phone}`, waPhone: phone, name: phone, lastMessage: last, unread, isUnknown: true as const };
   });
 
+  const threadsWithMeta = [...contactsWithMeta, ...unknownThreadsWithMeta].sort((a, b) =>
+    new Date(b.lastMessage!.created_at).getTime() - new Date(a.lastMessage!.created_at).getTime(),
+  );
+
   const selectedContact = contacts.find(c => c.id === selectedId) ?? null;
-  const threadMessages = messages.filter(m => m.client_id === selectedId);
+  const selectedUnknown = unknownThreadsWithMeta.find(t => t.id === selectedId) ?? null;
+  const threadMessages = selectedUnknown
+    ? messages.filter(m => m.wa_phone === selectedUnknown.waPhone && !m.client_id)
+    : messages.filter(m => m.client_id === selectedId);
+
+  async function handleSaveAsClient() {
+    if (!business || !saveAsClientPhone || !saveAsClientName.trim()) return;
+    setSavingAsClient(true);
+    try {
+      const { data: newContact, error } = await supabase
+        .from('contacts')
+        .insert({
+          business_id: business.id,
+          name: saveAsClientName.trim(),
+          email: saveAsClientEmail.trim() || null,
+          phone: saveAsClientPhone,
+          lifecycle_status: 'prospect',
+        })
+        .select('id, name, email, phone, company, lifecycle_status, portal_token')
+        .single();
+      if (error) throw error;
+
+      await supabase
+        .from('messages')
+        .update({ client_id: newContact.id })
+        .eq('business_id', business.id)
+        .eq('wa_phone', saveAsClientPhone)
+        .is('client_id', null);
+
+      setContacts(prev => [...prev, newContact as Contact]);
+      setMessages(prev => prev.map(m =>
+        m.wa_phone === saveAsClientPhone && !m.client_id ? { ...m, client_id: newContact.id } : m,
+      ));
+      setSelectedId(newContact.id);
+      setSaveAsClientPhone(null);
+      toast.success(`Saved ${saveAsClientName.trim()} as a client`);
+    } catch {
+      toast.error('Failed to save as client');
+    } finally {
+      setSavingAsClient(false);
+    }
+  }
 
   if (bizLoading || loading) {
     return (
@@ -539,7 +615,7 @@ export default function MessagesPage() {
           </button>
         )}
         <h1 className="text-lg font-semibold">
-          {!isDesktop && mobileShowThread && selectedContact ? selectedContact.name : 'Messages'}
+          {!isDesktop && mobileShowThread && (selectedContact?.name ?? selectedUnknown?.name) ? (selectedContact?.name ?? selectedUnknown?.name) : 'Messages'}
         </h1>
       </div>
 
@@ -547,7 +623,7 @@ export default function MessagesPage() {
 
         {/* Left: client list */}
         <div className="flex flex-col overflow-hidden border-r border-border">
-          {contactsWithMeta.length === 0 ? (
+          {threadsWithMeta.length === 0 ? (
             <div className="flex-1 flex flex-col items-center justify-center text-center px-6">
               <MessageSquare className="w-8 h-8 text-muted-foreground/30 mb-3" />
               <p className="text-sm font-medium">No contacts yet</p>
@@ -557,7 +633,7 @@ export default function MessagesPage() {
             </div>
           ) : (
             <div className="flex-1 overflow-y-auto">
-              {contactsWithMeta.map(c => (
+              {threadsWithMeta.map(c => (
                 <button
                   key={c.id}
                   onClick={() => {
@@ -570,7 +646,7 @@ export default function MessagesPage() {
                 >
                   <div className="relative shrink-0">
                     <div className="w-9 h-9 rounded-full bg-primary/10 text-primary flex items-center justify-center text-sm font-semibold">
-                      {initials(c.name)}
+                      {c.isUnknown ? <MessageSquare className="w-4 h-4" /> : initials(c.name)}
                     </div>
                     {c.unread > 0 && (
                       <span className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full bg-primary flex items-center justify-center text-[9px] font-bold text-primary-foreground">
@@ -581,7 +657,7 @@ export default function MessagesPage() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-baseline justify-between gap-2">
                       <span className={`text-sm truncate ${c.unread > 0 ? 'font-semibold' : 'font-medium'}`}>
-                        {c.name}
+                        {c.isUnknown ? `Unknown number · ${c.name}` : c.name}
                       </span>
                       {c.lastMessage && (
                         <span className="text-[10px] text-muted-foreground shrink-0">
@@ -613,6 +689,42 @@ export default function MessagesPage() {
               onSend={handleSend}
               sending={sending}
             />
+          ) : selectedUnknown ? (
+            <div className="flex flex-col h-full overflow-hidden">
+              <div className="hidden md:flex px-4 py-3 border-b border-border items-center gap-3 shrink-0">
+                <div className="w-9 h-9 rounded-full bg-muted text-muted-foreground flex items-center justify-center shrink-0">
+                  <MessageSquare className="w-4 h-4" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="font-medium text-sm truncate">Unknown number</div>
+                  <div className="text-xs text-muted-foreground truncate">{selectedUnknown.waPhone}</div>
+                </div>
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    setSaveAsClientPhone(selectedUnknown.waPhone);
+                    setSaveAsClientName('');
+                    setSaveAsClientEmail('');
+                  }}
+                >
+                  <UserPlus className="w-4 h-4 mr-1.5" />
+                  Save as client
+                </Button>
+              </div>
+              <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
+                {threadMessages.map(m => (
+                  <div key={m.id} className="flex flex-col items-start">
+                    <div className="max-w-[78%] rounded-2xl px-4 py-2.5 bg-muted text-foreground">
+                      <p className="text-sm whitespace-pre-wrap break-words">{m.body}</p>
+                      <p className="text-[10px] mt-1 text-muted-foreground">{formatTime(m.created_at)}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="px-4 py-3 border-t border-border text-xs text-muted-foreground text-center shrink-0">
+                Save this number as a client to reply.
+              </div>
+            </div>
           ) : (
             <div className="flex-1 flex flex-col items-center justify-center text-center px-8">
               <MessageSquare className="w-10 h-10 text-muted-foreground/20 mb-4" />
@@ -624,6 +736,52 @@ export default function MessagesPage() {
           )}
         </div>
       </div>
+
+      <Dialog open={saveAsClientPhone !== null} onOpenChange={(open) => { if (!open) setSaveAsClientPhone(null); }}>
+        <DialogContent>
+          {saveAsClientPhone && (
+            <>
+              <DialogHeader>
+                <DialogTitle>Save as client</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 pt-2">
+                <div className="space-y-2">
+                  <Label>Phone</Label>
+                  <Input value={saveAsClientPhone} disabled />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="saveAsClientName">Name</Label>
+                  <Input
+                    id="saveAsClientName"
+                    value={saveAsClientName}
+                    onChange={e => setSaveAsClientName(e.target.value)}
+                    placeholder="Client name"
+                    autoFocus
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="saveAsClientEmail">Email <span className="text-muted-foreground font-normal">(optional)</span></Label>
+                  <Input
+                    id="saveAsClientEmail"
+                    type="email"
+                    value={saveAsClientEmail}
+                    onChange={e => setSaveAsClientEmail(e.target.value)}
+                    placeholder="client@example.com"
+                  />
+                </div>
+                <Button
+                  className="w-full"
+                  onClick={handleSaveAsClient}
+                  disabled={!saveAsClientName.trim() || savingAsClient}
+                >
+                  {savingAsClient ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+                  Save as client
+                </Button>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

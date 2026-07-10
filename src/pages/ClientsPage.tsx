@@ -1,29 +1,29 @@
-import { useState, useEffect, useRef } from 'react';
+import { Building2, Crown, Download, Edit, FileText, Link, Loader2, Mail, Paperclip, Phone, Plus, Search, Send, Trash2, Upload, User, UserPlus, Users } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Card, CardContent } from '@/components/ui/card';
+import { toast } from 'sonner';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
-import { Plus, Search, Mail, Phone, Building2, Edit, Trash2, User, Users, UserPlus, Crown, Send, Link, Paperclip, Upload, Download, Loader2, FileText } from 'lucide-react';
-import { toast } from 'sonner';
-import type { Client } from '@/types/types';
-import { getClients, createClient, updateClient, deleteClient, uploadAvatar, subscribeToClients } from '@/services/clientService';
+import { Textarea } from '@/components/ui/textarea';
 import { useAuth } from '@/contexts/AuthContext';
 // @ts-ignore
 import { supabase } from '@/db/supabase';
-import { Badge } from '@/components/ui/badge';
+import { createClient, deleteClient, getClients, subscribeToClients, updateClient, uploadAvatar } from '@/services/clientService';
 import {
-  getContactIdByEmail,
-  getPortalFiles,
-  uploadPortalFile,
   deletePortalFile,
   formatFileSize,
+  getContactIdByEmail,
+  getPortalFiles,
   type PortalFileItem,
+  uploadPortalFile,
 } from '@/services/portalFileService';
+import type { Client } from '@/types/types';
 
 // ─── Client badge helpers ─────────────────────────────────────────────────────
 
@@ -324,6 +324,9 @@ export default function ClientsPage() {
       const newFile = await uploadPortalFile(filesContactId, file);
       setClientFiles(prev => [newFile, ...prev]);
       toast.success('File uploaded');
+      supabase.functions.invoke('notify-portal-file-shared', {
+        body: { contact_id: filesContactId, file_name: file.name },
+      });
     } catch {
       toast.error('Failed to upload file');
     } finally {

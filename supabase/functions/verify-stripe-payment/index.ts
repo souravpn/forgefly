@@ -1,5 +1,6 @@
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import Stripe from "npm:stripe@19.1.0";
+import { sendWhatsapp } from "../_shared/whatsappSend.ts";
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
 const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -44,7 +45,7 @@ async function updateInvoiceAndPayment(
     // Get invoice by session ID
     const { data: invoice, error: fetchError } = await supabase
       .from("invoices")
-      .select("id, payment_status")
+      .select("id, payment_status, user_id, client_id, invoice_number")
       .eq("stripe_checkout_session_id", sessionId)
       .single();
 
@@ -86,6 +87,38 @@ async function updateInvoiceAndPayment(
 
     if (paymentError) {
       console.error("Failed to update payment:", paymentError);
+    }
+
+    // WhatsApp notifications — best-effort, only fires on the transition we just made
+    const { data: business } = await supabase
+      .from("businesses")
+      .select("id, contact_phone")
+      .eq("user_id", invoice.user_id)
+      .eq("status", "active")
+      .maybeSingle();
+
+    if (business) {
+      if (business.contact_phone) {
+        await sendWhatsapp(supabase, {
+          businessId: business.id,
+          toPhone: business.contact_phone,
+          bodyText: `Invoice ${invoice.invoice_number} was paid.`,
+        });
+      }
+      if (invoice.client_id) {
+        const { data: client } = await supabase
+          .from("clients")
+          .select("phone")
+          .eq("id", invoice.client_id)
+          .maybeSingle();
+        if (client?.phone) {
+          await sendWhatsapp(supabase, {
+            businessId: business.id,
+            toPhone: client.phone,
+            bodyText: `Payment received for invoice ${invoice.invoice_number} — thank you!`,
+          });
+        }
+      }
     }
 
     return true;

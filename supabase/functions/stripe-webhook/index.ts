@@ -1,5 +1,6 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import Stripe from 'npm:stripe@17';
+import { sendWhatsapp } from '../_shared/whatsappSend.ts';
 
 const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY') || '', {
   apiVersion: '2024-12-18.acacia',
@@ -38,7 +39,9 @@ Deno.serve(async (req) => {
 
         const paymentIntentId = session.payment_intent as string;
 
-        await supabaseAdmin
+        // Optimistic lock: only this call's update (not a duplicate webhook delivery
+        // or a race with verify-stripe-payment) should trigger the WhatsApp notifications.
+        const { data: updatedInvoices } = await supabaseAdmin
           .from('invoices')
           .update({
             status: 'paid',
@@ -46,7 +49,43 @@ Deno.serve(async (req) => {
             paid_at: new Date().toISOString(),
             stripe_payment_intent_id: paymentIntentId,
           })
-          .eq('id', invoiceId);
+          .eq('id', invoiceId)
+          .neq('payment_status', 'paid')
+          .select('id, invoice_number, user_id, client_id');
+
+        const justPaidInvoice = updatedInvoices?.[0];
+        if (justPaidInvoice) {
+          const { data: business } = await supabaseAdmin
+            .from('businesses')
+            .select('id, contact_phone')
+            .eq('user_id', justPaidInvoice.user_id)
+            .eq('status', 'active')
+            .maybeSingle();
+
+          if (business) {
+            if (business.contact_phone) {
+              await sendWhatsapp(supabaseAdmin, {
+                businessId: business.id,
+                toPhone: business.contact_phone,
+                bodyText: `Invoice ${justPaidInvoice.invoice_number} was paid.`,
+              });
+            }
+            if (justPaidInvoice.client_id) {
+              const { data: client } = await supabaseAdmin
+                .from('clients')
+                .select('phone')
+                .eq('id', justPaidInvoice.client_id)
+                .maybeSingle();
+              if (client?.phone) {
+                await sendWhatsapp(supabaseAdmin, {
+                  businessId: business.id,
+                  toPhone: client.phone,
+                  bodyText: `Payment received for invoice ${justPaidInvoice.invoice_number} — thank you!`,
+                });
+              }
+            }
+          }
+        }
 
         if (paymentIntentId) {
           const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);

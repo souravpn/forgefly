@@ -2,7 +2,9 @@ import {
   Crown,
   ExternalLink,
   ImagePlus,
+  Instagram,
   Loader2,
+  MessageCircle,
   Search,
   Share2,
   Sparkles,
@@ -11,30 +13,159 @@ import {
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { UpgradeModal } from "@/components/common/UpgradeModal";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { UpgradeModal } from "@/components/common/UpgradeModal";
 import { useAuth } from "@/contexts/AuthContext";
 import { useBusiness } from "@/contexts/CurrentBusinessContext";
 import {
   addCompetitor,
   approveSocialPost,
   archiveSocialPost,
+  disconnectSocialPlatform,
   dismissCompetitor,
   fetchCompetitorIntel,
   generateSocialDrafts,
-  getCompetitors,
   getCompetitorIntel,
+  getCompetitors,
+  getSocialConnections,
   getSocialPosts,
   publishSocialPost,
+  type SocialConnectionStatus,
+  startInstagramConnect,
+  startWhatsappConnect,
   suggestCompetitors,
   uploadSocialImage,
 } from "@/services/socialService";
 import type { CompetitorProfile, CompetitorSiteIntel, SocialPost } from "@/types/types";
 
-type Tab = "compose" | "competitors";
+type Tab = "connections" | "compose" | "competitors";
+
+function ConnectionsTab({ businessId, contactPhone }: { businessId: string; contactPhone: string | null }) {
+  const [connections, setConnections] = useState<SocialConnectionStatus[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [igConnectLoading, setIgConnectLoading] = useState(false);
+  const [waConnectLoading, setWaConnectLoading] = useState(false);
+
+  const load = () => {
+    getSocialConnections(businessId)
+      .then(setConnections)
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [businessId]);
+
+  const connectionFor = (platform: "instagram" | "whatsapp") =>
+    connections.find((c) => c.platform === platform && c.status === "connected");
+
+  function handleConnectInstagram() {
+    setIgConnectLoading(true);
+    startInstagramConnect(businessId);
+  }
+
+  function handleConnectWhatsapp() {
+    if (!contactPhone) {
+      toast.error(
+        "Add your contact phone number in Settings → Business tab first — it's where WhatsApp notifications about your own proposals and invoices will be sent.",
+      );
+      return;
+    }
+    setWaConnectLoading(true);
+    startWhatsappConnect(businessId);
+  }
+
+  async function handleDisconnect(platform: "instagram" | "whatsapp") {
+    try {
+      await disconnectSocialPlatform(platform, businessId);
+      toast.success(`${platform === "instagram" ? "Instagram" : "WhatsApp"} disconnected`);
+      load();
+    } catch {
+      toast.error("Failed to disconnect");
+    }
+  }
+
+  const instagramConnection = connectionFor("instagram");
+  const whatsappConnection = connectionFor("whatsapp");
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-balance">Connections</CardTitle>
+        <CardDescription>
+          Connect Instagram and WhatsApp to publish posts and send client notifications directly from Forgefly.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {instagramConnection ? (
+          <div className="flex items-center gap-3 p-4 rounded-lg bg-success/10 border border-success/20">
+            <Instagram className="w-5 h-5 text-success shrink-0" />
+            <div className="flex-1">
+              <p className="font-medium text-success">Instagram connected</p>
+              <p className="text-sm text-muted-foreground mt-0.5">
+                @{instagramConnection.extra?.username ?? "connected account"}
+              </p>
+            </div>
+            <Button variant="outline" size="sm" onClick={() => handleDisconnect("instagram")}>
+              Disconnect
+            </Button>
+          </div>
+        ) : (
+          <div className="flex items-center gap-3 p-4 rounded-lg border">
+            <Instagram className="w-5 h-5 text-muted-foreground shrink-0" />
+            <div className="flex-1">
+              <p className="font-medium">Instagram</p>
+              <p className="text-sm text-muted-foreground mt-0.5">Publish AI-drafted posts to your Instagram business account.</p>
+            </div>
+            <Button size="sm" onClick={handleConnectInstagram} disabled={igConnectLoading || loading}>
+              {igConnectLoading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+              Connect
+            </Button>
+          </div>
+        )}
+
+        {whatsappConnection ? (
+          <div className="flex items-center gap-3 p-4 rounded-lg bg-success/10 border border-success/20">
+            <MessageCircle className="w-5 h-5 text-success shrink-0" />
+            <div className="flex-1">
+              <p className="font-medium text-success">WhatsApp connected</p>
+              <p className="text-sm text-muted-foreground mt-0.5">
+                {whatsappConnection.extra?.display_phone_number ?? "connected number"}
+              </p>
+            </div>
+            <Button variant="outline" size="sm" onClick={() => handleDisconnect("whatsapp")}>
+              Disconnect
+            </Button>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            <div className="flex items-center gap-3 p-4 rounded-lg border">
+              <MessageCircle className="w-5 h-5 text-muted-foreground shrink-0" />
+              <div className="flex-1">
+                <p className="font-medium">WhatsApp</p>
+                <p className="text-sm text-muted-foreground mt-0.5">Send and receive client messages over WhatsApp.</p>
+              </div>
+              <Button size="sm" onClick={handleConnectWhatsapp} disabled={waConnectLoading || loading}>
+                {waConnectLoading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+                Connect
+              </Button>
+            </div>
+            {!contactPhone && (
+              <p className="text-xs text-amber-500">
+                ⚠ Add a contact phone number in Settings → Business tab first — that's where your own WhatsApp notifications will be sent.
+              </p>
+            )}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
 
 function CompeteRow({
   competitor,
@@ -282,7 +413,8 @@ function TrackedCompetitorCard({ competitor }: { competitor: CompetitorProfile }
 }
 
 function SocialWorkspace() {
-  const [tab, setTab] = useState<Tab>("compose");
+  const { business } = useBusiness();
+  const [tab, setTab] = useState<Tab>("connections");
   const [posts, setPosts] = useState<SocialPost[]>([]);
   const [loadingPosts, setLoadingPosts] = useState(true);
   const [generating, setGenerating] = useState(false);
@@ -411,7 +543,7 @@ function SocialWorkspace() {
 
       {/* Tab bar */}
       <div className="flex gap-0 border-b">
-        {(["compose", "competitors"] as Tab[]).map((t) => (
+        {(["connections", "compose", "competitors"] as Tab[]).map((t) => (
           <button
             key={t}
             type="button"
@@ -422,10 +554,14 @@ function SocialWorkspace() {
                 : "border-transparent text-muted-foreground hover:text-foreground"
             }`}
           >
-            {t === "compose" ? "Compose" : "Competitors"}
+            {t === "connections" ? "Connections" : t === "compose" ? "Compose" : "Competitors"}
           </button>
         ))}
       </div>
+
+      {tab === "connections" && business && (
+        <ConnectionsTab businessId={business.id} contactPhone={business.contact_phone ?? null} />
+      )}
 
       {tab === "compose" && (
         <div className="space-y-4">

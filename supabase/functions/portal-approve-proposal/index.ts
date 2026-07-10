@@ -1,4 +1,5 @@
 import { createClient } from "jsr:@supabase/supabase-js@2";
+import { sendWhatsapp } from "../_shared/whatsappSend.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -70,7 +71,7 @@ Deno.serve(async (req) => {
       // Load business for email notification
       const { data: business } = await admin
         .from("businesses")
-        .select("id, name, user_id, contact_email, extracted_data")
+        .select("id, name, user_id, contact_email, contact_phone, extracted_data")
         .eq("id", proposal.business_id)
         .maybeSingle();
 
@@ -96,7 +97,7 @@ Deno.serve(async (req) => {
         // 2. Find contact by business_id + client_email
         const { data: contact } = await admin
           .from("contacts")
-          .select("id")
+          .select("id, phone")
           .eq("business_id", proposal.business_id)
           .eq("email", proposal.client_email)
           .maybeSingle();
@@ -140,7 +141,25 @@ Deno.serve(async (req) => {
           });
         }
 
-        // 5b. Notify freelancer by email
+        // 5b. WhatsApp notifications — both freelancer and client, best-effort
+        if (business) {
+          if (business.contact_phone) {
+            await sendWhatsapp(admin, {
+              businessId: business.id,
+              toPhone: business.contact_phone,
+              bodyText: `${proposal.client_email} approved your proposal "${proposal.title || "Untitled"}".`,
+            });
+          }
+          if (contact?.phone) {
+            await sendWhatsapp(admin, {
+              businessId: business.id,
+              toPhone: contact.phone,
+              bodyText: `Thanks for approving "${proposal.title || "the proposal"}"! We'll be in touch shortly.`,
+            });
+          }
+        }
+
+        // 5c. Notify freelancer by email
         if (business && RESEND_API_KEY) {
           const { data: freelancerUser } = await admin.auth.admin.getUserById(business.user_id);
           const freelancerEmail = business.contact_email ?? freelancerUser?.user?.email;
@@ -207,7 +226,7 @@ Deno.serve(async (req) => {
 
     const { data: engagement, error: engErr } = await admin
       .from("engagements")
-      .select("*, businesses!inner(id, name, user_id, contact_email, extracted_data)")
+      .select("*, businesses!inner(id, name, user_id, contact_email, contact_phone, extracted_data)")
       .eq("id", engagementId)
       .single();
 
@@ -219,7 +238,7 @@ Deno.serve(async (req) => {
 
     const business = engagement.businesses as {
       id: string; name: string; user_id: string;
-      contact_email: string | null; extracted_data: Record<string, unknown> | null;
+      contact_email: string | null; contact_phone: string | null; extracted_data: Record<string, unknown> | null;
     };
 
     if (action === "track_viewed") {
@@ -302,6 +321,29 @@ Deno.serve(async (req) => {
         entity_type: "proposal",
         entity_id: matchedProposalId,
       });
+
+      // WhatsApp notifications — both freelancer and client, best-effort
+      if (business.contact_phone) {
+        await sendWhatsapp(admin, {
+          businessId: business.id,
+          toPhone: business.contact_phone,
+          bodyText: `${clientLabel} approved your proposal "${engagement.service_name || "Untitled"}".`,
+        });
+      }
+      if (engagement.contact_id) {
+        const { data: clientContact } = await admin
+          .from("contacts")
+          .select("phone")
+          .eq("id", engagement.contact_id)
+          .maybeSingle();
+        if (clientContact?.phone) {
+          await sendWhatsapp(admin, {
+            businessId: business.id,
+            toPhone: clientContact.phone,
+            bodyText: `Thanks for approving "${engagement.service_name || "the proposal"}"! We'll be in touch shortly.`,
+          });
+        }
+      }
     }
 
     if (action === "approve" && RESEND_API_KEY) {
