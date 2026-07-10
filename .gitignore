@@ -35,3 +35,5 @@ history/*.json
 *.p12
 *.pem
 *.csr
+.vercel
+.env*

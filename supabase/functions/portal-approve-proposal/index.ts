@@ -154,6 +154,7 @@ Deno.serve(async (req) => {
             await sendWhatsapp(admin, {
               businessId: business.id,
               toPhone: contact.phone,
+              clientId: contact.id,
               bodyText: `Thanks for approving "${proposal.title || "the proposal"}"! We'll be in touch shortly.`,
             });
           }
@@ -340,6 +341,7 @@ Deno.serve(async (req) => {
           await sendWhatsapp(admin, {
             businessId: business.id,
             toPhone: clientContact.phone,
+            clientId: engagement.contact_id,
             bodyText: `Thanks for approving "${engagement.service_name || "the proposal"}"! We'll be in touch shortly.`,
           });
         }

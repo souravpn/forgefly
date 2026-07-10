@@ -140,6 +140,7 @@ interface DBMessage {
   client_id?: string;
   sender_id: string;
   sender_role: "freelancer" | "client";
+  channel?: "portal" | "whatsapp" | "email";
   body: string;
   read_at: string | null;
   created_at: string;
@@ -1390,8 +1391,12 @@ function ContactHub({
         {/* Messages */}
         {tab === "messages" && (
           <div
-            className="flex flex-col"
-            style={{ height: "calc(100dvh - 196px)", minHeight: "320px" }}
+            className="flex flex-col rounded-2xl p-4"
+            style={{
+              height: "calc(100dvh - 196px)",
+              minHeight: "320px",
+              background: "var(--p-card)",
+            }}
           >
             <div className="flex-1 overflow-y-auto space-y-3 pb-4 pr-1">
               {messages.length === 0 ? (
@@ -1442,6 +1447,14 @@ function ContactHub({
                         })}
                       </p>
                     </div>
+                    {m.channel === "whatsapp" && (
+                      <span
+                        className="text-[10px] mt-0.5 px-1"
+                        style={{ color: "var(--p-text4)" }}
+                      >
+                        via WhatsApp
+                      </span>
+                    )}
                     {/* Read receipt: show ✓✓ on client's own messages that the freelancer has read */}
                     {m.sender_role === "client" && (
                       <span
@@ -2924,7 +2937,7 @@ function EngagementPortal({
                 messages.map((m) => (
                   <div
                     key={m.id}
-                    className={`flex ${m.sender_role === "client" ? "justify-end" : "justify-start"}`}
+                    className={`flex flex-col ${m.sender_role === "client" ? "items-end" : "items-start"}`}
                   >
                     <div
                       className="max-w-[78%] rounded-2xl px-4 py-2.5"
@@ -2956,6 +2969,11 @@ function EngagementPortal({
                         })}
                       </p>
                     </div>
+                    {m.channel === "whatsapp" && (
+                      <span className="text-[10px] mt-0.5 px-1" style={{ color: "#555" }}>
+                        via WhatsApp
+                      </span>
+                    )}
                   </div>
                 ))
               )}

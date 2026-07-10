@@ -1,6 +1,6 @@
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import Stripe from "npm:stripe@19.1.0";
-import { sendWhatsapp } from "../_shared/whatsappSend.ts";
+import { resolveContactIdByPhone, sendWhatsapp } from "../_shared/whatsappSend.ts";
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
 const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -112,9 +112,11 @@ async function updateInvoiceAndPayment(
           .eq("id", invoice.client_id)
           .maybeSingle();
         if (client?.phone) {
+          const clientId = await resolveContactIdByPhone(supabase, business.id, client.phone);
           await sendWhatsapp(supabase, {
             businessId: business.id,
             toPhone: client.phone,
+            clientId,
             bodyText: `Payment received for invoice ${invoice.invoice_number} — thank you!`,
           });
         }

@@ -77,7 +77,7 @@ Deno.serve(async (req) => {
             (c: { id: string; phone: string | null }) => c.phone && normalizePhone(c.phone) === normalizedFrom,
           );
 
-          await service.from('messages').insert({
+          const { error: insertError } = await service.from('messages').insert({
             business_id: businessId,
             client_id: matchedContact?.id ?? null,
             sender_role: 'client',
@@ -85,6 +85,7 @@ Deno.serve(async (req) => {
             wa_phone: from,
             body,
           });
+          if (insertError) console.error('whatsapp-webhook: failed to insert message', insertError);
         }
       }
     }

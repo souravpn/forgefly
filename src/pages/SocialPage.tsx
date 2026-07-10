@@ -1,22 +1,31 @@
 import {
   Crown,
   ExternalLink,
+  Facebook,
+  HelpCircle,
+  Home,
   ImagePlus,
   Instagram,
+  Linkedin,
   Loader2,
   MessageCircle,
+  MessageSquare,
+  Music,
   Search,
   Share2,
   Sparkles,
   ThumbsDown,
+  Twitter,
   X,
+  Youtube,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { UpgradeModal } from "@/components/common/UpgradeModal";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/contexts/AuthContext";
 import { useBusiness } from "@/contexts/CurrentBusinessContext";
@@ -24,6 +33,7 @@ import {
   addCompetitor,
   approveSocialPost,
   archiveSocialPost,
+  completeSocialOauth,
   disconnectSocialPlatform,
   dismissCompetitor,
   fetchCompetitorIntel,
@@ -39,11 +49,23 @@ import {
   suggestCompetitors,
   uploadSocialImage,
 } from "@/services/socialService";
-import type { CompetitorProfile, CompetitorSiteIntel, SocialPost } from "@/types/types";
+import type {
+  CompetitorProfile,
+  CompetitorSiteIntel,
+  SocialPost,
+} from "@/types/types";
 
 type Tab = "connections" | "compose" | "competitors";
 
-function ConnectionsTab({ businessId, contactPhone }: { businessId: string; contactPhone: string | null }) {
+function ConnectionsTab({
+  businessId,
+  contactPhone,
+  refreshKey,
+}: {
+  businessId: string;
+  contactPhone: string | null;
+  refreshKey: number;
+}) {
   const [connections, setConnections] = useState<SocialConnectionStatus[]>([]);
   const [loading, setLoading] = useState(true);
   const [igConnectLoading, setIgConnectLoading] = useState(false);
@@ -59,10 +81,12 @@ function ConnectionsTab({ businessId, contactPhone }: { businessId: string; cont
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [businessId]);
+  }, [businessId, refreshKey]);
 
   const connectionFor = (platform: "instagram" | "whatsapp") =>
-    connections.find((c) => c.platform === platform && c.status === "connected");
+    connections.find(
+      (c) => c.platform === platform && c.status === "connected",
+    );
 
   function handleConnectInstagram() {
     setIgConnectLoading(true);
@@ -83,7 +107,9 @@ function ConnectionsTab({ businessId, contactPhone }: { businessId: string; cont
   async function handleDisconnect(platform: "instagram" | "whatsapp") {
     try {
       await disconnectSocialPlatform(platform, businessId);
-      toast.success(`${platform === "instagram" ? "Instagram" : "WhatsApp"} disconnected`);
+      toast.success(
+        `${platform === "instagram" ? "Instagram" : "WhatsApp"} disconnected`,
+      );
       load();
     } catch {
       toast.error("Failed to disconnect");
@@ -94,76 +120,174 @@ function ConnectionsTab({ businessId, contactPhone }: { businessId: string; cont
   const whatsappConnection = connectionFor("whatsapp");
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-balance">Connections</CardTitle>
-        <CardDescription>
-          Connect Instagram and WhatsApp to publish posts and send client notifications directly from Forgefly.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {instagramConnection ? (
-          <div className="flex items-center gap-3 p-4 rounded-lg bg-success/10 border border-success/20">
-            <Instagram className="w-5 h-5 text-success shrink-0" />
-            <div className="flex-1">
-              <p className="font-medium text-success">Instagram connected</p>
-              <p className="text-sm text-muted-foreground mt-0.5">
-                @{instagramConnection.extra?.username ?? "connected account"}
-              </p>
-            </div>
-            <Button variant="outline" size="sm" onClick={() => handleDisconnect("instagram")}>
-              Disconnect
-            </Button>
-          </div>
-        ) : (
-          <div className="flex items-center gap-3 p-4 rounded-lg border">
-            <Instagram className="w-5 h-5 text-muted-foreground shrink-0" />
-            <div className="flex-1">
-              <p className="font-medium">Instagram</p>
-              <p className="text-sm text-muted-foreground mt-0.5">Publish AI-drafted posts to your Instagram business account.</p>
-            </div>
-            <Button size="sm" onClick={handleConnectInstagram} disabled={igConnectLoading || loading}>
-              {igConnectLoading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
-              Connect
-            </Button>
-          </div>
-        )}
+    <div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          <PlatformCard
+            icon={<Instagram className="w-6 h-6 text-white" />}
+            iconClassName="bg-gradient-to-tr from-yellow-400 via-pink-500 to-purple-600"
+            name="Instagram"
+            description="Publish AI-drafted posts to your Instagram business account."
+            connected={!!instagramConnection}
+            connectedLabel={`@${instagramConnection?.extra?.username ?? "connected account"}`}
+            loading={igConnectLoading || loading}
+            onConnect={handleConnectInstagram}
+            onDisconnect={() => handleDisconnect("instagram")}
+          />
+          <PlatformCard
+            icon={<MessageCircle className="w-6 h-6 text-white" />}
+            iconClassName="bg-[#25D366]"
+            name="WhatsApp"
+            description="Send and receive client messages over WhatsApp."
+            connected={!!whatsappConnection}
+            connectedLabel={
+              whatsappConnection?.extra?.display_phone_number ??
+              "connected number"
+            }
+            loading={waConnectLoading || loading}
+            onConnect={handleConnectWhatsapp}
+            onDisconnect={() => handleDisconnect("whatsapp")}
+            warning={
+              !contactPhone && !whatsappConnection
+                ? "Add a contact phone number in Settings → Business tab first — that's where your own WhatsApp notifications will be sent."
+                : undefined
+            }
+          />
+          <PlatformCard
+            icon={<Music className="w-6 h-6 text-white" />}
+            iconClassName="bg-black"
+            name="TikTok"
+            description="Publish short-form videos directly to TikTok."
+            comingSoon
+          />
+          <PlatformCard
+            icon={<Linkedin className="w-6 h-6 text-white" />}
+            iconClassName="bg-[#0A66C2]"
+            name="LinkedIn"
+            description="Share updates and articles to your LinkedIn page."
+            comingSoon
+          />
+          <PlatformCard
+            icon={<Youtube className="w-6 h-6 text-white" />}
+            iconClassName="bg-[#FF0000]"
+            name="YouTube"
+            description="Upload and manage videos on your YouTube channel."
+            comingSoon
+          />
+          <PlatformCard
+            icon={<Twitter className="w-6 h-6 text-white" />}
+            iconClassName="bg-black"
+            name="X"
+            description="Post updates and threads directly to X."
+            comingSoon
+          />
+          <PlatformCard
+            icon={<Facebook className="w-6 h-6 text-white" />}
+            iconClassName="bg-[#1877F2]"
+            name="Facebook"
+            description="Publish posts and updates to your Facebook Page."
+            comingSoon
+          />
+          <PlatformCard
+            icon={<Home className="w-6 h-6 text-white" />}
+            iconClassName="bg-[#8ED500]"
+            name="Nextdoor"
+            description="Reach clients in your local neighborhood on Nextdoor."
+            comingSoon
+          />
+          <PlatformCard
+            icon={<MessageSquare className="w-6 h-6 text-white" />}
+            iconClassName="bg-[#FF4500]"
+            name="Reddit"
+            description="Engage with communities and share updates on Reddit."
+            comingSoon
+          />
+          <PlatformCard
+            icon={<HelpCircle className="w-6 h-6 text-white" />}
+            iconClassName="bg-[#B92B27]"
+            name="Quora"
+            description="Answer questions and build authority on Quora."
+            comingSoon
+          />
+      </div>
+    </div>
+  );
+}
 
-        {whatsappConnection ? (
-          <div className="flex items-center gap-3 p-4 rounded-lg bg-success/10 border border-success/20">
-            <MessageCircle className="w-5 h-5 text-success shrink-0" />
-            <div className="flex-1">
-              <p className="font-medium text-success">WhatsApp connected</p>
-              <p className="text-sm text-muted-foreground mt-0.5">
-                {whatsappConnection.extra?.display_phone_number ?? "connected number"}
-              </p>
-            </div>
-            <Button variant="outline" size="sm" onClick={() => handleDisconnect("whatsapp")}>
-              Disconnect
-            </Button>
-          </div>
-        ) : (
-          <div className="space-y-2">
-            <div className="flex items-center gap-3 p-4 rounded-lg border">
-              <MessageCircle className="w-5 h-5 text-muted-foreground shrink-0" />
-              <div className="flex-1">
-                <p className="font-medium">WhatsApp</p>
-                <p className="text-sm text-muted-foreground mt-0.5">Send and receive client messages over WhatsApp.</p>
-              </div>
-              <Button size="sm" onClick={handleConnectWhatsapp} disabled={waConnectLoading || loading}>
-                {waConnectLoading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
-                Connect
-              </Button>
-            </div>
-            {!contactPhone && (
-              <p className="text-xs text-amber-500">
-                ⚠ Add a contact phone number in Settings → Business tab first — that's where your own WhatsApp notifications will be sent.
-              </p>
-            )}
-          </div>
-        )}
-      </CardContent>
-    </Card>
+function PlatformCard({
+  icon,
+  iconClassName,
+  name,
+  description,
+  connected,
+  connectedLabel,
+  loading,
+  comingSoon,
+  warning,
+  onConnect,
+  onDisconnect,
+}: {
+  icon: ReactNode;
+  iconClassName: string;
+  name: string;
+  description: string;
+  connected?: boolean;
+  connectedLabel?: string;
+  loading?: boolean;
+  comingSoon?: boolean;
+  warning?: string;
+  onConnect?: () => void;
+  onDisconnect?: () => void;
+}) {
+  return (
+    <div
+      className={`rounded-2xl border p-5 flex flex-col gap-4 ${
+        connected ? "border-success/30 bg-success/5" : ""
+      }`}
+    >
+      <div
+        className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 ${iconClassName}`}
+      >
+        {icon}
+      </div>
+      <div className="flex-1">
+        <div className="flex items-center gap-1.5">
+          <p className="font-semibold">{name}</p>
+          {connected && (
+            <span className="w-1.5 h-1.5 rounded-full bg-success shrink-0" />
+          )}
+        </div>
+        <p
+          className={`text-sm mt-1 ${connected ? "text-success" : "text-muted-foreground"}`}
+        >
+          {connected ? connectedLabel : description}
+        </p>
+        {warning && <p className="text-xs text-amber-500 mt-2">⚠ {warning}</p>}
+      </div>
+      {comingSoon ? (
+        <Button size="sm" variant="outline" disabled className="w-full">
+          Coming Soon
+        </Button>
+      ) : connected ? (
+        <Button
+          size="sm"
+          variant="outline"
+          className="w-full"
+          onClick={onDisconnect}
+        >
+          Disconnect
+        </Button>
+      ) : (
+        <Button
+          size="sm"
+          className="w-full"
+          onClick={onConnect}
+          disabled={loading}
+        >
+          {loading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+          Connect
+        </Button>
+      )}
+    </div>
   );
 }
 
@@ -243,7 +367,8 @@ function DraftPostCard({
           />
         ) : (
           <p className="text-xs text-amber-600">
-            Instagram requires an image on every post — attach one before approving.
+            Instagram requires an image on every post — attach one before
+            approving.
           </p>
         )}
 
@@ -276,7 +401,11 @@ function DraftPostCard({
           >
             Approve
           </Button>
-          <Button size="sm" variant="outline" onClick={() => onArchive(post.id)}>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => onArchive(post.id)}
+          >
             <ThumbsDown className="w-3.5 h-3.5 mr-1.5" />
             Dismiss
           </Button>
@@ -340,7 +469,11 @@ function PublishablePostCard({
   );
 }
 
-function TrackedCompetitorCard({ competitor }: { competitor: CompetitorProfile }) {
+function TrackedCompetitorCard({
+  competitor,
+}: {
+  competitor: CompetitorProfile;
+}) {
   const [websiteUrl, setWebsiteUrl] = useState(competitor.website_url ?? "");
   const [intel, setIntel] = useState<CompetitorSiteIntel | null>(null);
   const [loading, setLoading] = useState(false);
@@ -359,7 +492,10 @@ function TrackedCompetitorCard({ competitor }: { competitor: CompetitorProfile }
     }
     setLoading(true);
     try {
-      const result = await fetchCompetitorIntel(competitor.id, websiteUrl.trim());
+      const result = await fetchCompetitorIntel(
+        competitor.id,
+        websiteUrl.trim(),
+      );
       setIntel(result);
       toast.success("Site intel pulled");
     } catch {
@@ -386,8 +522,17 @@ function TrackedCompetitorCard({ competitor }: { competitor: CompetitorProfile }
             placeholder="Their website URL (optional)"
             className="text-sm"
           />
-          <Button size="sm" variant="outline" disabled={loading} onClick={handleFetchIntel}>
-            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Get intel"}
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={loading}
+            onClick={handleFetchIntel}
+          >
+            {loading ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              "Get intel"
+            )}
           </Button>
         </div>
 
@@ -414,13 +559,18 @@ function TrackedCompetitorCard({ competitor }: { competitor: CompetitorProfile }
 
 function SocialWorkspace() {
   const { business } = useBusiness();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [tab, setTab] = useState<Tab>("connections");
   const [posts, setPosts] = useState<SocialPost[]>([]);
   const [loadingPosts, setLoadingPosts] = useState(true);
   const [generating, setGenerating] = useState(false);
+  const [connectionsRefreshKey, setConnectionsRefreshKey] = useState(0);
 
   const [competitors, setCompetitors] = useState<CompetitorProfile[]>([]);
-  const [candidates, setCandidates] = useState<{ handle: string; source_url: string }[]>([]);
+  const [candidates, setCandidates] = useState<
+    { handle: string; source_url: string }[]
+  >([]);
   const [niche, setNiche] = useState("");
   const [suggesting, setSuggesting] = useState(false);
   const [manualHandle, setManualHandle] = useState("");
@@ -429,15 +579,67 @@ function SocialWorkspace() {
     getSocialPosts()
       .then((data) => setPosts(data.filter((p) => p.status !== "archived")))
       .finally(() => setLoadingPosts(false));
-    getCompetitors().then((data) => setCompetitors(data.filter((c) => c.status === "tracking")));
+    getCompetitors().then((data) =>
+      setCompetitors(data.filter((c) => c.status === "tracking")),
+    );
   }, []);
+
+  // Guards the OAuth code exchange below from firing twice — `business` can
+  // change reference more than once while its context loads, and the code in
+  // searchParams isn't cleared until the async exchange finishes, so without
+  // this a second effect run would race a second exchange against the same
+  // single-use OAuth code and both would fail.
+  const oauthHandledRef = useRef(false);
+
+  // Handle the Meta OAuth redirect back to this page (?code=&state=platform:business_id) —
+  // registered as the redirect_uri for both the Instagram Login and Facebook Login products.
+  useEffect(() => {
+    const code = searchParams.get("code");
+    const state = searchParams.get("state");
+    const oauthError =
+      searchParams.get("error_description") || searchParams.get("error");
+    if (oauthError) {
+      toast.error(`Connection failed: ${oauthError}`);
+      navigate("/dashboard/social", { replace: true });
+      return;
+    }
+    if (code && state && business) {
+      if (oauthHandledRef.current) return;
+      oauthHandledRef.current = true;
+      const [platform, businessId] = state.split(":") as [
+        "instagram" | "whatsapp",
+        string,
+      ];
+      if (businessId !== business.id) {
+        navigate("/dashboard/social", { replace: true });
+        return;
+      }
+      completeSocialOauth(platform, code, businessId)
+        .then(() => {
+          toast.success(
+            `${platform === "instagram" ? "Instagram" : "WhatsApp"} connected`,
+          );
+          setConnectionsRefreshKey((k) => k + 1);
+        })
+        .catch((err) =>
+          toast.error(
+            err instanceof Error
+              ? err.message
+              : "Failed to complete connection",
+          ),
+        )
+        .finally(() => navigate("/dashboard/social", { replace: true }));
+    }
+  }, [business]);
 
   async function handleGenerate() {
     setGenerating(true);
     try {
       const drafts = await generateSocialDrafts();
       setPosts((prev) => [...drafts, ...prev]);
-      toast.success(`${drafts.length} caption${drafts.length === 1 ? "" : "s"} drafted`);
+      toast.success(
+        `${drafts.length} caption${drafts.length === 1 ? "" : "s"} drafted`,
+      );
     } catch {
       toast.error("Failed to generate drafts");
     } finally {
@@ -464,14 +666,21 @@ function SocialWorkspace() {
   }
 
   function handleImageUploaded(id: string, imageUrl: string) {
-    setPosts((prev) => prev.map((p) => (p.id === id ? { ...p, image_url: imageUrl } : p)));
+    setPosts((prev) =>
+      prev.map((p) => (p.id === id ? { ...p, image_url: imageUrl } : p)),
+    );
   }
 
   function handlePublished(id: string, platformPostId: string) {
     setPosts((prev) =>
       prev.map((p) =>
         p.id === id
-          ? { ...p, status: "published", platform_post_id: platformPostId, published_at: new Date().toISOString() }
+          ? {
+              ...p,
+              status: "published",
+              platform_post_id: platformPostId,
+              published_at: new Date().toISOString(),
+            }
           : p,
       ),
     );
@@ -479,14 +688,15 @@ function SocialWorkspace() {
 
   async function handleSuggest() {
     if (!niche.trim()) {
-      toast.error("Describe your niche first (e.g. \"wedding photography\")");
+      toast.error('Describe your niche first (e.g. "wedding photography")');
       return;
     }
     setSuggesting(true);
     try {
       const results = await suggestCompetitors(niche.trim());
       setCandidates(results);
-      if (results.length === 0) toast.info("No candidates found — try a different niche description");
+      if (results.length === 0)
+        toast.info("No candidates found — try a different niche description");
     } catch {
       toast.error("Failed to suggest competitors");
     } finally {
@@ -494,11 +704,16 @@ function SocialWorkspace() {
     }
   }
 
-  async function handleConfirmCandidate(candidate: { handle: string; source_url: string }) {
+  async function handleConfirmCandidate(candidate: {
+    handle: string;
+    source_url: string;
+  }) {
     try {
       const added = await addCompetitor(candidate.handle, "ai_suggested");
       setCompetitors((prev) => [added, ...prev]);
-      setCandidates((prev) => prev.filter((c) => c.handle !== candidate.handle));
+      setCandidates((prev) =>
+        prev.filter((c) => c.handle !== candidate.handle),
+      );
     } catch {
       toast.error("Failed to add competitor");
     }
@@ -530,12 +745,16 @@ function SocialWorkspace() {
   }
 
   const draftPosts = posts.filter((p) => p.status === "draft");
-  const approvedPosts = posts.filter((p) => p.status === "approved" || p.status === "published");
+  const approvedPosts = posts.filter(
+    (p) => p.status === "approved" || p.status === "published",
+  );
 
   return (
     <div className="space-y-6 md:space-y-8">
       <div>
-        <h1 className="text-3xl md:text-4xl font-bold text-balance mb-1">Social</h1>
+        <h1 className="text-3xl md:text-4xl font-bold text-balance mb-1">
+          Social
+        </h1>
         <p className="text-sm md:text-base text-muted-foreground">
           AI-drafted Instagram captions and competitor tracking
         </p>
@@ -554,13 +773,21 @@ function SocialWorkspace() {
                 : "border-transparent text-muted-foreground hover:text-foreground"
             }`}
           >
-            {t === "connections" ? "Connections" : t === "compose" ? "Compose" : "Competitors"}
+            {t === "connections"
+              ? "Connections"
+              : t === "compose"
+                ? "Compose"
+                : "Competitors"}
           </button>
         ))}
       </div>
 
       {tab === "connections" && business && (
-        <ConnectionsTab businessId={business.id} contactPhone={business.contact_phone ?? null} />
+        <ConnectionsTab
+          businessId={business.id}
+          contactPhone={business.contact_phone ?? null}
+          refreshKey={connectionsRefreshKey}
+        />
       )}
 
       {tab === "compose" && (
@@ -581,7 +808,8 @@ function SocialWorkspace() {
               <CardContent className="flex flex-col items-center justify-center py-16 text-center gap-3">
                 <Share2 className="w-8 h-8 text-muted-foreground opacity-40" />
                 <p className="text-sm text-muted-foreground max-w-md">
-                  No captions yet. Generate a few AI drafts to get started — you'll review and approve each one before posting anywhere.
+                  No captions yet. Generate a few AI drafts to get started —
+                  you'll review and approve each one before posting anywhere.
                 </p>
               </CardContent>
             </Card>
@@ -610,7 +838,11 @@ function SocialWorkspace() {
                     Approved
                   </p>
                   {approvedPosts.map((post) => (
-                    <PublishablePostCard key={post.id} post={post} onPublished={handlePublished} />
+                    <PublishablePostCard
+                      key={post.id}
+                      post={post}
+                      onPublished={handlePublished}
+                    />
                   ))}
                 </div>
               )}
@@ -639,7 +871,8 @@ function SocialWorkspace() {
                 </Button>
               </div>
               <p className="text-xs text-muted-foreground">
-                Candidates come from a live web search, not AI guesswork — confirm the ones that look right before tracking them.
+                Candidates come from a live web search, not AI guesswork —
+                confirm the ones that look right before tracking them.
               </p>
 
               {candidates.length > 0 && (
@@ -710,14 +943,18 @@ function SocialLocked({
   return (
     <div className="space-y-6 md:space-y-8">
       <div>
-        <h1 className="text-3xl md:text-4xl font-bold text-balance mb-1">Social</h1>
+        <h1 className="text-3xl md:text-4xl font-bold text-balance mb-1">
+          Social
+        </h1>
       </div>
       <Card className="border-dashed">
         <CardContent className="flex flex-col items-center justify-center py-20 text-center gap-4">
           <div className="w-16 h-16 rounded-full bg-accent/10 flex items-center justify-center">
             <Share2 className="w-8 h-8 text-accent" />
           </div>
-          <p className="text-muted-foreground max-w-md text-pretty">{message}</p>
+          <p className="text-muted-foreground max-w-md text-pretty">
+            {message}
+          </p>
           {showUpgradeCta && (
             <Button onClick={() => setShowUpgradeModal(true)}>
               <Crown className="w-4 h-4 mr-2" />
@@ -727,7 +964,10 @@ function SocialLocked({
         </CardContent>
       </Card>
       {showUpgradeCta && (
-        <UpgradeModal open={showUpgradeModal} onOpenChange={setShowUpgradeModal} />
+        <UpgradeModal
+          open={showUpgradeModal}
+          onOpenChange={setShowUpgradeModal}
+        />
       )}
     </div>
   );
@@ -750,9 +990,8 @@ export default function SocialPage() {
 
   // Private beta gate — Instagram/WhatsApp publishing is still being tested against a personal
   // Meta developer account, so this stays hidden from agency-tier beta users until that's further along.
-  const settings = (extractedData as Record<string, unknown> | null)?.settings as
-    | Record<string, unknown>
-    | undefined;
+  const settings = (extractedData as Record<string, unknown> | null)
+    ?.settings as Record<string, unknown> | undefined;
   const betaEnabled = settings?.social_beta_enabled === true;
 
   if (!betaEnabled) {

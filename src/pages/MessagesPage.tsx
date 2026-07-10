@@ -266,6 +266,9 @@ function ThreadPane({
                       {formatTime(m.created_at)}
                     </p>
                   </div>
+                  {m.channel === 'whatsapp' && (
+                    <span className="text-[10px] mt-0.5 px-1 text-muted-foreground/60">via WhatsApp</span>
+                  )}
                   {m.sender_role === 'freelancer' && (
                     <span className={`text-[10px] mt-0.5 px-1 transition-colors ${m.read_at ? 'text-primary' : 'text-muted-foreground/40'}`}>
                       {m.read_at ? '✓✓' : '✓'}
@@ -411,13 +414,14 @@ export default function MessagesPage() {
   const [saveAsClientName, setSaveAsClientName] = useState('');
   const [saveAsClientEmail, setSaveAsClientEmail] = useState('');
   const [savingAsClient, setSavingAsClient] = useState(false);
+  const [whatsappConnected, setWhatsappConnected] = useState(false);
 
   useEffect(() => {
     if (!business) return;
 
     async function load() {
       setLoading(true);
-      const [{ data: contactData }, { data: msgData }] = await Promise.all([
+      const [{ data: contactData }, { data: msgData }, { data: waConnection }] = await Promise.all([
         supabase
           .from('contacts')
           .select('id, name, email, phone, company, lifecycle_status, portal_token')
@@ -428,9 +432,17 @@ export default function MessagesPage() {
           .select('*')
           .eq('business_id', business!.id)
           .order('created_at', { ascending: true }),
+        supabase
+          .from('social_connections')
+          .select('id')
+          .eq('business_id', business!.id)
+          .eq('platform', 'whatsapp')
+          .eq('status', 'connected')
+          .maybeSingle(),
       ]);
       setContacts(contactData || []);
       setMessages(msgData || []);
+      setWhatsappConnected(!!waConnection);
       setLoading(false);
     }
 
@@ -489,16 +501,36 @@ export default function MessagesPage() {
     if (!business || !user || !selectedId) return;
     setSending(true);
     try {
-      const { error } = await supabase.from('messages').insert({
-        business_id: business.id,
-        client_id: selectedId,
-        sender_id: user.id,
-        sender_role: 'freelancer',
-        body,
-      });
-      if (error) throw error;
-
       const contact = contacts.find(c => c.id === selectedId);
+
+      // Once a contact's thread has any WhatsApp-channel message, keep replying on
+      // WhatsApp rather than silently falling back to a portal-only message the
+      // client would never see unless they happen to check their portal.
+      const threadHasWhatsapp = messages.some(
+        m => m.client_id === selectedId && m.channel === 'whatsapp',
+      );
+
+      if (threadHasWhatsapp && whatsappConnected && contact?.phone) {
+        const { error } = await supabase.functions.invoke('send-whatsapp-message', {
+          body: {
+            business_id: business.id,
+            client_id: selectedId,
+            to_phone: contact.phone,
+            body_text: body,
+          },
+        });
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from('messages').insert({
+          business_id: business.id,
+          client_id: selectedId,
+          sender_id: user.id,
+          sender_role: 'freelancer',
+          body,
+        });
+        if (error) throw error;
+      }
+
       if (contact?.email) {
         const portalUrl = contact.portal_token
           ? `${SITE_URL}/portal/${contact.portal_token}`
@@ -718,6 +750,7 @@ export default function MessagesPage() {
                       <p className="text-sm whitespace-pre-wrap break-words">{m.body}</p>
                       <p className="text-[10px] mt-1 text-muted-foreground">{formatTime(m.created_at)}</p>
                     </div>
+                    <span className="text-[10px] mt-0.5 px-1 text-muted-foreground/60">via WhatsApp</span>
                   </div>
                 ))}
               </div>

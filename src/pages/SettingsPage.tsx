@@ -21,7 +21,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/contexts/AuthContext";
 import { useBusiness } from "@/contexts/CurrentBusinessContext";
 import { supabase } from "@/db/supabase";
-import { completeSocialOauth } from "@/services/socialService";
 import type { BusinessProfile } from "@/types/types";
 
 const TIMEZONES = [
@@ -110,28 +109,6 @@ export default function SettingsPage() {
       loadConnectStatus();
     }
   }, [user]);
-
-  // Handle the Meta OAuth redirect back to this page (?code=&state=platform:business_id) —
-  // the Connect Instagram/WhatsApp UI lives on the Social page, but the registered Meta
-  // redirect_uri still points here, so this page finishes the exchange then forwards there.
-  useEffect(() => {
-    const code = searchParams.get('code');
-    const state = searchParams.get('state');
-    const oauthError = searchParams.get('error_description') || searchParams.get('error');
-    if (oauthError) {
-      toast.error(`Connection failed: ${oauthError}`);
-      navigate('/dashboard/social');
-      return;
-    }
-    if (code && state && business) {
-      const [platform, businessId] = state.split(':') as ['instagram' | 'whatsapp', string];
-      if (businessId !== business.id) { navigate('/dashboard/social'); return; }
-      completeSocialOauth(platform, code, businessId)
-        .then(() => toast.success(`${platform === 'instagram' ? 'Instagram' : 'WhatsApp'} connected`))
-        .catch((err) => toast.error(err instanceof Error ? err.message : 'Failed to complete connection'))
-        .finally(() => navigate('/dashboard/social'));
-    }
-  }, [business]);
 
   useEffect(() => {
     if (!user) return;

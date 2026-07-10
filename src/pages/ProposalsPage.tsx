@@ -248,7 +248,7 @@ function StatusBadge({ status }: { status: ProposalStatus }) {
 
 export default function ProposalsPage() {
   const { business } = useBusiness();
-  const { profile } = useAuth();
+  const { user, profile } = useAuth();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -1071,10 +1071,15 @@ export default function ProposalsPage() {
       };
 
       if (editProposal) {
-        await supabase.from('proposals').update(payload).eq('id', editProposal.id);
+        const { error } = await supabase.from('proposals').update(payload).eq('id', editProposal.id);
+        if (error) throw error;
         toast.success('Proposal updated');
       } else {
-        await supabase.from('proposals').insert({ ...payload, status: 'draft' });
+        if (!user) throw new Error('Not authenticated');
+        const { error } = await supabase
+          .from('proposals')
+          .insert({ ...payload, user_id: user.id, status: 'draft' });
+        if (error) throw error;
         toast.success('Proposal created');
       }
 

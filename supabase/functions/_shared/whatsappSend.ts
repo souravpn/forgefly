@@ -14,11 +14,43 @@ const SESSION_WINDOW_MS = 24 * 60 * 60 * 1000;
 const TEMPLATE_NAME = 'hello_world';
 const TEMPLATE_LANGUAGE = 'en_US';
 
+// Digits-only comparison so "+1 (555) 123-4567", "15551234567", and "5551234567"
+// (missing country code) can still be matched against each other where possible.
+export function normalizePhone(phone: string): string {
+  return phone.replace(/[^0-9]/g, '');
+}
+
+// Resolves the `contacts` row (messages.client_id's FK target) for a raw phone
+// number, so outbound sends can attach to the same thread the inbound webhook
+// uses — without this, client-facing notifications land as orphaned
+// "Unknown number" threads even when the contact is known by other means
+// (e.g. clients.id from an invoice, which is a different ID space entirely).
+export async function resolveContactIdByPhone(
+  service: ServiceClient,
+  businessId: string,
+  rawPhone: string | null | undefined,
+): Promise<string | null> {
+  if (!rawPhone) return null;
+  const normalized = normalizePhone(rawPhone);
+  if (!normalized) return null;
+
+  const { data: contacts } = await service
+    .from('contacts')
+    .select('id, phone')
+    .eq('business_id', businessId)
+    .not('phone', 'is', null);
+
+  const match = (contacts ?? []).find(
+    (c: { id: string; phone: string | null }) => c.phone && normalizePhone(c.phone) === normalized,
+  );
+  return match?.id ?? null;
+}
+
 export async function sendWhatsapp(
   service: ServiceClient,
-  params: { businessId: string; toPhone: string; bodyText: string },
+  params: { businessId: string; toPhone: string; bodyText: string; clientId?: string | null },
 ): Promise<{ sent: boolean; reason?: string }> {
-  const { businessId, toPhone, bodyText } = params;
+  const { businessId, toPhone, bodyText, clientId } = params;
   if (!toPhone) return { sent: false, reason: 'No phone number' };
 
   const { data: connection } = await service
@@ -74,13 +106,15 @@ export async function sendWhatsapp(
     return { sent: false, reason: data.error?.message ?? 'WhatsApp send failed' };
   }
 
-  await service.from('messages').insert({
+  const { error: insertError } = await service.from('messages').insert({
     business_id: businessId,
+    client_id: clientId ?? null,
     sender_role: 'freelancer',
     channel: 'whatsapp',
     wa_phone: toPhone,
     body: withinSession ? bodyText : `[Template sent] ${bodyText}`,
   });
+  if (insertError) console.error('sendWhatsapp: failed to log message', insertError);
 
   return { sent: true };
 }

@@ -102,7 +102,7 @@ export interface SocialConnectionStatus {
   extra: { username?: string; waba_id?: string; display_phone_number?: string } | null;
 }
 
-const OAUTH_REDIRECT_PATH = '/settings?tab=account';
+const OAUTH_REDIRECT_PATH = '/dashboard/social';
 
 export async function getSocialConnections(businessId: string): Promise<SocialConnectionStatus[]> {
   const { data, error } = await supabase.functions.invoke('get-social-status', {

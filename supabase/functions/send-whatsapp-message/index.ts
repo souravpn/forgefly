@@ -11,14 +11,18 @@ serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
   try {
-    const { contact_id, file_name } = await req.json() as {
-      contact_id?: string;
-      file_name?: string;
+    const { business_id, client_id, to_phone, body_text } = await req.json() as {
+      business_id?: string;
+      client_id?: string;
+      to_phone?: string;
+      body_text?: string;
     };
-    if (!contact_id || !file_name) {
-      return new Response(JSON.stringify({ error: 'contact_id and file_name are required' }), {
-        status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+
+    if (!business_id || !client_id || !to_phone || !body_text) {
+      return new Response(
+        JSON.stringify({ error: 'business_id, client_id, to_phone, and body_text are required' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
     }
 
     const userClient = createClient(
@@ -38,21 +42,10 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
     );
 
-    const { data: contact } = await service
-      .from('contacts')
-      .select('id, name, phone, business_id')
-      .eq('id', contact_id)
-      .maybeSingle();
-    if (!contact) {
-      return new Response(JSON.stringify({ error: 'Contact not found' }), {
-        status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
     const { data: business } = await service
       .from('businesses')
-      .select('id, name, user_id, contact_phone')
-      .eq('id', contact.business_id)
+      .select('id, user_id')
+      .eq('id', business_id)
       .maybeSingle();
 
     if (!business || business.user_id !== user.id) {
@@ -61,27 +54,24 @@ serve(async (req) => {
       });
     }
 
-    if (business.contact_phone) {
-      await sendWhatsapp(service, {
-        businessId: business.id,
-        toPhone: business.contact_phone,
-        bodyText: `You shared "${file_name}" with ${contact.name}.`,
-      });
-    }
-    if (contact.phone) {
-      await sendWhatsapp(service, {
-        businessId: business.id,
-        toPhone: contact.phone,
-        clientId: contact.id,
-        bodyText: `${business.name} shared a new file with you: "${file_name}". Check your portal to view it.`,
+    const result = await sendWhatsapp(service, {
+      businessId: business_id,
+      toPhone: to_phone,
+      bodyText: body_text,
+      clientId: client_id,
+    });
+
+    if (!result.sent) {
+      return new Response(JSON.stringify({ error: result.reason ?? 'Failed to send WhatsApp message' }), {
+        status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    return new Response(JSON.stringify({ notified: true }), {
+    return new Response(JSON.stringify({ sent: true }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (err) {
-    console.error('notify-portal-file-shared error:', err);
+    console.error('send-whatsapp-message error:', err);
     return new Response(JSON.stringify({ error: String(err) }), {
       status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
