@@ -2,6 +2,7 @@ import React from 'react';
 import { BrowserRouter as Router, MemoryRouter, Routes, Route, Navigate } from 'react-router-dom';
 import PublicPortfolioPage from './pages/PublicPortfolioPage';
 import IntersectObserver from '@/components/common/IntersectObserver';
+import { ScrollToTop } from '@/components/common/ScrollToTop';
 import { Toaster } from '@/components/ui/sonner';
 import { MainLayout } from '@/components/layouts/MainLayout';
 import { PWAInstallPrompt } from '@/components/common/PWAInstallPrompt';
@@ -39,6 +40,7 @@ const App: React.FC = () => {
       <Router>
         <AuthProvider>
           <RouteGuard>
+            <ScrollToTop />
             <IntersectObserver />
             <Routes>
               {/* Public routes without layout */}

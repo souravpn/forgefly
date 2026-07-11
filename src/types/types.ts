@@ -361,6 +361,28 @@ export interface SocialPost {
   image_url: string | null;
   platform_post_id: string | null;
   published_at: string | null;
+  is_featured: boolean;
+  featured_date: string | null;
+  headline: string | null;
+  template_id: string | null;
+}
+
+export type PromotionPlatform = 'instagram' | 'facebook' | 'nextdoor' | 'x' | 'linkedin';
+export type SocialPostTargetStatus = 'pending' | 'approved' | 'published' | 'skipped' | 'failed';
+
+export interface SocialPostTarget {
+  id: string;
+  post_id: string;
+  platform: PromotionPlatform;
+  status: SocialPostTargetStatus;
+  platform_post_id: string | null;
+  published_at: string | null;
+  created_at: string;
+}
+
+/** A `SocialPost` used as a promotion, with its per-platform targets attached. */
+export interface Promotion extends SocialPost {
+  targets: SocialPostTarget[];
 }
 
 export type CompetitorSource = 'ai_suggested' | 'manual';

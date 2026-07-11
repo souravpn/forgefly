@@ -1,5 +1,5 @@
-import { useState, type ReactNode } from "react";
-import { X, Sparkles, Send } from "lucide-react";
+import { useState, useRef, useCallback, type ReactNode } from "react";
+import { X, Sparkles, Send, GripVertical } from "lucide-react";
 import { AppSidebar } from "./AppSidebar";
 import { MobileTopBar } from "./MobileTopBar";
 import { BusinessBand } from "./BusinessBand";
@@ -17,6 +17,10 @@ import { CommandBar } from "./CommandBar";
 import NoBusinessPage from "@/pages/NoBusinessPage";
 
 type PanelType = "copilot" | "upgrade";
+
+const PANEL_MIN_WIDTH = 320;
+const PANEL_MAX_WIDTH = 720;
+const PANEL_DEFAULT_WIDTH = 380;
 
 function UpgradePanel({ onClose }: { onClose: () => void }) {
   const { business, extractedData, refetch } = useBusiness();
@@ -57,9 +61,41 @@ function UpgradePanel({ onClose }: { onClose: () => void }) {
 function AppShellContent({ children }: { children: ReactNode }) {
   const [moreOpen, setMoreOpen] = useState(false);
   const [panelType, setPanelType] = useState<PanelType | null>(null);
+  const [panelWidth, setPanelWidth] = useState(PANEL_DEFAULT_WIDTH);
+  const isResizingRef = useRef(false);
+  const contentColumnRef = useRef<HTMLDivElement>(null);
   const { business, extractedData, isLoading } = useBusiness();
   const nudges = useNudges();
   useReviewNotification();
+
+  const handleResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    isResizingRef.current = true;
+    const columnRight =
+      contentColumnRef.current?.getBoundingClientRect().right ??
+      window.innerWidth;
+
+    const onMouseMove = (moveEvent: MouseEvent) => {
+      if (!isResizingRef.current) return;
+      const newWidth = columnRight - moveEvent.clientX - 8;
+      setPanelWidth(
+        Math.min(PANEL_MAX_WIDTH, Math.max(PANEL_MIN_WIDTH, newWidth)),
+      );
+    };
+
+    const onMouseUp = () => {
+      isResizingRef.current = false;
+      document.removeEventListener("mousemove", onMouseMove);
+      document.removeEventListener("mouseup", onMouseUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    document.addEventListener("mousemove", onMouseMove);
+    document.addEventListener("mouseup", onMouseUp);
+  }, []);
 
   if (!isLoading && !business) {
     return <NoBusinessPage />;
@@ -84,10 +120,17 @@ function AppShellContent({ children }: { children: ReactNode }) {
       style={secondaryColor ? { backgroundColor: secondaryColor } : undefined}
     >
       {/* Desktop sidebar */}
-      <AppSidebar nudges={nudges} />
+      <AppSidebar
+        nudges={nudges}
+        isCopilotOpen={panelType === "copilot"}
+        onOpenCopilot={() => openPanel("copilot")}
+      />
 
       {/* Content column */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden rounded-2xl bg-background/30 backdrop-blur-md border border-border/40 shadow-lg relative">
+      <div
+        ref={contentColumnRef}
+        className="flex-1 flex flex-col min-w-0 overflow-hidden rounded-2xl bg-background/30 backdrop-blur-md border border-border/40 shadow-lg relative"
+      >
         {/* Mobile top bar */}
         <MobileTopBar onMenuOpen={() => setMoreOpen(true)} nudges={nudges} />
 
@@ -99,20 +142,35 @@ function AppShellContent({ children }: { children: ReactNode }) {
           <div className="px-4 md:px-6 py-4 md:py-6">{children}</div>
         </main>
 
-        {/* Right-side panel overlay (copilot or upgrade) */}
+        {/* Right-side panel overlay (copilot or upgrade), resizable via drag handle */}
         {panelType && (
           <div
-            className={cn(
-              "absolute right-2 top-[48px] bottom-2 z-40 w-[360px] flex flex-col",
-              "bg-background border border-border/40 shadow-2xl rounded-xl overflow-hidden",
-              "transition-all duration-200",
-            )}
+            className="absolute right-2 top-[48px] bottom-2 z-40 flex"
+            style={{ width: panelWidth }}
           >
-            {panelType === "copilot" ? (
-              <AICopilot onClose={closePanel} />
-            ) : (
-              <UpgradePanel onClose={closePanel} />
-            )}
+            {/* Resize handle */}
+            <div
+              onMouseDown={handleResizeStart}
+              className="group relative w-1.5 shrink-0 cursor-col-resize flex items-center justify-center"
+            >
+              <div className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-border group-hover:bg-primary/50 transition-colors" />
+              <div className="z-10 flex h-8 w-3 items-center justify-center rounded-sm border bg-border group-hover:border-primary/50 transition-colors">
+                <GripVertical className="h-2.5 w-2.5" />
+              </div>
+            </div>
+
+            <div
+              className={cn(
+                "flex-1 min-w-0 flex flex-col",
+                "bg-background border border-border/40 shadow-2xl rounded-xl overflow-hidden",
+              )}
+            >
+              {panelType === "copilot" ? (
+                <AICopilot onClose={closePanel} />
+              ) : (
+                <UpgradePanel onClose={closePanel} />
+              )}
+            </div>
           </div>
         )}
       </div>

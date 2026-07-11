@@ -4,7 +4,6 @@ import {
   Facebook,
   HelpCircle,
   Home,
-  ImagePlus,
   Instagram,
   Linkedin,
   Loader2,
@@ -14,15 +13,25 @@ import {
   Search,
   Share2,
   Sparkles,
-  ThumbsDown,
   Twitter,
   X,
   Youtube,
 } from "lucide-react";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { UpgradeModal } from "@/components/common/UpgradeModal";
+import { ManualPromotionForm } from "@/components/promotions/ManualPromotionForm";
+import { OpenAIIcon } from "@/components/promotions/OpenAIIcon";
+import { PromotionCard } from "@/components/promotions/PromotionCard";
+import { PromotionList } from "@/components/promotions/PromotionList";
+import { PublishWorkflowModal } from "@/components/promotions/PublishWorkflowModal";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -30,32 +39,40 @@ import { Input } from "@/components/ui/input";
 import { useAuth } from "@/contexts/AuthContext";
 import { useBusiness } from "@/contexts/CurrentBusinessContext";
 import {
+  deletePromotion,
+  draftPromotion,
+  generateFeaturedPromotion,
+  generateFeaturedPromotionOpenAI,
+  getFeaturedPromotion,
+  getPromotionsByStatus,
+} from "@/services/promotionService";
+import {
   addCompetitor,
-  approveSocialPost,
-  archiveSocialPost,
   completeSocialOauth,
   disconnectSocialPlatform,
   dismissCompetitor,
   fetchCompetitorIntel,
-  generateSocialDrafts,
   getCompetitorIntel,
   getCompetitors,
   getSocialConnections,
-  getSocialPosts,
-  publishSocialPost,
   type SocialConnectionStatus,
   startInstagramConnect,
   startWhatsappConnect,
   suggestCompetitors,
-  uploadSocialImage,
 } from "@/services/socialService";
 import type {
   CompetitorProfile,
   CompetitorSiteIntel,
-  SocialPost,
+  Promotion,
 } from "@/types/types";
 
-type Tab = "connections" | "compose" | "competitors";
+type Tab =
+  | "featured"
+  | "create"
+  | "draft"
+  | "published"
+  | "connections"
+  | "competitors";
 
 function ConnectionsTab({
   businessId,
@@ -122,92 +139,92 @@ function ConnectionsTab({
   return (
     <div>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          <PlatformCard
-            icon={<Instagram className="w-6 h-6 text-white" />}
-            iconClassName="bg-gradient-to-tr from-yellow-400 via-pink-500 to-purple-600"
-            name="Instagram"
-            description="Publish AI-drafted posts to your Instagram business account."
-            connected={!!instagramConnection}
-            connectedLabel={`@${instagramConnection?.extra?.username ?? "connected account"}`}
-            loading={igConnectLoading || loading}
-            onConnect={handleConnectInstagram}
-            onDisconnect={() => handleDisconnect("instagram")}
-          />
-          <PlatformCard
-            icon={<MessageCircle className="w-6 h-6 text-white" />}
-            iconClassName="bg-[#25D366]"
-            name="WhatsApp"
-            description="Send and receive client messages over WhatsApp."
-            connected={!!whatsappConnection}
-            connectedLabel={
-              whatsappConnection?.extra?.display_phone_number ??
-              "connected number"
-            }
-            loading={waConnectLoading || loading}
-            onConnect={handleConnectWhatsapp}
-            onDisconnect={() => handleDisconnect("whatsapp")}
-            warning={
-              !contactPhone && !whatsappConnection
-                ? "Add a contact phone number in Settings → Business tab first — that's where your own WhatsApp notifications will be sent."
-                : undefined
-            }
-          />
-          <PlatformCard
-            icon={<Music className="w-6 h-6 text-white" />}
-            iconClassName="bg-black"
-            name="TikTok"
-            description="Publish short-form videos directly to TikTok."
-            comingSoon
-          />
-          <PlatformCard
-            icon={<Linkedin className="w-6 h-6 text-white" />}
-            iconClassName="bg-[#0A66C2]"
-            name="LinkedIn"
-            description="Share updates and articles to your LinkedIn page."
-            comingSoon
-          />
-          <PlatformCard
-            icon={<Youtube className="w-6 h-6 text-white" />}
-            iconClassName="bg-[#FF0000]"
-            name="YouTube"
-            description="Upload and manage videos on your YouTube channel."
-            comingSoon
-          />
-          <PlatformCard
-            icon={<Twitter className="w-6 h-6 text-white" />}
-            iconClassName="bg-black"
-            name="X"
-            description="Post updates and threads directly to X."
-            comingSoon
-          />
-          <PlatformCard
-            icon={<Facebook className="w-6 h-6 text-white" />}
-            iconClassName="bg-[#1877F2]"
-            name="Facebook"
-            description="Publish posts and updates to your Facebook Page."
-            comingSoon
-          />
-          <PlatformCard
-            icon={<Home className="w-6 h-6 text-white" />}
-            iconClassName="bg-[#8ED500]"
-            name="Nextdoor"
-            description="Reach clients in your local neighborhood on Nextdoor."
-            comingSoon
-          />
-          <PlatformCard
-            icon={<MessageSquare className="w-6 h-6 text-white" />}
-            iconClassName="bg-[#FF4500]"
-            name="Reddit"
-            description="Engage with communities and share updates on Reddit."
-            comingSoon
-          />
-          <PlatformCard
-            icon={<HelpCircle className="w-6 h-6 text-white" />}
-            iconClassName="bg-[#B92B27]"
-            name="Quora"
-            description="Answer questions and build authority on Quora."
-            comingSoon
-          />
+        <PlatformCard
+          icon={<Instagram className="w-6 h-6 text-white" />}
+          iconClassName="bg-gradient-to-tr from-yellow-400 via-pink-500 to-purple-600"
+          name="Instagram"
+          description="Publish AI-drafted posts to your Instagram business account."
+          connected={!!instagramConnection}
+          connectedLabel={`@${instagramConnection?.extra?.username ?? "connected account"}`}
+          loading={igConnectLoading || loading}
+          onConnect={handleConnectInstagram}
+          onDisconnect={() => handleDisconnect("instagram")}
+        />
+        <PlatformCard
+          icon={<MessageCircle className="w-6 h-6 text-white" />}
+          iconClassName="bg-[#25D366]"
+          name="WhatsApp"
+          description="Send and receive client messages over WhatsApp."
+          connected={!!whatsappConnection}
+          connectedLabel={
+            whatsappConnection?.extra?.display_phone_number ??
+            "connected number"
+          }
+          loading={waConnectLoading || loading}
+          onConnect={handleConnectWhatsapp}
+          onDisconnect={() => handleDisconnect("whatsapp")}
+          warning={
+            !contactPhone && !whatsappConnection
+              ? "Add a contact phone number in Settings → Business tab first — that's where your own WhatsApp notifications will be sent."
+              : undefined
+          }
+        />
+        <PlatformCard
+          icon={<Music className="w-6 h-6 text-white" />}
+          iconClassName="bg-black"
+          name="TikTok"
+          description="Publish short-form videos directly to TikTok."
+          comingSoon
+        />
+        <PlatformCard
+          icon={<Linkedin className="w-6 h-6 text-white" />}
+          iconClassName="bg-[#0A66C2]"
+          name="LinkedIn"
+          description="Share updates and articles to your LinkedIn page."
+          comingSoon
+        />
+        <PlatformCard
+          icon={<Youtube className="w-6 h-6 text-white" />}
+          iconClassName="bg-[#FF0000]"
+          name="YouTube"
+          description="Upload and manage videos on your YouTube channel."
+          comingSoon
+        />
+        <PlatformCard
+          icon={<Twitter className="w-6 h-6 text-white" />}
+          iconClassName="bg-black"
+          name="X"
+          description="Post updates and threads directly to X."
+          comingSoon
+        />
+        <PlatformCard
+          icon={<Facebook className="w-6 h-6 text-white" />}
+          iconClassName="bg-[#1877F2]"
+          name="Facebook"
+          description="Publish posts and updates to your Facebook Page."
+          comingSoon
+        />
+        <PlatformCard
+          icon={<Home className="w-6 h-6 text-white" />}
+          iconClassName="bg-[#8ED500]"
+          name="Nextdoor"
+          description="Reach clients in your local neighborhood on Nextdoor."
+          comingSoon
+        />
+        <PlatformCard
+          icon={<MessageSquare className="w-6 h-6 text-white" />}
+          iconClassName="bg-[#FF4500]"
+          name="Reddit"
+          description="Engage with communities and share updates on Reddit."
+          comingSoon
+        />
+        <PlatformCard
+          icon={<HelpCircle className="w-6 h-6 text-white" />}
+          iconClassName="bg-[#B92B27]"
+          name="Quora"
+          description="Answer questions and build authority on Quora."
+          comingSoon
+        />
       </div>
     </div>
   );
@@ -325,150 +342,6 @@ function CompeteRow({
   );
 }
 
-function DraftPostCard({
-  post,
-  onApprove,
-  onArchive,
-  onImageUploaded,
-}: {
-  post: SocialPost;
-  onApprove: (id: string, imageUrl: string | null) => void;
-  onArchive: (id: string) => void;
-  onImageUploaded: (id: string, imageUrl: string) => void;
-}) {
-  const [uploading, setUploading] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setUploading(true);
-    try {
-      const url = await uploadSocialImage(post.id, file);
-      onImageUploaded(post.id, url);
-    } catch {
-      toast.error("Failed to upload image");
-    } finally {
-      setUploading(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
-    }
-  }
-
-  return (
-    <Card>
-      <CardContent className="p-4 space-y-3">
-        <p className="text-sm whitespace-pre-wrap">{post.caption}</p>
-
-        {post.image_url ? (
-          <img
-            src={post.image_url}
-            alt="Post attachment"
-            className="w-full max-w-xs rounded-lg border"
-          />
-        ) : (
-          <p className="text-xs text-amber-600">
-            Instagram requires an image on every post — attach one before
-            approving.
-          </p>
-        )}
-
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/*"
-          className="hidden"
-          onChange={handleFileChange}
-        />
-
-        <div className="flex gap-2">
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={uploading}
-            onClick={() => fileInputRef.current?.click()}
-          >
-            {uploading ? (
-              <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
-            ) : (
-              <ImagePlus className="w-3.5 h-3.5 mr-1.5" />
-            )}
-            {post.image_url ? "Replace image" : "Add image"}
-          </Button>
-          <Button
-            size="sm"
-            disabled={!post.image_url}
-            onClick={() => onApprove(post.id, post.image_url)}
-          >
-            Approve
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => onArchive(post.id)}
-          >
-            <ThumbsDown className="w-3.5 h-3.5 mr-1.5" />
-            Dismiss
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-function PublishablePostCard({
-  post,
-  onPublished,
-}: {
-  post: SocialPost;
-  onPublished: (id: string, platformPostId: string) => void;
-}) {
-  const [publishing, setPublishing] = useState(false);
-
-  async function handlePublish() {
-    setPublishing(true);
-    try {
-      const result = await publishSocialPost(post.id);
-      onPublished(post.id, result.platform_post_id);
-      toast.success("Published to Instagram");
-    } catch (err: unknown) {
-      toast.error((err as Error).message || "Failed to publish");
-    } finally {
-      setPublishing(false);
-    }
-  }
-
-  const isPublished = post.status === "published";
-
-  return (
-    <Card className={isPublished ? "border-emerald-500/30" : undefined}>
-      <CardContent className="p-4 space-y-3">
-        <p className="text-sm whitespace-pre-wrap">{post.caption}</p>
-        {post.image_url && (
-          <img
-            src={post.image_url}
-            alt="Post attachment"
-            className="w-full max-w-xs rounded-lg border"
-          />
-        )}
-        {isPublished ? (
-          <p className="text-xs text-emerald-600">
-            Published — post ID {post.platform_post_id}
-          </p>
-        ) : (
-          <Button size="sm" disabled={publishing} onClick={handlePublish}>
-            {publishing ? (
-              <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
-            ) : (
-              <Sparkles className="w-3.5 h-3.5 mr-1.5" />
-            )}
-            {publishing ? "Publishing…" : "Publish to Instagram"}
-          </Button>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
 function TrackedCompetitorCard({
   competitor,
 }: {
@@ -561,10 +434,7 @@ function SocialWorkspace() {
   const { business } = useBusiness();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const [tab, setTab] = useState<Tab>("connections");
-  const [posts, setPosts] = useState<SocialPost[]>([]);
-  const [loadingPosts, setLoadingPosts] = useState(true);
-  const [generating, setGenerating] = useState(false);
+  const [tab, setTab] = useState<Tab>("featured");
   const [connectionsRefreshKey, setConnectionsRefreshKey] = useState(0);
 
   const [competitors, setCompetitors] = useState<CompetitorProfile[]>([]);
@@ -575,14 +445,88 @@ function SocialWorkspace() {
   const [suggesting, setSuggesting] = useState(false);
   const [manualHandle, setManualHandle] = useState("");
 
+  const [featured, setFeatured] = useState<Promotion | null>(null);
+  const [loadingFeatured, setLoadingFeatured] = useState(true);
+  const [generatingFeatured, setGeneratingFeatured] = useState(false);
+  const [generatingFeaturedOpenAI, setGeneratingFeaturedOpenAI] = useState(false);
+  const [drafts, setDrafts] = useState<Promotion[]>([]);
+  const [published, setPublished] = useState<Promotion[]>([]);
+  const [publishTarget, setPublishTarget] = useState<Promotion | null>(null);
+
+  const loadFeatured = useCallback(() => {
+    if (!business) return;
+    setLoadingFeatured(true);
+    getFeaturedPromotion(business.id)
+      .then(setFeatured)
+      .finally(() => setLoadingFeatured(false));
+  }, [business]);
+
+  const loadDraftsAndPublished = useCallback(() => {
+    if (!business) return;
+    getPromotionsByStatus(business.id, "draft").then(setDrafts);
+    getPromotionsByStatus(business.id, "published").then(setPublished);
+  }, [business]);
+
   useEffect(() => {
-    getSocialPosts()
-      .then((data) => setPosts(data.filter((p) => p.status !== "archived")))
-      .finally(() => setLoadingPosts(false));
+    loadFeatured();
+    loadDraftsAndPublished();
     getCompetitors().then((data) =>
       setCompetitors(data.filter((c) => c.status === "tracking")),
     );
-  }, []);
+  }, [loadFeatured, loadDraftsAndPublished]);
+
+  async function handleGenerateFeatured() {
+    setGeneratingFeatured(true);
+    try {
+      const promotion = await generateFeaturedPromotion();
+      setFeatured(promotion);
+    } catch (err: unknown) {
+      toast.error((err as Error).message || "Failed to generate promotion");
+    } finally {
+      setGeneratingFeatured(false);
+    }
+  }
+
+  async function handleGenerateFeaturedOpenAI() {
+    setGeneratingFeaturedOpenAI(true);
+    try {
+      const promotion = await generateFeaturedPromotionOpenAI();
+      setFeatured(promotion);
+    } catch (err: unknown) {
+      toast.error((err as Error).message || "Failed to generate promotion");
+    } finally {
+      setGeneratingFeaturedOpenAI(false);
+    }
+  }
+
+  function handlePromotionPublished(id: string, platformPostId: string) {
+    void platformPostId;
+    if (featured?.id === id) setFeatured(null);
+    setDrafts((prev) => prev.filter((p) => p.id !== id));
+    loadDraftsAndPublished();
+  }
+
+  async function handlePromotionDraft(id: string) {
+    try {
+      await draftPromotion(id);
+      if (featured?.id === id) setFeatured(null);
+      loadDraftsAndPublished();
+      toast.success("Moved to drafts");
+    } catch {
+      toast.error("Failed to move to drafts");
+    }
+  }
+
+  async function handlePromotionDelete(id: string) {
+    try {
+      await deletePromotion(id);
+      if (featured?.id === id) setFeatured(null);
+      setDrafts((prev) => prev.filter((p) => p.id !== id));
+      toast.success("Deleted");
+    } catch {
+      toast.error("Failed to delete");
+    }
+  }
 
   // Guards the OAuth code exchange below from firing twice — `business` can
   // change reference more than once while its context loads, and the code in
@@ -631,60 +575,6 @@ function SocialWorkspace() {
         .finally(() => navigate("/dashboard/social", { replace: true }));
     }
   }, [business]);
-
-  async function handleGenerate() {
-    setGenerating(true);
-    try {
-      const drafts = await generateSocialDrafts();
-      setPosts((prev) => [...drafts, ...prev]);
-      toast.success(
-        `${drafts.length} caption${drafts.length === 1 ? "" : "s"} drafted`,
-      );
-    } catch {
-      toast.error("Failed to generate drafts");
-    } finally {
-      setGenerating(false);
-    }
-  }
-
-  async function handleApprove(id: string, imageUrl: string | null) {
-    try {
-      const updated = await approveSocialPost(id, imageUrl);
-      setPosts((prev) => prev.map((p) => (p.id === id ? updated : p)));
-    } catch (err: unknown) {
-      toast.error((err as Error).message || "Failed to approve");
-    }
-  }
-
-  async function handleArchive(id: string) {
-    try {
-      await archiveSocialPost(id);
-      setPosts((prev) => prev.filter((p) => p.id !== id));
-    } catch {
-      toast.error("Failed to dismiss");
-    }
-  }
-
-  function handleImageUploaded(id: string, imageUrl: string) {
-    setPosts((prev) =>
-      prev.map((p) => (p.id === id ? { ...p, image_url: imageUrl } : p)),
-    );
-  }
-
-  function handlePublished(id: string, platformPostId: string) {
-    setPosts((prev) =>
-      prev.map((p) =>
-        p.id === id
-          ? {
-              ...p,
-              status: "published",
-              platform_post_id: platformPostId,
-              published_at: new Date().toISOString(),
-            }
-          : p,
-      ),
-    );
-  }
 
   async function handleSuggest() {
     if (!niche.trim()) {
@@ -744,43 +634,132 @@ function SocialWorkspace() {
     }
   }
 
-  const draftPosts = posts.filter((p) => p.status === "draft");
-  const approvedPosts = posts.filter(
-    (p) => p.status === "approved" || p.status === "published",
-  );
-
   return (
     <div className="space-y-6 md:space-y-8">
       <div>
         <h1 className="text-3xl md:text-4xl font-bold text-balance mb-1">
-          Social
+          Promotions
         </h1>
         <p className="text-sm md:text-base text-muted-foreground">
-          AI-drafted Instagram captions and competitor tracking
+          AI-drafted promotion graphics, captions, and competitor tracking
         </p>
       </div>
 
       {/* Tab bar */}
-      <div className="flex gap-0 border-b">
-        {(["connections", "compose", "competitors"] as Tab[]).map((t) => (
+      <div className="flex gap-0 border-b overflow-x-auto">
+        {(
+          [
+            "featured",
+            "create",
+            "draft",
+            "published",
+            "connections",
+            "competitors",
+          ] as Tab[]
+        ).map((t) => (
           <button
             key={t}
             type="button"
             onClick={() => setTab(t)}
-            className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors capitalize ${
+            className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors capitalize whitespace-nowrap ${
               tab === t
                 ? "border-foreground text-foreground"
                 : "border-transparent text-muted-foreground hover:text-foreground"
             }`}
           >
-            {t === "connections"
-              ? "Connections"
-              : t === "compose"
-                ? "Compose"
-                : "Competitors"}
+            {t === "featured"
+              ? "Featured"
+              : t === "create"
+                ? "+ Create"
+                : t === "draft"
+                  ? "Draft"
+                  : t === "published"
+                    ? "Published"
+                    : t === "connections"
+                      ? "Connections"
+                      : "Competitors"}
           </button>
         ))}
       </div>
+
+      {tab === "featured" && (
+        <div className="space-y-4">
+          {loadingFeatured ? (
+            <p className="text-sm text-muted-foreground">Loading…</p>
+          ) : featured ? (
+            <PromotionCard
+              promotion={featured}
+              onChange={setFeatured}
+              onPublish={setPublishTarget}
+              onDelete={handlePromotionDelete}
+              onDraft={handlePromotionDraft}
+            />
+          ) : (
+            <Card className="border-dashed">
+              <CardContent className="flex flex-col items-center justify-center py-16 text-center gap-4">
+                <Share2 className="w-8 h-8 text-muted-foreground opacity-40" />
+                <p className="text-sm text-muted-foreground max-w-md">
+                  No more Featured promotions for Today.
+                </p>
+                <div className="flex flex-wrap items-start justify-center gap-4">
+                  <div className="flex flex-col items-center gap-1.5">
+                    <Button
+                      onClick={handleGenerateFeatured}
+                      disabled={generatingFeatured || generatingFeaturedOpenAI}
+                    >
+                      {generatingFeatured ? (
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      ) : (
+                        <Sparkles className="w-4 h-4 mr-2" />
+                      )}
+                      {generatingFeatured ? "Generating…" : "Generate with AI"}
+                    </Button>
+                    <p className="text-xs text-emerald-600">~$0.001 · text + template render</p>
+                  </div>
+                  <div className="flex flex-col items-center gap-1.5">
+                    <Button
+                      variant="outline"
+                      onClick={handleGenerateFeaturedOpenAI}
+                      disabled={generatingFeatured || generatingFeaturedOpenAI}
+                    >
+                      {generatingFeaturedOpenAI ? (
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      ) : (
+                        <OpenAIIcon className="w-4 h-4 mr-2" />
+                      )}
+                      {generatingFeaturedOpenAI ? "Generating…" : "Generate with OpenAI"}
+                    </Button>
+                    <p className="text-xs text-amber-600">~$0.04 · gpt-image-1 diffusion image</p>
+                  </div>
+                </div>
+                <Button variant="ghost" onClick={() => setTab("draft")}>
+                  Go to Drafts
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      )}
+
+      {tab === "create" && (
+        <ManualPromotionForm
+          onCreated={(promotion) => {
+            setTab("draft");
+            setDrafts((prev) => [promotion, ...prev]);
+          }}
+        />
+      )}
+
+      {tab === "draft" && (
+        <PromotionList promotions={drafts} emptyLabel="No drafts yet." />
+      )}
+
+      {tab === "published" && (
+        <PromotionList
+          promotions={published}
+          emptyLabel="No published promotions yet."
+        />
+      )}
 
       {tab === "connections" && business && (
         <ConnectionsTab
@@ -790,66 +769,16 @@ function SocialWorkspace() {
         />
       )}
 
-      {tab === "compose" && (
-        <div className="space-y-4">
-          <Button onClick={handleGenerate} disabled={generating}>
-            {generating ? (
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-            ) : (
-              <Sparkles className="w-4 h-4 mr-2" />
-            )}
-            {generating ? "Drafting…" : "Generate captions"}
-          </Button>
-
-          {loadingPosts ? (
-            <p className="text-sm text-muted-foreground">Loading…</p>
-          ) : draftPosts.length === 0 && approvedPosts.length === 0 ? (
-            <Card className="border-dashed">
-              <CardContent className="flex flex-col items-center justify-center py-16 text-center gap-3">
-                <Share2 className="w-8 h-8 text-muted-foreground opacity-40" />
-                <p className="text-sm text-muted-foreground max-w-md">
-                  No captions yet. Generate a few AI drafts to get started —
-                  you'll review and approve each one before posting anywhere.
-                </p>
-              </CardContent>
-            </Card>
-          ) : (
-            <>
-              {draftPosts.length > 0 && (
-                <div className="space-y-3">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Drafts
-                  </p>
-                  {draftPosts.map((post) => (
-                    <DraftPostCard
-                      key={post.id}
-                      post={post}
-                      onApprove={handleApprove}
-                      onArchive={handleArchive}
-                      onImageUploaded={handleImageUploaded}
-                    />
-                  ))}
-                </div>
-              )}
-
-              {approvedPosts.length > 0 && (
-                <div className="space-y-3">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Approved
-                  </p>
-                  {approvedPosts.map((post) => (
-                    <PublishablePostCard
-                      key={post.id}
-                      post={post}
-                      onPublished={handlePublished}
-                    />
-                  ))}
-                </div>
-              )}
-            </>
-          )}
-        </div>
-      )}
+      <PublishWorkflowModal
+        promotion={publishTarget}
+        onOpenChange={(open) => {
+          if (!open) setPublishTarget(null);
+        }}
+        onPublished={(id, platformPostId) => {
+          handlePromotionPublished(id, platformPostId);
+          setPublishTarget(null);
+        }}
+      />
 
       {tab === "competitors" && (
         <div className="space-y-6">
@@ -944,7 +873,7 @@ function SocialLocked({
     <div className="space-y-6 md:space-y-8">
       <div>
         <h1 className="text-3xl md:text-4xl font-bold text-balance mb-1">
-          Social
+          Promotions
         </h1>
       </div>
       <Card className="border-dashed">
@@ -982,7 +911,7 @@ export default function SocialPage() {
   if (!isAgency) {
     return (
       <SocialLocked
-        message="AI-drafted Instagram captions and competitor tracking are an agency-tier feature."
+        message="AI-drafted promotions and competitor tracking are an agency-tier feature."
         showUpgradeCta
       />
     );
@@ -997,7 +926,7 @@ export default function SocialPage() {
   if (!betaEnabled) {
     return (
       <SocialLocked
-        message="Social is in private beta while we finish testing Instagram and WhatsApp integration. It'll open up to everyone soon."
+        message="Promotions is in private beta while we finish testing Instagram and WhatsApp integration. It'll open up to everyone soon."
         showUpgradeCta={false}
       />
     );

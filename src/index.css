@@ -202,6 +202,42 @@ All colors MUST be HSL.
     }
   }
 
+  /* Traveling-glow border for the dashboard Featured-promotion card — a large
+     gradient background panned behind a thin border, clipped via padding +
+     an inner solid layer, so no @property registration is needed for
+     browser support. */
+  .promo-glow-border {
+    --glow-border-width: 1px;
+    position: relative;
+    isolation: isolate;
+  }
+
+  .promo-glow-border::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: var(--glow-border-width);
+    background: linear-gradient(90deg, #d946ef, #ec4899, #a855f7, #d946ef);
+    background-size: 300% 100%;
+    animation: promo-glow-travel 3s linear infinite;
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    mask-composite: exclude;
+    z-index: -1;
+    pointer-events: none;
+  }
+
+  @keyframes promo-glow-travel {
+    0% {
+      background-position: 0% 50%;
+    }
+    100% {
+      background-position: 300% 50%;
+    }
+  }
+
   .card-hover {
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   }

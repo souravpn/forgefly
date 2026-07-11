@@ -102,6 +102,7 @@ interface OverviewData {
   portalVisits30d: number;
   projectsThisMonth: number;
   projectsCompleted: number;
+  featuredPromotion: { id: string; headline: string | null; caption: string } | null;
 }
 
 async function loadOverviewData(userId: string, businessId?: string): Promise<OverviewData> {
@@ -116,6 +117,7 @@ async function loadOverviewData(userId: string, businessId?: string): Promise<Ov
     { data: reviews },
     { count: portalVisits },
     { data: calendarEvents },
+    { data: featuredPromotionRow },
   ] = await Promise.all([
     supabase.from("invoices").select("*, client:clients(name)").eq("user_id", userId),
     supabase.from("projects").select("*, client:clients(name)").eq("user_id", userId).order("created_at", { ascending: false }),
@@ -133,6 +135,15 @@ async function loadOverviewData(userId: string, businessId?: string): Promise<Ov
       .gte("start_time", new Date().toISOString())
       .order("start_time", { ascending: true })
       .limit(15),
+    businessId
+      ? supabase.from("social_posts")
+          .select("id, headline, caption")
+          .eq("business_id", businessId)
+          .eq("is_featured", true)
+          .eq("featured_date", new Date().toISOString().slice(0, 10))
+          .eq("status", "draft")
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
   ]);
 
   const allInvoices: Invoice[] = invoices ?? [];
@@ -240,6 +251,7 @@ async function loadOverviewData(userId: string, businessId?: string): Promise<Ov
     reviewScore, reviewCount: allReviews.length,
     portalVisits30d: portalVisits ?? 0,
     projectsThisMonth, projectsCompleted,
+    featuredPromotion: featuredPromotionRow ?? null,
   };
 }
 
@@ -569,6 +581,30 @@ export default function DashboardPage() {
               </p>
             )}
           </div>
+        )}
+
+        {/* ── Featured promotion row ──────────────────────────────────────── */}
+        {data?.featuredPromotion && (
+          <button
+            type="button"
+            onClick={() => navigate("/dashboard/social")}
+            className="promo-glow-border relative w-full text-left rounded-lg p-4 overflow-hidden bg-gradient-to-r from-fuchsia-500/10 via-purple-500/10 to-pink-500/10"
+          >
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5 text-[10px] font-medium text-fuchsia-500 uppercase tracking-wide mb-1">
+                  <Sparkles className="w-3.5 h-3.5" />
+                  Featured promotion ready
+                </div>
+                <p className="text-sm font-medium truncate">
+                  {data.featuredPromotion.headline || data.featuredPromotion.caption}
+                </p>
+              </div>
+              <span className="shrink-0 text-xs font-medium text-fuchsia-500">
+                Review &amp; publish →
+              </span>
+            </div>
+          </button>
         )}
 
         {/* ── Row 2: 3-col ─────────────────────────────────────────────────── */}

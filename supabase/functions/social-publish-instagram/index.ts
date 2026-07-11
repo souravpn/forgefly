@@ -193,6 +193,16 @@ serve(async (req) => {
       })
       .eq('id', post.id);
 
+    await service
+      .from('social_post_targets')
+      .update({
+        status: 'published',
+        platform_post_id: publishData.id,
+        published_at: new Date().toISOString(),
+      })
+      .eq('post_id', post.id)
+      .eq('platform', 'instagram');
+
     return new Response(
       JSON.stringify({ published: true, platform_post_id: publishData.id }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
