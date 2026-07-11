@@ -19,6 +19,11 @@ export interface Business {
   slug: string | null
   contact_email: string | null
   contact_phone: string | null
+  social_instagram: string | null
+  social_facebook: string | null
+  social_linkedin: string | null
+  social_x: string | null
+  social_nextdoor: string | null
   logo_url: string | null
   extracted_data: ExtractedData
   seed_prompt: string | null

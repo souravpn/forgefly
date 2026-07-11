@@ -21,6 +21,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/contexts/AuthContext";
 import { useBusiness } from "@/contexts/CurrentBusinessContext";
 import { supabase } from "@/db/supabase";
+import { buildPortfolioUrl, displayPortfolioUrl } from "@/lib/portfolioUrl";
 import type { BusinessProfile } from "@/types/types";
 
 const TIMEZONES = [
@@ -72,6 +73,11 @@ export default function SettingsPage() {
     bio: '',
     contact_email: '',
     contact_phone: '',
+    social_instagram: '',
+    social_facebook: '',
+    social_linkedin: '',
+    social_x: '',
+    social_nextdoor: '',
   });
   const [publicIdentLoading, setPublicIdentLoading] = useState(false);
   const [slugStatus, setSlugStatus] = useState<'idle' | 'checking' | 'available' | 'taken'>('idle');
@@ -131,6 +137,11 @@ export default function SettingsPage() {
         bio: business.bio ?? '',
         contact_email: business.contact_email ?? '',
         contact_phone: business.contact_phone ?? '',
+        social_instagram: business.social_instagram ?? '',
+        social_facebook: business.social_facebook ?? '',
+        social_linkedin: business.social_linkedin ?? '',
+        social_x: business.social_x ?? '',
+        social_nextdoor: business.social_nextdoor ?? '',
       };
       setPublicIdent(ident);
       setOriginalSlug(slug);
@@ -161,8 +172,7 @@ export default function SettingsPage() {
   useEffect(() => {
     const slug = publicIdent.slug;
     if (!slug) return;
-    const url = `${window.location.origin}/p/${slug}`;
-    QRCode.toDataURL(url, { width: 80, margin: 1, color: { dark: '#ffffff', light: '#00000000' } })
+    QRCode.toDataURL(buildPortfolioUrl(slug), { width: 80, margin: 1, color: { dark: '#ffffff', light: '#00000000' } })
       .then(setPassQrDataUrl).catch(() => {});
   }, [publicIdent.slug]);
 
@@ -270,7 +280,7 @@ export default function SettingsPage() {
     if (slugStatus === 'taken') { toast.error('That URL slug is already taken.'); return; }
     if (publicIdent.slug !== originalSlug) {
       const confirmed = window.confirm(
-        `Changing your public URL from /p/${originalSlug || '(none)'} to /p/${publicIdent.slug} will break any links you've already shared. Continue?`
+        `Changing your public URL from ${originalSlug ? displayPortfolioUrl(originalSlug) : '(none)'} to ${displayPortfolioUrl(publicIdent.slug)} will break any links you've already shared. Continue?`
       );
       if (!confirmed) return;
     }
@@ -283,6 +293,11 @@ export default function SettingsPage() {
         bio: publicIdent.bio || null,
         contact_email: publicIdent.contact_email || null,
         contact_phone: publicIdent.contact_phone || null,
+        social_instagram: publicIdent.social_instagram || null,
+        social_facebook: publicIdent.social_facebook || null,
+        social_linkedin: publicIdent.social_linkedin || null,
+        social_x: publicIdent.social_x || null,
+        social_nextdoor: publicIdent.social_nextdoor || null,
       })
       .eq('id', business.id);
 
@@ -431,7 +446,7 @@ export default function SettingsPage() {
               <CardDescription>
                 Shown on your public portfolio
                 {publicIdent.slug ? (
-                  <> at <span className="font-mono text-foreground/80">forgefly.app/p/{publicIdent.slug}</span></>
+                  <> at <span className="font-mono text-foreground/80">{displayPortfolioUrl(publicIdent.slug)}</span></>
                 ) : ''}
               </CardDescription>
             </CardHeader>
@@ -449,7 +464,6 @@ export default function SettingsPage() {
               <div className="space-y-2">
                 <Label htmlFor="publicSlug">Public URL Slug</Label>
                 <div className="flex items-center gap-2">
-                  <span className="text-sm text-muted-foreground shrink-0">forgefly.app/p/</span>
                   <Input
                     id="publicSlug"
                     value={publicIdent.slug}
@@ -458,6 +472,7 @@ export default function SettingsPage() {
                     placeholder="your-slug"
                     className="flex-1"
                   />
+                  <span className="text-sm text-muted-foreground shrink-0">.forgefly.io</span>
                 </div>
                 {slugStatus === 'checking' && <p className="text-xs text-muted-foreground">Checking availability…</p>}
                 {slugStatus === 'available' && <p className="text-xs text-emerald-500">✓ Available</p>}
@@ -523,6 +538,42 @@ export default function SettingsPage() {
               </div>
               <p className="text-xs text-muted-foreground -mt-2">Shown on your public portfolio page</p>
 
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="publicInstagram">Instagram <span className="text-muted-foreground font-normal">(optional)</span></Label>
+                  <Input
+                    id="publicInstagram"
+                    value={publicIdent.social_instagram}
+                    onChange={(e) => setPublicIdent(p => ({ ...p, social_instagram: e.target.value }))}
+                    placeholder="@yourbusiness"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="publicFacebook" className="text-muted-foreground">
+                    Facebook <span className="font-normal">(coming soon)</span>
+                  </Label>
+                  <Input id="publicFacebook" value="" disabled placeholder="Coming soon" />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="publicLinkedin" className="text-muted-foreground">
+                    LinkedIn <span className="font-normal">(coming soon)</span>
+                  </Label>
+                  <Input id="publicLinkedin" value="" disabled placeholder="Coming soon" />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="publicX" className="text-muted-foreground">
+                    X <span className="font-normal">(coming soon)</span>
+                  </Label>
+                  <Input id="publicX" value="" disabled placeholder="Coming soon" />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="publicNextdoor" className="text-muted-foreground">
+                    Nextdoor <span className="font-normal">(coming soon)</span>
+                  </Label>
+                  <Input id="publicNextdoor" value="" disabled placeholder="Coming soon" />
+                </div>
+              </div>
+
               <Button onClick={handleSavePublicIdent} disabled={publicIdentLoading || slugStatus === 'taken'}>
                 {publicIdentLoading ? 'Saving…' : 'Save Public Identity'}
               </Button>
@@ -539,7 +590,7 @@ export default function SettingsPage() {
             const fgColor = lum > 0.5 ? '#000000' : '#ffffff';
             const tagline = business.extracted_data?.identity?.tagline ?? '';
             const bizName = business.extracted_data?.identity?.businessName ?? business.name ?? '';
-            const portfolioUrl = publicIdent.slug ? `forgefly.io/p/${publicIdent.slug}` : '';
+            const portfolioUrl = publicIdent.slug ? displayPortfolioUrl(publicIdent.slug) : '';
 
             return (
               <Card>
@@ -770,7 +821,7 @@ export default function SettingsPage() {
                     )}
                   </p>
                   {nextBillingDate && (
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-sm text-orange-500">
                       Next billing date: {new Date(nextBillingDate).toLocaleDateString()}
                     </p>
                   )}
