@@ -66,17 +66,38 @@ export async function sendWhatsapp(
 
   const { access_token: accessToken, external_id: phoneNumberId } = connection;
 
-  // Session window: has this phone sent us an inbound message in the last 24h?
-  const { data: lastInbound } = await service
-    .from('messages')
-    .select('created_at')
-    .eq('business_id', businessId)
-    .eq('wa_phone', toPhone)
-    .eq('sender_role', 'client')
-    .eq('channel', 'whatsapp')
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  // Session window: has this contact sent us an inbound message in the last 24h?
+  // Match by client_id when known — wa_phone is stored inconsistently across
+  // rows (e.g. "+14086368006" vs "14086368006" for the same person), so an
+  // exact string match on wa_phone alone silently misses recent inbound
+  // messages and falls back to the template unnecessarily.
+  let lastInbound: { created_at: string } | null = null;
+  if (clientId) {
+    const { data } = await service
+      .from('messages')
+      .select('created_at')
+      .eq('business_id', businessId)
+      .eq('client_id', clientId)
+      .eq('sender_role', 'client')
+      .eq('channel', 'whatsapp')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    lastInbound = data;
+  } else {
+    const normalizedToPhone = normalizePhone(toPhone);
+    const { data: candidates } = await service
+      .from('messages')
+      .select('created_at, wa_phone')
+      .eq('business_id', businessId)
+      .eq('sender_role', 'client')
+      .eq('channel', 'whatsapp')
+      .not('wa_phone', 'is', null)
+      .order('created_at', { ascending: false });
+    lastInbound = (candidates ?? []).find(
+      (m: { wa_phone: string | null }) => m.wa_phone && normalizePhone(m.wa_phone) === normalizedToPhone,
+    ) ?? null;
+  }
 
   const withinSession = lastInbound
     ? Date.now() - new Date(lastInbound.created_at).getTime() < SESSION_WINDOW_MS

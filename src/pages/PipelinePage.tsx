@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { PhoneInputField } from '@/components/common/PhoneInputField';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -440,11 +441,10 @@ function LeadModal({
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="lead-client-phone">Phone</Label>
-                      <Input
+                      <PhoneInputField
                         id="lead-client-phone"
-                        type="tel"
                         value={form.newClient.phone}
-                        onChange={e => setForm(f => ({ ...f, newClient: { ...f.newClient, phone: e.target.value } }))}
+                        onChange={value => setForm(f => ({ ...f, newClient: { ...f.newClient, phone: value } }))}
                       />
                     </div>
                     <div className="space-y-2">
@@ -547,10 +547,18 @@ export default function PipelinePage() {
 
   const [deleteTarget, setDeleteTarget] = useState<Lead | null>(null);
 
-  // Auto-open "new lead" modal when navigated with ?action=new
+  // Auto-open "new lead" modal when navigated with ?action=new, optionally
+  // prefilling a phone number (e.g. from an unmatched WhatsApp thread).
   useEffect(() => {
     if (searchParams.get('action') === 'new') {
-      setLeadModal({ open: true, initial: EMPTY_FORM, editId: null });
+      const phone = searchParams.get('phone') ?? '';
+      setLeadModal({
+        open: true,
+        initial: phone
+          ? { ...EMPTY_FORM, clientMode: 'new', newClient: { ...EMPTY_NEW_CLIENT, phone } }
+          : EMPTY_FORM,
+        editId: null,
+      });
       setSearchParams({}, { replace: true });
     }
   }, []);

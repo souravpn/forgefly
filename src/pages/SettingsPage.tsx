@@ -3,6 +3,7 @@ import QRCode from 'qrcode';
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
+import { PhoneInputField } from "@/components/common/PhoneInputField";
 import { UpgradeModal } from "@/components/common/UpgradeModal";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -527,12 +528,10 @@ export default function SettingsPage() {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="publicPhone">Contact Phone <span className="text-muted-foreground font-normal">(optional)</span></Label>
-                  <Input
+                  <PhoneInputField
                     id="publicPhone"
-                    type="tel"
                     value={publicIdent.contact_phone}
-                    onChange={(e) => setPublicIdent(p => ({ ...p, contact_phone: e.target.value }))}
-                    placeholder="+1 (555) 000-0000"
+                    onChange={(value) => setPublicIdent(p => ({ ...p, contact_phone: value }))}
                   />
                 </div>
               </div>

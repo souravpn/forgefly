@@ -1,15 +1,15 @@
 import { ArrowLeft, Download, FileText, Folder, Loader2, MessageSquare, Paperclip, Send, Trash2, UserPlus } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useAuth } from '@/contexts/AuthContext';
 import { useBusiness } from '@/contexts/CurrentBusinessContext';
 // @ts-ignore
 import { supabase } from '@/db/supabase';
+import { getSocialConnections } from '@/services/socialService';
 
 const SITE_URL = import.meta.env.VITE_SITE_URL ?? 'https://www.forgefly.io';
 const MAX_FILE_BYTES = 50 * 1024 * 1024; // 50 MB
@@ -400,6 +400,7 @@ function useIsDesktop() {
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function MessagesPage() {
+  const navigate = useNavigate();
   const { user } = useAuth();
   const { business, isLoading: bizLoading } = useBusiness();
   const isDesktop = useIsDesktop();
@@ -410,10 +411,6 @@ export default function MessagesPage() {
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [mobileShowThread, setMobileShowThread] = useState(false);
-  const [saveAsClientPhone, setSaveAsClientPhone] = useState<string | null>(null);
-  const [saveAsClientName, setSaveAsClientName] = useState('');
-  const [saveAsClientEmail, setSaveAsClientEmail] = useState('');
-  const [savingAsClient, setSavingAsClient] = useState(false);
   const [whatsappConnected, setWhatsappConnected] = useState(false);
 
   useEffect(() => {
@@ -421,7 +418,7 @@ export default function MessagesPage() {
 
     async function load() {
       setLoading(true);
-      const [{ data: contactData }, { data: msgData }, { data: waConnection }] = await Promise.all([
+      const [{ data: contactData }, { data: msgData }, connections] = await Promise.all([
         supabase
           .from('contacts')
           .select('id, name, email, phone, company, lifecycle_status, portal_token')
@@ -432,17 +429,15 @@ export default function MessagesPage() {
           .select('*')
           .eq('business_id', business!.id)
           .order('created_at', { ascending: true }),
-        supabase
-          .from('social_connections')
-          .select('id')
-          .eq('business_id', business!.id)
-          .eq('platform', 'whatsapp')
-          .eq('status', 'connected')
-          .maybeSingle(),
+        // social_connections has RLS enabled with no client-facing policies (it
+        // holds access tokens), so it must be read via this service-role-backed
+        // function rather than queried directly — a direct query silently
+        // returns nothing instead of erroring.
+        getSocialConnections(business!.id).catch(() => []),
       ]);
       setContacts(contactData || []);
       setMessages(msgData || []);
-      setWhatsappConnected(!!waConnection);
+      setWhatsappConnected(connections.some(c => c.platform === 'whatsapp' && c.status === 'connected'));
       setLoading(false);
     }
 
@@ -585,44 +580,6 @@ export default function MessagesPage() {
     ? messages.filter(m => m.wa_phone === selectedUnknown.waPhone && !m.client_id)
     : messages.filter(m => m.client_id === selectedId);
 
-  async function handleSaveAsClient() {
-    if (!business || !saveAsClientPhone || !saveAsClientName.trim()) return;
-    setSavingAsClient(true);
-    try {
-      const { data: newContact, error } = await supabase
-        .from('contacts')
-        .insert({
-          business_id: business.id,
-          name: saveAsClientName.trim(),
-          email: saveAsClientEmail.trim() || null,
-          phone: saveAsClientPhone,
-          lifecycle_status: 'prospect',
-        })
-        .select('id, name, email, phone, company, lifecycle_status, portal_token')
-        .single();
-      if (error) throw error;
-
-      await supabase
-        .from('messages')
-        .update({ client_id: newContact.id })
-        .eq('business_id', business.id)
-        .eq('wa_phone', saveAsClientPhone)
-        .is('client_id', null);
-
-      setContacts(prev => [...prev, newContact as Contact]);
-      setMessages(prev => prev.map(m =>
-        m.wa_phone === saveAsClientPhone && !m.client_id ? { ...m, client_id: newContact.id } : m,
-      ));
-      setSelectedId(newContact.id);
-      setSaveAsClientPhone(null);
-      toast.success(`Saved ${saveAsClientName.trim()} as a client`);
-    } catch {
-      toast.error('Failed to save as client');
-    } finally {
-      setSavingAsClient(false);
-    }
-  }
-
   if (bizLoading || loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -733,14 +690,10 @@ export default function MessagesPage() {
                 </div>
                 <Button
                   size="sm"
-                  onClick={() => {
-                    setSaveAsClientPhone(selectedUnknown.waPhone);
-                    setSaveAsClientName('');
-                    setSaveAsClientEmail('');
-                  }}
+                  onClick={() => navigate(`/dashboard/leads?action=new&phone=${encodeURIComponent(selectedUnknown.waPhone)}`)}
                 >
                   <UserPlus className="w-4 h-4 mr-1.5" />
-                  Save as client
+                  Save this Lead as Client
                 </Button>
               </div>
               <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
@@ -769,52 +722,6 @@ export default function MessagesPage() {
           )}
         </div>
       </div>
-
-      <Dialog open={saveAsClientPhone !== null} onOpenChange={(open) => { if (!open) setSaveAsClientPhone(null); }}>
-        <DialogContent>
-          {saveAsClientPhone && (
-            <>
-              <DialogHeader>
-                <DialogTitle>Save as client</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-4 pt-2">
-                <div className="space-y-2">
-                  <Label>Phone</Label>
-                  <Input value={saveAsClientPhone} disabled />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="saveAsClientName">Name</Label>
-                  <Input
-                    id="saveAsClientName"
-                    value={saveAsClientName}
-                    onChange={e => setSaveAsClientName(e.target.value)}
-                    placeholder="Client name"
-                    autoFocus
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="saveAsClientEmail">Email <span className="text-muted-foreground font-normal">(optional)</span></Label>
-                  <Input
-                    id="saveAsClientEmail"
-                    type="email"
-                    value={saveAsClientEmail}
-                    onChange={e => setSaveAsClientEmail(e.target.value)}
-                    placeholder="client@example.com"
-                  />
-                </div>
-                <Button
-                  className="w-full"
-                  onClick={handleSaveAsClient}
-                  disabled={!saveAsClientName.trim() || savingAsClient}
-                >
-                  {savingAsClient ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
-                  Save as client
-                </Button>
-              </div>
-            </>
-          )}
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

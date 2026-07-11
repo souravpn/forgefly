@@ -73,9 +73,37 @@ Deno.serve(async (req) => {
             .eq('business_id', businessId)
             .not('phone', 'is', null);
 
-          const matchedContact = (contacts ?? []).find(
+          let matchedContact = (contacts ?? []).find(
             (c: { id: string; phone: string | null }) => c.phone && normalizePhone(c.phone) === normalizedFrom,
           );
+
+          // First message ever from this number — auto-create a Prospect lead
+          // instead of leaving it as an orphaned "Unknown number" thread.
+          if (!matchedContact) {
+            const { data: newContact, error: contactError } = await service
+              .from('contacts')
+              .insert({
+                business_id: businessId,
+                name: from,
+                phone: from,
+                lifecycle_status: 'prospect',
+              })
+              .select('id, phone')
+              .single();
+
+            if (contactError) {
+              console.error('whatsapp-webhook: failed to auto-create contact', contactError);
+            } else {
+              matchedContact = newContact;
+              const { error: leadError } = await service.from('pipeline_leads').insert({
+                business_id: businessId,
+                contact_id: newContact.id,
+                stage: 'Prospect',
+                service_name: 'via WhatsApp',
+              });
+              if (leadError) console.error('whatsapp-webhook: failed to auto-create lead', leadError);
+            }
+          }
 
           const { error: insertError } = await service.from('messages').insert({
             business_id: businessId,
