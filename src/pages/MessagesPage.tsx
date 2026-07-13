@@ -1,5 +1,5 @@
 import { ArrowLeft, Download, FileText, Folder, Loader2, MessageSquare, Paperclip, Send, Trash2, UserPlus } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -384,8 +384,31 @@ function ThreadPane({
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-// Shell chrome heights: ForgeflyBand h-10 (40px) + BusinessBand h-14 (56px) + TabNav h-10 (40px) = 136px
-const SHELL_HEIGHT = 136;
+// The chrome above this page (sidebar header band, upgrade bar, etc.) has no
+// fixed height — it grows with content (voice dictation row, diff review,
+// resizing text). A hardcoded "shell height" magic number drifts out of sync
+// every time that chrome changes, so instead measure the container's actual
+// top offset and size it to exactly fill the remaining viewport. Uses a
+// callback ref (not a plain object ref) so measurement re-runs the moment the
+// real container mounts — this page renders a loading-spinner placeholder
+// first, and an object ref's effect wouldn't fire again once that swaps out.
+function useAvailableHeight() {
+  const [node, setNode] = useState<HTMLElement | null>(null);
+  const [height, setHeight] = useState<number | null>(null);
+  const ref = useCallback((el: HTMLElement | null) => setNode(el), []);
+
+  useLayoutEffect(() => {
+    if (!node) return;
+    function measure() {
+      setHeight(window.innerHeight - node!.getBoundingClientRect().top);
+    }
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, [node]);
+
+  return [ref, height] as const;
+}
 
 function useIsDesktop() {
   const [isDesktop, setIsDesktop] = useState(() => window.innerWidth >= 768);
@@ -412,6 +435,7 @@ export default function MessagesPage() {
   const [sending, setSending] = useState(false);
   const [mobileShowThread, setMobileShowThread] = useState(false);
   const [whatsappConnected, setWhatsappConnected] = useState(false);
+  const [containerRef, availableHeight] = useAvailableHeight();
 
   useEffect(() => {
     if (!business) return;
@@ -594,8 +618,9 @@ export default function MessagesPage() {
 
   return (
     <div
+      ref={containerRef}
       className="-mx-4 md:-mx-6 -mt-4 md:-mt-6 flex flex-col"
-      style={{ height: `calc(100vh - ${SHELL_HEIGHT}px)`, overflow: 'hidden' }}
+      style={{ height: availableHeight ? `${availableHeight}px` : '100vh', overflow: 'hidden' }}
     >
       <div className="px-4 md:px-6 py-3 border-b border-border shrink-0 flex items-center gap-3">
         {!isDesktop && mobileShowThread && (

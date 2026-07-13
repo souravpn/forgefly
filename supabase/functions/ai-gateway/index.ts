@@ -195,35 +195,64 @@ Rules:
   - presence_tier: b2b_creative=design/creative B2B, b2c_local=local consumer services, b2b_professional=professional services B2B, hybrid_professional=both motions
   - If ambiguous, pick most likely and set confidence: "low"
 
-CRITICAL OVERRIDES:
-- "I now offer", "I also offer", "I'm adding", "we now offer", "starting to offer" → prompt_type MUST be "additive"; sections_needed MUST include "services"
+IMPORTANT: A single prompt can touch multiple sections at once. Read the whole prompt and enumerate every distinct thing it asks for — sections_needed must list all of them, not just the first or most obvious one.
+
+WORKED EXAMPLES:
+
+Prompt: "add a new client called Xin Ju. +15551239876. Xinj@yopmail.com\nAlso add a new service called site evaluation photo shoot, price is $2000, only in Texas and AZ"
+This asks for two distinct things — a new client AND a new service — so both sections are needed:
+{"prompt_type":"additive","complexity":"medium","token_estimate":500,"sections_needed":["contacts","services"],"has_pricing":true,"language":"en","confidence_map":{"identity":"low","services":"high","pricing":"high","location":"high","niche":"low","brand":"low"},"business_profile":{"motion":"b2c","industry_vertical":"photography","sale_type":"direct_search","client_decision_maker":"property owner or manager","sales_cycle":"urgency_driven","presence_tier":"b2c_local","confidence":"medium"}}
+
+Prompt: "change my photography package price to $1500"
+This only touches pricing on an existing service — a revision, not an addition:
+{"prompt_type":"revision","complexity":"simple","token_estimate":300,"sections_needed":["services"],"has_pricing":true,"language":"en","confidence_map":{"identity":"low","services":"high","pricing":"high","location":"low","niche":"low","brand":"low"},"business_profile":{"motion":"b2c","industry_vertical":"photography","sale_type":"direct_search","client_decision_maker":"individual client","sales_cycle":"urgency_driven","presence_tier":"b2c_local","confidence":"low"}}
+
+Rely on genuinely reading and understanding the prompt's intent — the phrase list below is a backstop for phrasing the model has historically mis-read, not the primary way to decide sections_needed:
+- "I now offer", "I also offer", "I'm adding", "we now offer", "starting to offer", "add a service", "add a new service", "new service called" → prompt_type MUST be "additive"; sections_needed MUST include "services"
+- "add a client", "add a new client", "new client called", "add a contact", "add a new contact", "sign a new client" → prompt_type MUST be "additive"; sections_needed MUST include "contacts"
 - "my brand colors are", "my colors are", "brand colors are", "brand color is" → sections_needed MUST include "brand"
 - Any dollar amount in the prompt (e.g. $800, $1,200) → has_pricing MUST be true
 - For "additive" and "revision" prompts: sections_needed must NEVER be empty`;
 
+// The full schema (sections_needed + has_pricing + language + a 6-field
+// confidence_map + a 7-field business_profile) runs well past 200 tokens once
+// populated — a tight budget was silently truncating valid JSON on anything
+// but the simplest prompts, which surfaced as "the classifier missed this"
+// when the model may have understood fine and just never got to finish
+// writing the answer. Retry once with more room before falling back, and
+// fail OPEN (request every section) rather than closed (request none) if it
+// still can't produce valid JSON — a slightly more expensive extraction call
+// is far better than silently dropping a real update on the floor.
 async function runClassifier(prompt: string): Promise<ClassifierOutput> {
-  const result = await callAnthropic({
-    model: HAIKU,
-    max_tokens: 200,
-    temperature: 0,
-    system: CLASSIFIER_SYSTEM,
-    messages: [{ role: 'user', content: prompt }],
-  });
-
-  const text = result.content[0]?.text ?? '{}';
-  try {
+  async function attempt(maxTokens: number): Promise<ClassifierOutput> {
+    const result = await callAnthropic({
+      model: HAIKU,
+      max_tokens: maxTokens,
+      temperature: 0,
+      system: CLASSIFIER_SYSTEM,
+      messages: [{ role: 'user', content: prompt }],
+    });
+    const text = result.content[0]?.text ?? '{}';
     return JSON.parse(stripFences(text));
-  } catch {
-    // Haiku returned natural language instead of JSON — use safe defaults
-    console.warn('Classifier returned non-JSON, using fallback classification');
-    return {
-      prompt_type: 'scoped',
-      complexity: 'simple',
-      token_estimate: 400,
-      sections_needed: [],
-      has_pricing: false,
-      language: 'en',
-    };
+  }
+
+  try {
+    return await attempt(500);
+  } catch (err) {
+    console.error('Classifier JSON parse failed at 500 tokens, retrying at 900. Prompt:', prompt.slice(0, 300), 'Error:', err);
+    try {
+      return await attempt(900);
+    } catch (err2) {
+      console.error('Classifier failed again after retry — falling back to all sections rather than none. Prompt:', prompt.slice(0, 300), 'Error:', err2);
+      return {
+        prompt_type: 'additive',
+        complexity: 'medium',
+        token_estimate: 1200,
+        sections_needed: [...STRUCTURAL_SECTIONS, ...CREATIVE_SECTIONS],
+        has_pricing: true,
+        language: 'en',
+      };
+    }
   }
 }
 
@@ -235,7 +264,7 @@ const SCHEMA_MAP: Record<string, string> = {
   pipeline: `"pipeline": { "stages": ["Prospect","Qualified","Proposal Sent","Negotiating","Closed Won"], "leads": [{ "name": string, "stage": string, "value": string, "service": string }] }`,
   invoices: `"invoices": [{ "client": string, "service": string, "amount": string, "status": "Draft"|"Outstanding"|"Paid"|"Overdue", "date": string, "number": string }]`,
   metrics: `"metrics": { "monthlyRevenue": string, "activeClients": number, "pipelineValue": string, "avgProjectValue": string }`,
-  contacts: `"contacts": [{ "name": string, "email": string, "company": string, "role": string, "status": "Active client"|"Prospect"|"Past client" }]`,
+  contacts: `"contacts": [{ "name": string, "email": string, "phone": string, "company": string, "role": string, "status": "Active client"|"Prospect"|"Past client" }]`,
   proposal: `"proposal": { "intro": string, "approach": string, "whyUs": string, "nextSteps": [string] }`,
   brand: `"brand": { "primaryColor": string (hex), "secondaryColor": string (hex), "accentColor": string (hex), "fonts": { "heading": string, "body": string }, "tone": string, "keywords": [string] }`,
 };
@@ -417,13 +446,20 @@ async function handleExtract(
     (current_data && Object.keys(current_data as object).length > 0)
   );
 
-  // Keyword safety net: phrases like "I now offer X" or "my brand colors are Y" are always
-  // business updates even if the classifier incorrectly returned sections_needed = []
-  const ADDITIVE_PATTERN = /\b(i now offer|i also offer|i'?m adding|we now offer|starting to offer|my brand colors|my colors are|brand colors are|brand color is)\b/i;
-  if (sections_needed.length === 0 && !isDiff && hasPriorContext && ADDITIVE_PATTERN.test(prompt)) {
+  // Keyword safety net: phrases like "I now offer X", "add a new client Y", or
+  // "my brand colors are Z" are always business updates even if the classifier
+  // incorrectly returned sections_needed = []. Each clause below is checked
+  // independently (not one combined pattern) so a single prompt that touches
+  // multiple sections — e.g. "add a client... also add a service..." — infers
+  // all of them, not just whichever matched first.
+  const SERVICE_PATTERN = /\b(i now offer|i also offer|i'?m adding|we now offer|starting to offer|add(?:ing)? a (?:new )?(?:service|package))\b/i;
+  const CONTACT_PATTERN = /\b(add(?:ing)? a (?:new )?(?:client|customer|contact)|new client called|new contact called|sign(?:ed|ing)? a new client)\b/i;
+  const BRAND_PATTERN = /\b(my brand colors|my colors are|brand colors are|brand color is)\b/i;
+  if (sections_needed.length === 0 && !isDiff && hasPriorContext) {
     const inferred: string[] = [];
-    if (/\boffer|service|package|speciali[sz]|photo|coach|audit|sprint|retainer|consult|design|develop|write\b/i.test(prompt)) inferred.push('services');
-    if (/\bcolor|colour|brand|palette|logo\b/i.test(prompt)) inferred.push('brand');
+    if (SERVICE_PATTERN.test(prompt)) inferred.push('services');
+    if (CONTACT_PATTERN.test(prompt)) inferred.push('contacts');
+    if (BRAND_PATTERN.test(prompt)) inferred.push('brand');
     if (inferred.length > 0) {
       sections_needed = inferred;
       prompt_type = 'additive';

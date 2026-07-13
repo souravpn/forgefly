@@ -53,7 +53,7 @@ Located in `supabase/functions/`, written in Deno/TypeScript:
 
 | Function | Purpose |
 |---|---|
-| `ai-copilot` | Calls OpenAI GPT-4o with business context; returns structured JSON with optional `action` |
+| `ai-gateway` | Calls Anthropic's Claude (Sonnet/Haiku) with business context; powers AI Copilot chat, proposal/outreach generation, and the Update-OS command bar. Returns structured JSON with an optional `action` for chat mode |
 | `create-invoice-checkout` | Creates a Stripe Checkout session for an invoice |
 | `create-checkout-session` | Generic Stripe checkout |
 | `create-subscription-checkout` | Stripe subscription checkout for agency tier |
@@ -64,7 +64,7 @@ Located in `supabase/functions/`, written in Deno/TypeScript:
 
 ### AI Copilot
 
-The `AICopilot` component (`src/components/layouts/AICopilot.tsx`) is a floating chat panel always visible inside `MainLayout`. It calls the `ai-copilot` Edge Function, which fetches live business context (clients, projects, proposals, invoices, subscription) and passes it to OpenAI. Responses include an optional `action` field (e.g., `navigate`, `create_proposal`) that the frontend handles.
+The `AICopilot` component (`src/components/layouts/AICopilot.tsx`) is a resizable right-side panel, opened via the "AI Copilot" button in `AppSidebar`. It calls the `ai-gateway` Edge Function (chat mode), which fetches live business context (clients, projects, proposals, invoices, subscription) and passes it to Claude. Responses include an optional `action` field (e.g., `navigate`, `create_proposal`) that the frontend handles.
 
 ### Subscription tiers
 

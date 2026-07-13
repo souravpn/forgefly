@@ -9,6 +9,8 @@ import {
   Users,
   Crown,
   Loader2,
+  Mic,
+  MicOff,
   type LucideIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -18,6 +20,8 @@ import { Badge } from "@/components/ui/badge";
 import { useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "@/db/supabase";
 import { toast } from "sonner";
+import { useVoiceDictation } from "@/hooks/useVoiceDictation";
+import { cn } from "@/lib/utils";
 import type { ChatMessage } from "@/types/types";
 
 interface QuickAction {
@@ -53,6 +57,9 @@ export function AICopilot({ onClose }: AICopilotProps) {
   const [isTyping, setIsTyping] = useState(false);
   const [quickActions, setQuickActions] = useState<QuickAction[]>([]);
   const [suggestions, setSuggestions] = useState<string[]>([]);
+  const { isListening, isSupported: isVoiceSupported, toggleListening } = useVoiceDictation(
+    (transcript) => setInput((prev) => (prev.trim() ? `${prev.trim()} ${transcript}` : transcript)),
+  );
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -432,6 +439,21 @@ export function AICopilot({ onClose }: AICopilotProps) {
             disabled={isTyping}
             className="min-h-[60px] resize-none"
           />
+          {isVoiceSupported && (
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              onClick={toggleListening}
+              className={cn(
+                "shrink-0",
+                isListening && "bg-destructive/10 border-destructive text-destructive animate-pulse",
+              )}
+              aria-label={isListening ? "Stop voice dictation" : "Start voice dictation"}
+            >
+              {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+            </Button>
+          )}
           <Button
             onClick={handleSend}
             size="icon"

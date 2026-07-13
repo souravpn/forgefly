@@ -9,32 +9,45 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
-import { Plus, FileText, Send, Edit, Trash2, DollarSign, Calendar, CheckCircle2, Clock, AlertCircle, CreditCard, Mail, Search } from 'lucide-react';
+import { Plus, FileText, Send, Edit, Trash2, DollarSign, Calendar, CheckCircle2, Clock, AlertCircle, CreditCard, Mail, MessageCircle, Search } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/db/supabase';
 import type { Invoice, InvoiceStatus, PaymentStatus, Client, Project } from '@/types/types';
 import { getInvoices, createInvoice, updateInvoice, sendInvoice, markInvoiceAsPaid, deleteInvoice, subscribeToInvoices } from '@/services/invoiceService';
 import { getClients } from '@/services/clientService';
 import { getProjects } from '@/services/projectService';
+import { getSocialConnections } from '@/services/socialService';
 import { useBusiness } from '@/contexts/CurrentBusinessContext';
 
 // Finds (or creates) the `contacts` row matching this client, mirroring the
 // resolution pattern used in ProposalsPage — invoices only carry a `clients.id`,
-// but portal links are generated per-contact.
-async function resolveContactId(businessId: string, name: string, email: string | null): Promise<string> {
+// but portal links are generated per-contact. Backfills phone onto an existing
+// contact when known — the WhatsApp send path needs it, and contacts created
+// via the email-only path above never had one.
+async function resolveContactId(
+  businessId: string,
+  name: string,
+  email: string | null,
+  phone: string | null = null,
+): Promise<string> {
   if (email) {
     const { data: existing } = await supabase
       .from('contacts')
-      .select('id')
+      .select('id, phone')
       .eq('business_id', businessId)
       .ilike('email', email)
       .maybeSingle();
-    if (existing?.id) return existing.id;
+    if (existing?.id) {
+      if (phone && !existing.phone) {
+        await supabase.from('contacts').update({ phone }).eq('id', existing.id);
+      }
+      return existing.id;
+    }
   }
 
   const { data: created, error } = await supabase
     .from('contacts')
-    .insert({ business_id: businessId, name, email })
+    .insert({ business_id: businessId, name, email, phone })
     .select('id')
     .single();
   if (error || !created) throw new Error('Failed to create contact');
@@ -77,6 +90,37 @@ async function ensureProjectVisible(projectId: string): Promise<void> {
   }
 }
 
+// Shared by both the email and WhatsApp send paths — resolves the contact +
+// engagement this invoice's client maps to, backfills invoice.contact_id /
+// project visibility for invoices created before that was wired up, and
+// mints a fresh 30-day no-login portal link scoped to the engagement.
+async function resolvePaymentLink(
+  businessId: string,
+  invoice: Invoice,
+  phone: string | null = null,
+): Promise<{ contactId: string; paymentLink: string }> {
+  if (!invoice.client) throw new Error('Client information missing');
+
+  const contactId = await resolveContactId(businessId, invoice.client.name, invoice.client.email, phone);
+  const engagementId = await resolveEngagementId(businessId, contactId, `Invoice ${invoice.invoice_number}`);
+
+  if (invoice.contact_id !== contactId) {
+    await updateInvoice(invoice.id, { contact_id: contactId });
+  }
+  if (invoice.project_id) {
+    await ensureProjectVisible(invoice.project_id);
+  }
+
+  const { data: portalData, error: portalErr } = await supabase.functions.invoke('generate-portal-link', {
+    body: { engagementId, clientEmail: invoice.client.email },
+  });
+  if (portalErr || !portalData?.portalUrl) {
+    throw new Error('Failed to generate a payment link');
+  }
+
+  return { contactId, paymentLink: portalData.portalUrl as string };
+}
+
 export default function InvoicesPage() {
   const { business } = useBusiness();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -90,6 +134,8 @@ export default function InvoicesPage() {
   const [isSendDialogOpen, setIsSendDialogOpen] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
   const [sendingEmail, setSendingEmail] = useState(false);
+  const [sendingWhatsapp, setSendingWhatsapp] = useState(false);
+  const [whatsappConnected, setWhatsappConnected] = useState(false);
   const [formData, setFormData] = useState({
     client_id: '',
     project_id: '',
@@ -123,6 +169,13 @@ export default function InvoicesPage() {
       channel.unsubscribe();
     };
   }, []);
+
+  useEffect(() => {
+    if (!business) return;
+    getSocialConnections(business.id)
+      .then(connections => setWhatsappConnected(connections.some(c => c.platform === 'whatsapp' && c.status === 'connected')))
+      .catch(() => setWhatsappConnected(false));
+  }, [business]);
 
   async function loadData() {
     try {
@@ -268,34 +321,7 @@ export default function InvoicesPage() {
     const isResend = selectedInvoice.status !== 'draft';
     setSendingEmail(true);
     try {
-      // Resolve (or create) the contact + engagement this client maps to, then
-      // generate a fresh portal link (30-day, no-login URL) scoped to it.
-      const contactId = await resolveContactId(business.id, selectedInvoice.client.name, selectedInvoice.client.email);
-      const engagementId = await resolveEngagementId(business.id, contactId, `Invoice ${selectedInvoice.invoice_number}`);
-
-      // Backfill contact_id on the invoice itself if missing — the portal's
-      // Invoices tab reads by contact_id, so invoices created before this was
-      // wired up would otherwise never show up for the client.
-      if (selectedInvoice.contact_id !== contactId) {
-        await updateInvoice(selectedInvoice.id, { contact_id: contactId });
-      }
-
-      // Backfill the linked project's portal visibility too, for invoices
-      // created before this was wired up.
-      if (selectedInvoice.project_id) {
-        await ensureProjectVisible(selectedInvoice.project_id);
-      }
-
-      const { data: portalData, error: portalErr } = await supabase.functions.invoke('generate-portal-link', {
-        body: { engagementId, clientEmail: selectedInvoice.client.email },
-      });
-
-      if (portalErr || !portalData?.portalUrl) {
-        toast.error('Failed to generate a payment link. Please try again.');
-        return;
-      }
-
-      const paymentLink = portalData.portalUrl;
+      const { paymentLink } = await resolvePaymentLink(business.id, selectedInvoice);
 
       const dueDate = selectedInvoice.due_date
         ? new Date(selectedInvoice.due_date).toLocaleDateString('en-US', {
@@ -335,6 +361,62 @@ export default function InvoicesPage() {
       toast.error('Failed to send invoice');
     } finally {
       setSendingEmail(false);
+    }
+  }
+
+  async function handleSendWhatsapp() {
+    if (!selectedInvoice || !selectedInvoice.client) {
+      toast.error('Client information missing');
+      return;
+    }
+
+    if (!selectedInvoice.client.phone) {
+      toast.error('Client phone number is required');
+      return;
+    }
+
+    if (!business) {
+      toast.error('Business not loaded — please try again');
+      return;
+    }
+
+    const isResend = selectedInvoice.status !== 'draft';
+    setSendingWhatsapp(true);
+    try {
+      const { contactId, paymentLink } = await resolvePaymentLink(
+        business.id,
+        selectedInvoice,
+        selectedInvoice.client.phone,
+      );
+
+      const amount = typeof selectedInvoice.amount === 'string' ? parseFloat(selectedInvoice.amount) : selectedInvoice.amount;
+      const bodyText = `Hi ${selectedInvoice.client.name}, here's invoice ${selectedInvoice.invoice_number} for $${amount.toLocaleString()} from ${business.name}. View and pay securely here: ${paymentLink}`;
+
+      const { error } = await supabase.functions.invoke('send-whatsapp-message', {
+        body: {
+          business_id: business.id,
+          client_id: contactId,
+          to_phone: selectedInvoice.client.phone,
+          body_text: bodyText,
+        },
+      });
+
+      if (error) {
+        const errorMsg = await error?.context?.text();
+        console.error('WhatsApp sending error:', errorMsg || error?.message);
+        toast.error('Failed to send WhatsApp message. Please try again.');
+        return;
+      }
+
+      await sendInvoice(selectedInvoice.id);
+      toast.success(isResend ? 'Invoice resent via WhatsApp!' : 'Invoice sent via WhatsApp!');
+      setIsSendDialogOpen(false);
+      loadInvoices();
+    } catch (error) {
+      console.error('Error sending invoice via WhatsApp:', error);
+      toast.error('Failed to send invoice via WhatsApp');
+    } finally {
+      setSendingWhatsapp(false);
     }
   }
 
@@ -741,20 +823,17 @@ export default function InvoicesPage() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Send / Resend Email Confirmation Dialog */}
+      {/* Send / Resend Invoice Confirmation Dialog */}
       <AlertDialog open={isSendDialogOpen} onOpenChange={setIsSendDialogOpen}>
         <AlertDialogContent className="max-w-[calc(100%-2rem)] md:max-w-lg">
           <AlertDialogHeader>
             <AlertDialogTitle>
-              {selectedInvoice?.status !== 'draft' ? 'Resend Invoice' : 'Send Invoice via Email'}
+              {selectedInvoice?.status !== 'draft' ? 'Resend Invoice' : 'Send Invoice'}
             </AlertDialogTitle>
             <AlertDialogDescription>
               {selectedInvoice?.status !== 'draft'
-                ? `A new email with a fresh payment link will be sent to ${selectedInvoice?.client?.name}.`
-                : `This will send the invoice to ${selectedInvoice?.client?.name} at`}{' '}
-              {selectedInvoice?.status === 'draft' && (
-                <strong className="text-accent">{selectedInvoice?.client?.email}</strong>
-              )}
+                ? `A new payment link will be sent to ${selectedInvoice?.client?.name}.`
+                : `This will send the invoice to ${selectedInvoice?.client?.name}.`}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="py-4">
@@ -768,20 +847,37 @@ export default function InvoicesPage() {
                 <span className="text-sm font-bold text-accent">${selectedInvoice?.amount.toLocaleString()}</span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-sm font-medium">To:</span>
-                <span className="text-sm text-muted-foreground">{selectedInvoice?.client?.email}</span>
+                <span className="text-sm font-medium">Email:</span>
+                <span className="text-sm text-muted-foreground">{selectedInvoice?.client?.email || '—'}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-sm font-medium">WhatsApp:</span>
+                <span className="text-sm text-muted-foreground">{selectedInvoice?.client?.phone || '—'}</span>
               </div>
               <p className="text-xs text-muted-foreground pt-2">
-                {selectedInvoice?.status !== 'draft'
-                  ? 'Client will receive a new email with a 30-day secure portal link to view and pay this invoice — no account needed.'
-                  : 'Client will receive a branded email with a secure portal link to view and pay — no account needed.'}
+                Client receives a branded message with a secure portal link to view and pay — no account needed.
               </p>
             </div>
           </div>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={sendingEmail}>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleSendEmail} disabled={sendingEmail} className="glow-accent">
-              {sendingEmail ? 'Sending...' : selectedInvoice?.status !== 'draft' ? 'Resend' : 'Send Email'}
+          <AlertDialogFooter className="flex-col sm:flex-row gap-2">
+            <AlertDialogCancel disabled={sendingEmail || sendingWhatsapp}>Cancel</AlertDialogCancel>
+            {whatsappConnected && (
+              <AlertDialogAction
+                onClick={handleSendWhatsapp}
+                disabled={sendingEmail || sendingWhatsapp || !selectedInvoice?.client?.phone}
+                title={!selectedInvoice?.client?.phone ? 'Client has no phone number on file' : undefined}
+                className="gap-2 bg-emerald-500 hover:bg-emerald-600 text-white"
+              >
+                <MessageCircle className="w-4 h-4" />
+                {sendingWhatsapp ? 'Sending...' : 'Send via WhatsApp'}
+              </AlertDialogAction>
+            )}
+            <AlertDialogAction
+              onClick={handleSendEmail}
+              disabled={sendingEmail || sendingWhatsapp || !selectedInvoice?.client?.email}
+              className="glow-accent"
+            >
+              {sendingEmail ? 'Sending...' : selectedInvoice?.status !== 'draft' ? 'Resend Email' : 'Send Email'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
