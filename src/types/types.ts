@@ -233,11 +233,60 @@ export interface CashflowData {
   profit: number;
 }
 
+export interface ActionRecipient {
+  client_id: string;
+  name: string;
+  phone: string | null;
+  email: string | null;
+  invoice_id?: string;
+  invoice_number?: string;
+  amount?: number;
+  due_date?: string | null;
+}
+
+export interface ActionSendResult {
+  client_id: string;
+  name: string;
+  sent: boolean;
+  reason?: string;
+}
+
+export interface ActionProposal {
+  recipients: ActionRecipient[];
+  messageDraft: string;
+  unresolvedNames?: string[];
+  // "Who exactly?" was ambiguous (e.g. "message a few clients") — never
+  // guessed; the user picks explicitly from candidateClients instead.
+  needsSelection?: boolean;
+  candidateClients?: { id: string; name: string }[];
+  selectedCandidateIds?: string[];
+  // The original prompt, kept so a manual selection can be resent for
+  // drafting once the user confirms who it's for.
+  originalPrompt?: string;
+  sending?: boolean;
+  sendResults?: ActionSendResult[];
+}
+
 export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
   content: string;
   timestamp: string;
+  // Optional rich KPI card rendered below the bubble — set when Freeda
+  // answers a "query" intent by matching a known dashboard KPI/list.
+  kpi?: import('@/config/freedaKpiCatalog').FreedaKpiResult;
+  // Set when Freeda answers an "update" intent — a diff card the user must
+  // explicitly apply, mirroring the old CommandBar review-then-apply flow.
+  diff?: import('@/lib/businessDiff').PendingDiff;
+  diffApplied?: boolean;
+  // Set when Freeda answers an "action" intent — a read-only proposal
+  // (who + draft message). Sending isn't wired up yet; see CLAUDE.md's
+  // AI-to-database security boundary section for why that's deliberate.
+  actionProposal?: ActionProposal;
+  // A navigate/create/etc. action the chat response suggested — rendered as
+  // a "Take me there" button, never fired automatically (silently
+  // navigating the page out from under someone mid-read is jarring).
+  suggestedAction?: { action: string; actionData?: any };
 }
 
 export interface Package {

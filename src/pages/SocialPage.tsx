@@ -904,7 +904,7 @@ function SocialLocked({
 
 export default function SocialPage() {
   const { isAgency } = useAuth();
-  const { extractedData, isLoading } = useBusiness();
+  const { isLoading } = useBusiness();
 
   if (isLoading) return null;
 
@@ -913,21 +913,6 @@ export default function SocialPage() {
       <SocialLocked
         message="AI-drafted promotions and competitor tracking are an agency-tier feature."
         showUpgradeCta
-      />
-    );
-  }
-
-  // Private beta gate — Instagram/WhatsApp publishing is still being tested against a personal
-  // Meta developer account, so this stays hidden from agency-tier beta users until that's further along.
-  const settings = (extractedData as Record<string, unknown> | null)
-    ?.settings as Record<string, unknown> | undefined;
-  const betaEnabled = settings?.social_beta_enabled === true;
-
-  if (!betaEnabled) {
-    return (
-      <SocialLocked
-        message="Promotions is in private beta while we finish testing Instagram and WhatsApp integration. It'll open up to everyone soon."
-        showUpgradeCta={false}
       />
     );
   }

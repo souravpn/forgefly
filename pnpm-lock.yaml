@@ -173,6 +173,9 @@ importers:
       react-hook-form:
         specifier: ^7.66.0
         version: 7.66.0(react@18.3.1)
+      react-markdown:
+        specifier: ^10.1.0
+        version: 10.1.0(@types/react@19.2.2)(react@18.3.1)
       react-phone-number-input:
         specifier: ^3.4.17
         version: 3.4.17(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
@@ -7844,7 +7847,7 @@ snapshots:
   micromark@4.0.2:
     dependencies:
       '@types/debug': 4.1.12
-      debug: 4.4.1
+      debug: 4.4.3
       decode-named-character-reference: 1.2.0
       devlop: 1.1.0
       micromark-core-commonmark: 2.0.3
