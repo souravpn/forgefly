@@ -27,6 +27,8 @@ import {
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { UpgradeModal } from "@/components/common/UpgradeModal";
+import { DraftPromotionCard } from "@/components/promotions/DraftPromotionCard";
+import { EditPromotionModal } from "@/components/promotions/EditPromotionModal";
 import { ManualPromotionForm } from "@/components/promotions/ManualPromotionForm";
 import { OpenAIIcon } from "@/components/promotions/OpenAIIcon";
 import { PromotionCard } from "@/components/promotions/PromotionCard";
@@ -56,6 +58,8 @@ import {
   getCompetitors,
   getSocialConnections,
   type SocialConnectionStatus,
+  selectFacebookPage,
+  startFacebookConnect,
   startInstagramConnect,
   startWhatsappConnect,
   suggestCompetitors,
@@ -66,13 +70,8 @@ import type {
   Promotion,
 } from "@/types/types";
 
-type Tab =
-  | "featured"
-  | "create"
-  | "draft"
-  | "published"
-  | "connections"
-  | "competitors";
+type Tab = "promotions" | "connections" | "competitors";
+type PromotionsSubTab = "featured" | "create" | "draft" | "published";
 
 function ConnectionsTab({
   businessId,
@@ -87,6 +86,8 @@ function ConnectionsTab({
   const [loading, setLoading] = useState(true);
   const [igConnectLoading, setIgConnectLoading] = useState(false);
   const [waConnectLoading, setWaConnectLoading] = useState(false);
+  const [fbConnectLoading, setFbConnectLoading] = useState(false);
+  const [fbSelectingPage, setFbSelectingPage] = useState(false);
 
   const load = () => {
     getSocialConnections(businessId)
@@ -100,7 +101,7 @@ function ConnectionsTab({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [businessId, refreshKey]);
 
-  const connectionFor = (platform: "instagram" | "whatsapp") =>
+  const connectionFor = (platform: "instagram" | "whatsapp" | "facebook") =>
     connections.find(
       (c) => c.platform === platform && c.status === "connected",
     );
@@ -121,11 +122,16 @@ function ConnectionsTab({
     startWhatsappConnect(businessId);
   }
 
-  async function handleDisconnect(platform: "instagram" | "whatsapp") {
+  function handleConnectFacebook() {
+    setFbConnectLoading(true);
+    startFacebookConnect(businessId);
+  }
+
+  async function handleDisconnect(platform: "instagram" | "whatsapp" | "facebook") {
     try {
       await disconnectSocialPlatform(platform, businessId);
       toast.success(
-        `${platform === "instagram" ? "Instagram" : "WhatsApp"} disconnected`,
+        `${platform === "instagram" ? "Instagram" : platform === "whatsapp" ? "WhatsApp" : "Facebook"} disconnected`,
       );
       load();
     } catch {
@@ -133,8 +139,27 @@ function ConnectionsTab({
     }
   }
 
+  async function handleSelectFacebookPage(pageId: string) {
+    setFbSelectingPage(true);
+    try {
+      await selectFacebookPage(businessId, pageId);
+      toast.success("Facebook Page connected");
+      load();
+    } catch (err: unknown) {
+      toast.error(
+        err instanceof Error ? err.message : "Failed to connect this Page",
+      );
+    } finally {
+      setFbSelectingPage(false);
+    }
+  }
+
   const instagramConnection = connectionFor("instagram");
   const whatsappConnection = connectionFor("whatsapp");
+  const facebookConnection = connectionFor("facebook");
+  const facebookPending = connections.find(
+    (c) => c.platform === "facebook" && c.status === "pending_page_selection",
+  );
 
   return (
     <div>
@@ -201,8 +226,34 @@ function ConnectionsTab({
           icon={<Facebook className="w-6 h-6 text-white" />}
           iconClassName="bg-[#1877F2]"
           name="Facebook"
-          description="Publish posts and updates to your Facebook Page."
-          comingSoon
+          description="Publish posts and Reels to your Facebook Page."
+          connected={!!facebookConnection}
+          connectedLabel={facebookConnection?.extra?.page_name ?? "connected Page"}
+          loading={fbConnectLoading || loading}
+          onConnect={handleConnectFacebook}
+          onDisconnect={() => handleDisconnect("facebook")}
+          pending={!!facebookPending}
+          pendingContent={
+            facebookPending && (
+              <div className="w-full space-y-1.5">
+                <p className="text-xs text-muted-foreground">
+                  Choose which Page to connect:
+                </p>
+                {(facebookPending.extra?.pages ?? []).map((page) => (
+                  <Button
+                    key={page.id}
+                    size="sm"
+                    variant="outline"
+                    className="w-full justify-start"
+                    disabled={fbSelectingPage}
+                    onClick={() => handleSelectFacebookPage(page.id)}
+                  >
+                    {page.name}
+                  </Button>
+                ))}
+              </div>
+            )
+          }
         />
         <PlatformCard
           icon={<Home className="w-6 h-6 text-white" />}
@@ -242,6 +293,8 @@ function PlatformCard({
   warning,
   onConnect,
   onDisconnect,
+  pending,
+  pendingContent,
 }: {
   icon: ReactNode;
   iconClassName: string;
@@ -254,6 +307,11 @@ function PlatformCard({
   warning?: string;
   onConnect?: () => void;
   onDisconnect?: () => void;
+  /** True once the OAuth exchange succeeded but a follow-up choice (e.g. which Facebook
+   * Page) is still needed before the connection is usable — renders `pendingContent`
+   * instead of the normal Connect/Disconnect button. */
+  pending?: boolean;
+  pendingContent?: ReactNode;
 }) {
   return (
     <div
@@ -280,7 +338,9 @@ function PlatformCard({
         </p>
         {warning && <p className="text-xs text-amber-500 mt-2">⚠ {warning}</p>}
       </div>
-      {comingSoon ? (
+      {pending ? (
+        pendingContent
+      ) : comingSoon ? (
         <Button size="sm" variant="outline" disabled className="w-full">
           Coming Soon
         </Button>
@@ -434,7 +494,8 @@ function SocialWorkspace() {
   const { business } = useBusiness();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const [tab, setTab] = useState<Tab>("featured");
+  const [tab, setTab] = useState<Tab>("promotions");
+  const [promoSubTab, setPromoSubTab] = useState<PromotionsSubTab>("featured");
   const [connectionsRefreshKey, setConnectionsRefreshKey] = useState(0);
 
   const [competitors, setCompetitors] = useState<CompetitorProfile[]>([]);
@@ -453,6 +514,7 @@ function SocialWorkspace() {
   const [drafts, setDrafts] = useState<Promotion[]>([]);
   const [published, setPublished] = useState<Promotion[]>([]);
   const [publishTarget, setPublishTarget] = useState<Promotion | null>(null);
+  const [editTarget, setEditTarget] = useState<Promotion | null>(null);
 
   const loadFeatured = useCallback(() => {
     if (!business) return;
@@ -552,17 +614,25 @@ function SocialWorkspace() {
       if (oauthHandledRef.current) return;
       oauthHandledRef.current = true;
       const [platform, businessId] = state.split(":") as [
-        "instagram" | "whatsapp",
+        "instagram" | "whatsapp" | "facebook",
         string,
       ];
       if (businessId !== business.id) {
         navigate("/dashboard/social", { replace: true });
         return;
       }
+      const platformLabel =
+        platform === "instagram"
+          ? "Instagram"
+          : platform === "whatsapp"
+            ? "WhatsApp"
+            : "Facebook";
       completeSocialOauth(platform, code, businessId)
-        .then(() => {
+        .then((result) => {
           toast.success(
-            `${platform === "instagram" ? "Instagram" : "WhatsApp"} connected`,
+            result.needsSelection
+              ? `Choose which ${platformLabel} Page to connect below`
+              : `${platformLabel} connected`,
           );
           setConnectionsRefreshKey((k) => k + 1);
         })
@@ -648,16 +718,7 @@ function SocialWorkspace() {
 
       {/* Tab bar */}
       <div className="flex gap-0 border-b overflow-x-auto">
-        {(
-          [
-            "featured",
-            "create",
-            "draft",
-            "published",
-            "connections",
-            "competitors",
-          ] as Tab[]
-        ).map((t) => (
+        {(["promotions", "connections", "competitors"] as Tab[]).map((t) => (
           <button
             key={t}
             type="button"
@@ -668,22 +729,41 @@ function SocialWorkspace() {
                 : "border-transparent text-muted-foreground hover:text-foreground"
             }`}
           >
-            {t === "featured"
-              ? "Featured"
-              : t === "create"
-                ? "+ Create"
-                : t === "draft"
-                  ? "Draft"
-                  : t === "published"
-                    ? "Published"
-                    : t === "connections"
-                      ? "Connections"
-                      : "Competitors"}
+            {t === "promotions"
+              ? "Promotions"
+              : t === "connections"
+                ? "Connections"
+                : "Competitors"}
           </button>
         ))}
       </div>
 
-      {tab === "featured" && (
+      {tab === "promotions" && (
+        <div className="flex gap-0 border-b overflow-x-auto -mt-2">
+          {(["featured", "create", "draft", "published"] as PromotionsSubTab[]).map((t) => (
+            <button
+              key={t}
+              type="button"
+              onClick={() => setPromoSubTab(t)}
+              className={`px-3 py-2 text-xs font-medium border-b-2 -mb-px transition-colors whitespace-nowrap ${
+                promoSubTab === t
+                  ? "border-foreground text-foreground"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {t === "featured"
+                ? "Featured"
+                : t === "create"
+                  ? "+ Create"
+                  : t === "draft"
+                    ? "Draft"
+                    : "Published"}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {tab === "promotions" && promoSubTab === "featured" && (
         <div className="space-y-4">
           {loadingFeatured ? (
             <p className="text-sm text-muted-foreground">Loading…</p>
@@ -739,7 +819,10 @@ function SocialWorkspace() {
                     </p>
                   </div>
                 </div>
-                <Button variant="ghost" onClick={() => setTab("draft")}>
+                <Button
+                  variant="ghost"
+                  onClick={() => setPromoSubTab("draft")}
+                >
                   Go to Drafts
                 </Button>
               </CardContent>
@@ -748,20 +831,36 @@ function SocialWorkspace() {
         </div>
       )}
 
-      {tab === "create" && (
+      {tab === "promotions" && promoSubTab === "create" && (
         <ManualPromotionForm
           onCreated={(promotion) => {
-            setTab("draft");
+            setPromoSubTab("draft");
             setDrafts((prev) => [promotion, ...prev]);
           }}
         />
       )}
 
-      {tab === "draft" && (
-        <PromotionList promotions={drafts} emptyLabel="No drafts yet." />
+      {tab === "promotions" && promoSubTab === "draft" && (
+        <div className="space-y-3">
+          {drafts.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-8 text-center">
+              No drafts yet.
+            </p>
+          ) : (
+            drafts.map((promotion) => (
+              <DraftPromotionCard
+                key={promotion.id}
+                promotion={promotion}
+                onPublish={setPublishTarget}
+                onEdit={setEditTarget}
+                onDelete={handlePromotionDelete}
+              />
+            ))
+          )}
+        </div>
       )}
 
-      {tab === "published" && (
+      {tab === "promotions" && promoSubTab === "published" && (
         <PromotionList
           promotions={published}
           emptyLabel="No published promotions yet."
@@ -784,6 +883,23 @@ function SocialWorkspace() {
         onPublished={(id, platformPostId) => {
           handlePromotionPublished(id, platformPostId);
           setPublishTarget(null);
+        }}
+      />
+
+      <EditPromotionModal
+        promotion={editTarget}
+        onOpenChange={(open) => {
+          if (!open) setEditTarget(null);
+        }}
+        onChange={(updated) => {
+          setDrafts((prev) =>
+            prev.map((p) => (p.id === updated.id ? updated : p)),
+          );
+          setEditTarget(null);
+        }}
+        onApproveAndPublish={(updated) => {
+          setEditTarget(null);
+          setPublishTarget(updated);
         }}
       />
 

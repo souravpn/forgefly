@@ -99,10 +99,16 @@ export async function publishSocialPost(
 // ─── Connections (Instagram / WhatsApp OAuth) ──────────────────────────────
 
 export interface SocialConnectionStatus {
-  platform: 'instagram' | 'whatsapp';
-  status: 'connected' | 'disconnected';
+  platform: 'instagram' | 'whatsapp' | 'facebook';
+  status: 'connected' | 'disconnected' | 'pending_page_selection';
   external_id: string;
-  extra: { username?: string; waba_id?: string; display_phone_number?: string } | null;
+  extra: {
+    username?: string;
+    waba_id?: string;
+    display_phone_number?: string;
+    page_name?: string;
+    pages?: { id: string; name: string }[];
+  } | null;
 }
 
 const OAUTH_REDIRECT_PATH = '/dashboard/social';
@@ -141,11 +147,24 @@ export function startWhatsappConnect(businessId: string): void {
   window.location.href = `https://www.facebook.com/v21.0/dialog/oauth?${params}`;
 }
 
+export function startFacebookConnect(businessId: string): void {
+  const appId = import.meta.env.VITE_META_APP_ID as string;
+  const redirectUri = `${window.location.origin}${OAUTH_REDIRECT_PATH}`;
+  const params = new URLSearchParams({
+    client_id: appId,
+    redirect_uri: redirectUri,
+    response_type: 'code',
+    scope: 'pages_show_list,pages_manage_posts,pages_read_engagement',
+    state: `facebook:${businessId}`,
+  });
+  window.location.href = `https://www.facebook.com/v21.0/dialog/oauth?${params}`;
+}
+
 export async function completeSocialOauth(
-  platform: 'instagram' | 'whatsapp',
+  platform: 'instagram' | 'whatsapp' | 'facebook',
   code: string,
   businessId: string,
-): Promise<{ connected: boolean; extra: SocialConnectionStatus['extra'] }> {
+): Promise<{ connected: boolean; needsSelection?: boolean; pages?: { id: string; name: string }[]; extra: SocialConnectionStatus['extra'] }> {
   const redirectUri = `${window.location.origin}${OAUTH_REDIRECT_PATH}`;
   const { data, error } = await supabase.functions.invoke('social-oauth-callback', {
     body: { platform, code, business_id: businessId, redirect_uri: redirectUri },
@@ -154,8 +173,21 @@ export async function completeSocialOauth(
   return data;
 }
 
+/** Finalizes a pending multi-Page Facebook connection once the user picks which Page to use —
+ * see social-facebook-select-page. Every subsequent publish then needs zero extra steps. */
+export async function selectFacebookPage(
+  businessId: string,
+  pageId: string,
+): Promise<{ connected: boolean; extra: SocialConnectionStatus['extra'] }> {
+  const { data, error } = await supabase.functions.invoke('social-facebook-select-page', {
+    body: { business_id: businessId, page_id: pageId },
+  });
+  if (error) throw error;
+  return data;
+}
+
 export async function disconnectSocialPlatform(
-  platform: 'instagram' | 'whatsapp',
+  platform: 'instagram' | 'whatsapp' | 'facebook',
   businessId: string,
 ): Promise<void> {
   const { error } = await supabase.functions.invoke('social-disconnect', {

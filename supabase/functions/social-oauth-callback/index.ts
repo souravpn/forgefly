@@ -131,12 +131,87 @@ async function exchangeWhatsappToken(code: string, redirectUri: string) {
   };
 }
 
+interface FacebookPage {
+  id: string;
+  name: string;
+  access_token: string;
+}
+
+/** Facebook Page publishing shares the WhatsApp/Facebook Login app (META_APP_ID/SECRET) —
+ * just a different scope (pages_show_list etc.) on the same OAuth product, so the
+ * short/long-lived token exchange is identical to exchangeWhatsappToken's first half. */
+async function exchangeFacebookToken(
+  code: string,
+  redirectUri: string,
+): Promise<
+  | { needsSelection: true; pages: FacebookPage[] }
+  | { needsSelection: false; accessToken: string; externalId: string; extra: { page_name: string } }
+> {
+  const appId = Deno.env.get('META_APP_ID') ?? '';
+  const appSecret = Deno.env.get('META_APP_SECRET') ?? '';
+
+  const shortLivedRes = await fetch(
+    `https://graph.facebook.com/${GRAPH_API_VERSION}/oauth/access_token?` +
+      new URLSearchParams({
+        client_id: appId,
+        client_secret: appSecret,
+        redirect_uri: redirectUri,
+        code,
+      }),
+  );
+  const shortLivedData = await shortLivedRes.json();
+  if (!shortLivedRes.ok || !shortLivedData.access_token) {
+    throw new Error(shortLivedData.error?.message ?? 'Failed to exchange Facebook authorization code');
+  }
+
+  const longLivedRes = await fetch(
+    `https://graph.facebook.com/${GRAPH_API_VERSION}/oauth/access_token?` +
+      new URLSearchParams({
+        grant_type: 'fb_exchange_token',
+        client_id: appId,
+        client_secret: appSecret,
+        fb_exchange_token: shortLivedData.access_token,
+      }),
+  );
+  const longLivedData = await longLivedRes.json();
+  if (!longLivedRes.ok || !longLivedData.access_token) {
+    throw new Error(longLivedData.error?.message ?? 'Failed to obtain long-lived Facebook token');
+  }
+  const userAccessToken = longLivedData.access_token as string;
+
+  // /me/accounts lists every Page this user administers (personal or Business-Manager-owned
+  // alike — Page access is granted per person, not per account type) and conveniently already
+  // includes each Page's own (effectively non-expiring) access token, so no further exchange
+  // is needed once a Page is chosen.
+  const accountsRes = await fetch(
+    `https://graph.facebook.com/${GRAPH_API_VERSION}/me/accounts?access_token=${userAccessToken}`,
+  );
+  const accountsData = await accountsRes.json();
+  if (!accountsRes.ok) {
+    throw new Error(accountsData.error?.message ?? 'Failed to list Facebook Pages');
+  }
+  const pages = (accountsData.data ?? []) as FacebookPage[];
+  if (pages.length === 0) {
+    throw new Error('No Facebook Pages found for this account — you need to be an admin of a Page to connect it.');
+  }
+
+  if (pages.length === 1) {
+    return {
+      needsSelection: false,
+      accessToken: pages[0].access_token,
+      externalId: pages[0].id,
+      extra: { page_name: pages[0].name },
+    };
+  }
+  return { needsSelection: true, pages };
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
   try {
     const { platform, code, business_id, redirect_uri } = await req.json() as {
-      platform?: 'instagram' | 'whatsapp';
+      platform?: 'instagram' | 'whatsapp' | 'facebook';
       code?: string;
       business_id?: string;
       redirect_uri?: string;
@@ -172,6 +247,55 @@ serve(async (req) => {
     if (!business || business.user_id !== user.id) {
       return new Response(JSON.stringify({ error: 'Forbidden' }), {
         status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (platform === 'facebook') {
+      const result = await exchangeFacebookToken(code, redirect_uri);
+
+      if (result.needsSelection) {
+        // Multiple Pages: don't finalize a connection yet. Page access tokens are stashed
+        // in the access_token column (as JSON) rather than `extra` — get-social-status only
+        // ever selects `extra`, so this keeps every Page's token out of client reach until
+        // social-facebook-select-page (service-role only) resolves the chosen one.
+        const { error: upsertError } = await service
+          .from('social_connections')
+          .upsert({
+            business_id,
+            platform,
+            access_token: JSON.stringify(result.pages),
+            external_id: '',
+            extra: { pages: result.pages.map((p) => ({ id: p.id, name: p.name })) },
+            status: 'pending_page_selection',
+            updated_at: new Date().toISOString(),
+          }, { onConflict: 'business_id,platform' });
+        if (upsertError) throw upsertError;
+
+        return new Response(
+          JSON.stringify({
+            connected: false,
+            needsSelection: true,
+            pages: result.pages.map((p) => ({ id: p.id, name: p.name })),
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        );
+      }
+
+      const { error: upsertError } = await service
+        .from('social_connections')
+        .upsert({
+          business_id,
+          platform,
+          access_token: result.accessToken,
+          external_id: result.externalId,
+          extra: result.extra,
+          status: 'connected',
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'business_id,platform' });
+      if (upsertError) throw upsertError;
+
+      return new Response(JSON.stringify({ connected: true, extra: result.extra }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 

@@ -32,11 +32,11 @@ export function PromotionCard({
   const [draftingLoading, setDraftingLoading] = useState(false);
   const [format, setFormat] = useState<"photo" | "reel">("photo");
 
-  // 'instagram_reel' targets track the Reel publish internally — not a selectable
-  // "Promote on" checklist item, so exclude it here.
+  // 'instagram_reel'/'facebook_reel' targets track the Reel publish internally — not a
+  // selectable "Promote on" checklist item, so exclude them here.
   const selectedPlatforms = promotion.targets
     .map((t) => t.platform)
-    .filter((p): p is PromotionPlatform => p !== "instagram_reel");
+    .filter((p): p is PromotionPlatform => p !== "instagram_reel" && p !== "facebook_reel");
 
   // Poll the Shotstack render status while a Reel is still processing — same shape as
   // the container-status polling already used server-side in social-publish-instagram.

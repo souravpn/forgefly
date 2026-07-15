@@ -421,10 +421,10 @@ export interface SocialPost {
 export type PromotionPlatform = 'instagram' | 'facebook' | 'nextdoor' | 'x' | 'linkedin';
 export type SocialPostTargetStatus = 'pending' | 'approved' | 'published' | 'skipped' | 'failed';
 
-// 'instagram_reel' isn't a selectable "Promote on" platform (see PlatformChecklist) — it's
-// an internal target row social-publish-instagram upserts to track the Reel publish
-// separately from the photo publish, since the two are independent Instagram posts.
-export type SocialPostTargetPlatform = PromotionPlatform | 'instagram_reel';
+// 'instagram_reel'/'facebook_reel' aren't selectable "Promote on" platforms (see
+// PlatformChecklist) — they're internal target rows the publish functions upsert to track
+// a Reel publish separately from the photo publish, since the two are independent posts.
+export type SocialPostTargetPlatform = PromotionPlatform | 'instagram_reel' | 'facebook_reel';
 
 export interface SocialPostTarget {
   id: string;

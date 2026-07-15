@@ -11,7 +11,7 @@ serve(async (req) => {
 
   try {
     const { platform, business_id } = await req.json() as {
-      platform?: 'instagram' | 'whatsapp';
+      platform?: 'instagram' | 'whatsapp' | 'facebook';
       business_id?: string;
     };
 

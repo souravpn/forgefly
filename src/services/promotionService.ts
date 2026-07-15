@@ -9,7 +9,7 @@ import type {
 } from '@/types/types';
 
 const ALL_PLATFORMS: PromotionPlatform[] = ['instagram', 'facebook', 'nextdoor', 'x', 'linkedin'];
-export const LIVE_PLATFORMS: PromotionPlatform[] = ['instagram'];
+export const LIVE_PLATFORMS: PromotionPlatform[] = ['instagram', 'facebook'];
 
 /** supabase-js collapses every non-2xx edge function response into the same generic
  * "Edge Function returned a non-2xx status code" message, hiding the actual error our
@@ -206,6 +206,17 @@ export async function publishInstagramTarget(
   useVideo?: boolean,
 ): Promise<{ published: boolean; platform_post_id: string }> {
   const { data, error } = await supabase.functions.invoke('social-publish-instagram', {
+    body: { social_post_id: postId, use_video: !!useVideo },
+  });
+  if (error) throw await unwrapFunctionError(error);
+  return data;
+}
+
+export async function publishFacebookTarget(
+  postId: string,
+  useVideo?: boolean,
+): Promise<{ published: boolean; platform_post_id: string }> {
+  const { data, error } = await supabase.functions.invoke('social-publish-facebook', {
     body: { social_post_id: postId, use_video: !!useVideo },
   });
   if (error) throw await unwrapFunctionError(error);

@@ -1,4 +1,4 @@
-import { Instagram, Loader2, Sparkles } from "lucide-react";
+import { Facebook, Instagram, Loader2, Sparkles } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -13,10 +13,19 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   approvePromotion,
   LIVE_PLATFORMS,
+  publishFacebookTarget,
   publishInstagramTarget,
   updatePromotionCaption,
 } from "@/services/promotionService";
 import type { Promotion, PromotionPlatform } from "@/types/types";
+
+const PLATFORM_CONFIG: Record<
+  "instagram" | "facebook",
+  { label: string; icon: typeof Instagram; publish: (postId: string, useVideo?: boolean) => Promise<{ platform_post_id: string }> }
+> = {
+  instagram: { label: "Instagram", icon: Instagram, publish: publishInstagramTarget },
+  facebook: { label: "Facebook", icon: Facebook, publish: publishFacebookTarget },
+};
 
 export function PublishWorkflowModal({
   promotion,
@@ -29,7 +38,7 @@ export function PublishWorkflowModal({
 }) {
   const [caption, setCaption] = useState(promotion?.caption ?? "");
   const [publishing, setPublishing] = useState(false);
-  const [publishStage, setPublishStage] = useState<"photo" | "reel" | null>(null);
+  const [publishStage, setPublishStage] = useState<string | null>(null);
   const [done, setDone] = useState(false);
 
   useEffect(() => {
@@ -43,37 +52,61 @@ export function PublishWorkflowModal({
 
   const selectedLivePlatforms = promotion.targets
     .map((t) => t.platform)
-    .filter((p): p is PromotionPlatform => p !== "instagram_reel" && LIVE_PLATFORMS.includes(p));
+    .filter(
+      (p): p is "instagram" | "facebook" =>
+        (p === "instagram" || p === "facebook") &&
+        LIVE_PLATFORMS.includes(p as PromotionPlatform),
+    );
 
-  const hasInstagramStep = selectedLivePlatforms.includes("instagram");
+  const hasLiveStep = selectedLivePlatforms.length > 0;
   const hasReel = promotion.video_status === "ready" && !!promotion.video_url;
 
-  // A ready Reel always gets published alongside the photo, one after the other — two
-  // independent Instagram posts from the same generated promotion, not an either/or choice.
+  // A ready Reel always gets published alongside the photo, one after the other, on every
+  // selected live platform — two independent posts per platform from the same generated
+  // promotion, not an either/or choice. Each platform/format leg fails independently so one
+  // platform's error doesn't block the others.
   async function handleApproveAndPublish() {
     setPublishing(true);
+    const errors: string[] = [];
+    let firstPublishedId: string | null = null;
     try {
       if (caption !== promotion!.caption) {
         await updatePromotionCaption(promotion!.id, caption);
       }
       await approvePromotion(promotion!.id);
 
-      setPublishStage("photo");
-      const result = await publishInstagramTarget(promotion!.id, false);
-      onPublished(promotion!.id, result.platform_post_id);
+      for (const platform of selectedLivePlatforms) {
+        const { label, publish } = PLATFORM_CONFIG[platform];
 
-      if (hasReel) {
-        setPublishStage("reel");
+        setPublishStage(`${label} — photo…`);
         try {
-          await publishInstagramTarget(promotion!.id, true);
-          toast.success("Published photo and Reel to Instagram");
-        } catch (reelErr: unknown) {
-          toast.error(
-            `Photo published, but the Reel failed: ${(reelErr as Error).message || "unknown error"}`,
-          );
+          const result = await publish(promotion!.id, false);
+          firstPublishedId ??= result.platform_post_id;
+        } catch (err: unknown) {
+          errors.push(`${label} photo: ${(err as Error).message || "unknown error"}`);
+          continue;
         }
+
+        if (hasReel) {
+          setPublishStage(`${label} — Reel…`);
+          try {
+            await publish(promotion!.id, true);
+          } catch (err: unknown) {
+            errors.push(`${label} Reel: ${(err as Error).message || "unknown error"}`);
+          }
+        }
+      }
+
+      if (firstPublishedId) {
+        onPublished(promotion!.id, firstPublishedId);
+      }
+
+      if (errors.length === 0) {
+        toast.success(hasReel ? "Published photos and Reels" : "Published");
+      } else if (firstPublishedId) {
+        toast.error(`Published with some failures: ${errors.join("; ")}`);
       } else {
-        toast.success("Published to Instagram");
+        toast.error(errors.join("; "));
       }
       setDone(true);
     } catch (err: unknown) {
@@ -91,20 +124,27 @@ export function PublishWorkflowModal({
           <DialogTitle>Publish promotion</DialogTitle>
         </DialogHeader>
 
-        {!hasInstagramStep || done ? (
+        {!hasLiveStep || done ? (
           <div className="py-6 text-center space-y-3">
             <p className="text-sm text-muted-foreground">
               {done
-                ? "Published to Instagram."
-                : "None of the selected platforms are supported yet — check Instagram to publish now, or save this as a draft for when other platforms go live."}
+                ? "Published."
+                : "None of the selected platforms are supported yet — check Instagram or Facebook to publish now, or save this as a draft for when other platforms go live."}
             </p>
             <Button onClick={() => onOpenChange(false)}>Done</Button>
           </div>
         ) : (
           <div className="space-y-4">
-            <div className="flex items-center gap-2 text-sm font-medium">
-              <Instagram className="w-4 h-4" />
-              Instagram
+            <div className="flex items-center gap-3 text-sm font-medium">
+              {selectedLivePlatforms.map((platform) => {
+                const Icon = PLATFORM_CONFIG[platform].icon;
+                return (
+                  <span key={platform} className="flex items-center gap-1.5">
+                    <Icon className="w-4 h-4" />
+                    {PLATFORM_CONFIG[platform].label}
+                  </span>
+                );
+              })}
             </div>
             <Textarea
               value={caption}
@@ -121,7 +161,7 @@ export function PublishWorkflowModal({
             )}
             {hasReel && (
               <p className="text-xs text-muted-foreground text-center">
-                A Reel is also ready and will be published right after the photo.
+                A Reel is also ready and will be published right after each photo.
               </p>
             )}
             <DialogFooter>
@@ -132,9 +172,7 @@ export function PublishWorkflowModal({
                   <Sparkles className="w-4 h-4 mr-2" />
                 )}
                 {publishing
-                  ? publishStage === "reel"
-                    ? "Publishing Reel…"
-                    : "Publishing…"
+                  ? (publishStage ?? "Publishing…")
                   : "Approve and Publish"}
               </Button>
             </DialogFooter>
