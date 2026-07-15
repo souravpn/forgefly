@@ -11,6 +11,14 @@ const HAIKU = 'claude-haiku-4-5-20251001';
 const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
 const OPENAI_IMAGES_URL = 'https://api.openai.com/v1/images/generations';
 
+const SHOTSTACK_API_KEY = Deno.env.get('SHOTSTACK_API_KEY');
+// Sandbox endpoint for now — free, unlimited renders but watermarked output. Switch to
+// 'https://api.shotstack.io/edit/v1/render' (with a production API key) once verified.
+const SHOTSTACK_RENDER_URL = 'https://api.shotstack.io/edit/stage/render';
+const REEL_DURATION_SECONDS = 4;
+const SITE_URL = Deno.env.get('SITE_URL') ?? 'https://www.forgefly.io';
+const REEL_BACKGROUND_URL = `${SITE_URL}/hero-bg.png`;
+
 const PLATFORMS = ['instagram', 'facebook', 'nextdoor', 'x', 'linkedin'] as const;
 
 const corsHeaders = {
@@ -20,9 +28,10 @@ const corsHeaders = {
 
 // Cost per 1M tokens (USD) — matches ai-gateway's TOKEN_COST table for ai_usage_log.
 const HAIKU_COST = { input: 1.00, output: 5.00 };
-// gpt-image-1, 1024x1024, quality "medium" — flat per-image cost (not token-metered
-// the way OpenAI bills it, but ai_usage_log's cost_usd column takes a flat figure fine).
-const OPENAI_IMAGE_COST_USD = 0.042;
+// gpt-image-2, 1024x1024, quality "medium" — official per-image cost from OpenAI's
+// pricing page ($30/1M output tokens, translated to a flat per-image figure since
+// ai_usage_log's cost_usd column takes a flat figure, not raw token counts).
+const OPENAI_IMAGE_COST_USD = 0.053;
 
 // deno-lint-ignore no-explicit-any
 async function logUsage(
@@ -51,12 +60,14 @@ async function logUsage(
 }
 
 async function renderOpenAiImage(input: {
-  businessName: string;
   niche: string;
-  headline: string;
-  stat: string | null;
+  caption: string;
 }): Promise<Uint8Array> {
-  const prompt = `A professional, minimal square Instagram promotional graphic for "${input.businessName}", a ${input.niche} business. Dark modern background, clean bold sans-serif typography, high contrast. Large headline text reading exactly: "${input.headline}".${input.stat ? ` Prominent large stat callout reading exactly: "${input.stat}".` : ''} Include a small "Link in bio" footer. Graphic-design poster style, no photorealistic people, no stock-photo look.`;
+  // Baked-in typography from gpt-image models tends to render blurry/garbled — illustrating
+  // the caption's idea instead (no text at all) is both more reliable and reads as a
+  // more polished post; the headline/stat/CTA text still lives in the actual caption,
+  // which Instagram already displays alongside the media.
+  const prompt = `Create a business promotion post (for Instagram) without any text, illustrating the following: "${input.caption}". ${input.niche} business, clean modern editorial illustration style, no photorealistic people, no stock-photo look, no logos, no text or typography elements.`;
 
   const response = await fetch(OPENAI_IMAGES_URL, {
     method: 'POST',
@@ -65,7 +76,7 @@ async function renderOpenAiImage(input: {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: 'gpt-image-1',
+      model: 'gpt-image-2',
       prompt,
       size: '1024x1024',
       quality: 'medium',
@@ -79,6 +90,95 @@ async function renderOpenAiImage(input: {
   const b64 = data.data?.[0]?.b64_json;
   if (!b64) throw new Error('OpenAI Images API returned no image data');
   return Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+}
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+/** Submits a Ken Burns pan/zoom Reel render to Shotstack: the gpt-image-2 still as a
+ * full-bleed portrait clip, plus a business-name pill overlay burned into the video
+ * (Reels/Feed video have no real clickable region — the actual link stays in the
+ * caption's "link in bio" CTA, same as the still-image templates). Returns the
+ * Shotstack render id for later polling; throws on submission failure so the caller
+ * can treat it as non-fatal to the (already-succeeded) still-image generation.
+ */
+async function submitShotstackRender(input: { imageUrl: string; businessName: string }): Promise<string> {
+  const pillName = escapeHtml(input.businessName);
+
+  const timeline = {
+    background: '#000000',
+    tracks: [
+      {
+        // Pill overlay track (rendered on top of the image track below).
+        clips: [
+          {
+            asset: {
+              type: 'html',
+              html: `<div class="pill">${pillName}</div>`,
+              css: `.pill { display: inline-block; padding: 18px 36px; background: rgba(15,15,15,0.6); color: #ffffff; font-family: Inter, sans-serif; font-weight: 700; font-size: 40px; border-radius: 999px; }`,
+              width: 1000,
+              height: 120,
+            },
+            start: 0,
+            length: REEL_DURATION_SECONDS,
+            position: 'bottom',
+            offset: { y: 0.08 },
+          },
+        ],
+      },
+      {
+        // The gpt-image-2 still, kept at its original (square) aspect ratio — 'contain'
+        // letterboxes it against the portrait canvas instead of cropping/stretching.
+        clips: [
+          {
+            asset: { type: 'image', src: input.imageUrl },
+            start: 0,
+            length: REEL_DURATION_SECONDS,
+            effect: 'zoomInSlow',
+            fit: 'contain',
+          },
+        ],
+      },
+      {
+        // Full-bleed backdrop behind the letterboxed photo — fine to crop/cover since
+        // it's ambient brand background, not the actual promo content.
+        clips: [
+          {
+            asset: { type: 'image', src: REEL_BACKGROUND_URL },
+            start: 0,
+            length: REEL_DURATION_SECONDS,
+            fit: 'cover',
+          },
+        ],
+      },
+    ],
+  };
+
+  const response = await fetch(SHOTSTACK_RENDER_URL, {
+    method: 'POST',
+    headers: {
+      'x-api-key': SHOTSTACK_API_KEY ?? '',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      timeline,
+      output: { format: 'mp4', size: { width: 1080, height: 1920 } },
+    }),
+  });
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`Shotstack render API error ${response.status}: ${error}`);
+  }
+  const data = await response.json();
+  const renderId = data?.response?.id;
+  if (!renderId) throw new Error('Shotstack render API returned no render id');
+  return renderId;
 }
 
 let wasmReady: Promise<void> | null = null;
@@ -257,14 +357,14 @@ Return ONLY valid JSON, no markdown fences:
       });
     }
     const stat = parsed.stat?.trim().slice(0, 12) || null;
-    const templateId = useOpenAiImage ? 'openai_gpt_image_1' : stat ? 'stat_card' : 'announcement';
+    const templateId = useOpenAiImage ? 'openai_gpt_image_2' : stat ? 'stat_card' : 'announcement';
 
     const png = useOpenAiImage
-      ? await renderOpenAiImage({ businessName, niche, headline, stat })
+      ? await renderOpenAiImage({ niche, caption })
       : await renderPng(TEMPLATES[templateId]({ businessName, headline, stat, footerText: 'Link in bio' }));
 
     if (useOpenAiImage) {
-      await logUsage(service, user.id, business.id, 'gpt-image-1', 'generate_promotion_image', OPENAI_IMAGE_COST_USD);
+      await logUsage(service, user.id, business.id, 'gpt-image-2', 'generate_promotion_image', OPENAI_IMAGE_COST_USD);
     }
 
     const { data: post, error: insertError } = await service
@@ -300,9 +400,28 @@ Return ONLY valid JSON, no markdown fences:
     }
     const { data: publicUrlData } = service.storage.from('work-samples').getPublicUrl(filename);
 
+    // The Reel video is additive to the still image — a Shotstack submission failure
+    // must not fail the (already-succeeded) still-image generation.
+    let shotstackRenderId: string | null = null;
+    if (useOpenAiImage) {
+      try {
+        shotstackRenderId = await submitShotstackRender({
+          imageUrl: publicUrlData.publicUrl,
+          businessName,
+        });
+      } catch (err) {
+        console.error('Shotstack render submission failed (non-fatal):', err);
+      }
+    }
+
     const { data: updatedPost, error: updateError } = await service
       .from('social_posts')
-      .update({ image_url: publicUrlData.publicUrl })
+      .update({
+        image_url: publicUrlData.publicUrl,
+        ...(shotstackRenderId
+          ? { shotstack_render_id: shotstackRenderId, video_status: 'rendering' }
+          : {}),
+      })
       .eq('id', post.id)
       .select()
       .single();

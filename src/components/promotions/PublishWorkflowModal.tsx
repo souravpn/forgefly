@@ -16,7 +16,7 @@ import {
   publishInstagramTarget,
   updatePromotionCaption,
 } from "@/services/promotionService";
-import type { Promotion } from "@/types/types";
+import type { Promotion, PromotionPlatform } from "@/types/types";
 
 export function PublishWorkflowModal({
   promotion,
@@ -29,6 +29,7 @@ export function PublishWorkflowModal({
 }) {
   const [caption, setCaption] = useState(promotion?.caption ?? "");
   const [publishing, setPublishing] = useState(false);
+  const [publishStage, setPublishStage] = useState<"photo" | "reel" | null>(null);
   const [done, setDone] = useState(false);
 
   useEffect(() => {
@@ -42,10 +43,13 @@ export function PublishWorkflowModal({
 
   const selectedLivePlatforms = promotion.targets
     .map((t) => t.platform)
-    .filter((p) => LIVE_PLATFORMS.includes(p));
+    .filter((p): p is PromotionPlatform => p !== "instagram_reel" && LIVE_PLATFORMS.includes(p));
 
   const hasInstagramStep = selectedLivePlatforms.includes("instagram");
+  const hasReel = promotion.video_status === "ready" && !!promotion.video_url;
 
+  // A ready Reel always gets published alongside the photo, one after the other — two
+  // independent Instagram posts from the same generated promotion, not an either/or choice.
   async function handleApproveAndPublish() {
     setPublishing(true);
     try {
@@ -53,14 +57,30 @@ export function PublishWorkflowModal({
         await updatePromotionCaption(promotion!.id, caption);
       }
       await approvePromotion(promotion!.id);
-      const result = await publishInstagramTarget(promotion!.id);
+
+      setPublishStage("photo");
+      const result = await publishInstagramTarget(promotion!.id, false);
       onPublished(promotion!.id, result.platform_post_id);
-      toast.success("Published to Instagram");
+
+      if (hasReel) {
+        setPublishStage("reel");
+        try {
+          await publishInstagramTarget(promotion!.id, true);
+          toast.success("Published photo and Reel to Instagram");
+        } catch (reelErr: unknown) {
+          toast.error(
+            `Photo published, but the Reel failed: ${(reelErr as Error).message || "unknown error"}`,
+          );
+        }
+      } else {
+        toast.success("Published to Instagram");
+      }
       setDone(true);
     } catch (err: unknown) {
       toast.error((err as Error).message || "Failed to publish");
     } finally {
       setPublishing(false);
+      setPublishStage(null);
     }
   }
 
@@ -99,6 +119,11 @@ export function PublishWorkflowModal({
                 className="w-full max-w-xs rounded-lg border mx-auto"
               />
             )}
+            {hasReel && (
+              <p className="text-xs text-muted-foreground text-center">
+                A Reel is also ready and will be published right after the photo.
+              </p>
+            )}
             <DialogFooter>
               <Button disabled={publishing} onClick={handleApproveAndPublish}>
                 {publishing ? (
@@ -106,7 +131,11 @@ export function PublishWorkflowModal({
                 ) : (
                   <Sparkles className="w-4 h-4 mr-2" />
                 )}
-                {publishing ? "Publishing…" : "Approve and Publish"}
+                {publishing
+                  ? publishStage === "reel"
+                    ? "Publishing Reel…"
+                    : "Publishing…"
+                  : "Approve and Publish"}
               </Button>
             </DialogFooter>
           </div>

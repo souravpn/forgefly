@@ -85,9 +85,12 @@ export async function archiveSocialPost(id: string): Promise<void> {
   if (error) throw error;
 }
 
-export async function publishSocialPost(id: string): Promise<{ published: boolean; platform_post_id: string }> {
+export async function publishSocialPost(
+  id: string,
+  useVideo?: boolean,
+): Promise<{ published: boolean; platform_post_id: string }> {
   const { data, error } = await supabase.functions.invoke('social-publish-instagram', {
-    body: { social_post_id: id },
+    body: { social_post_id: id, use_video: !!useVideo },
   });
   if (error) throw error;
   return data;

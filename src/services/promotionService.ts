@@ -1,3 +1,4 @@
+import { FunctionsHttpError } from '@supabase/supabase-js';
 import { supabase } from '@/db/supabase';
 import type {
   Promotion,
@@ -9,6 +10,22 @@ import type {
 
 const ALL_PLATFORMS: PromotionPlatform[] = ['instagram', 'facebook', 'nextdoor', 'x', 'linkedin'];
 export const LIVE_PLATFORMS: PromotionPlatform[] = ['instagram'];
+
+/** supabase-js collapses every non-2xx edge function response into the same generic
+ * "Edge Function returned a non-2xx status code" message, hiding the actual error our
+ * functions put in the JSON body (e.g. "Reel video is not ready yet"). Unwrap it so
+ * callers/toasts show something actionable. */
+async function unwrapFunctionError(error: unknown): Promise<Error> {
+  if (error instanceof FunctionsHttpError) {
+    try {
+      const body = await error.context.json();
+      if (body?.error) return new Error(body.error);
+    } catch {
+      // Response body wasn't JSON — fall through to the generic message below.
+    }
+  }
+  return error instanceof Error ? error : new Error(String(error));
+}
 
 async function currentUser() {
   const { data: { user } } = await supabase.auth.getUser();
@@ -71,19 +88,19 @@ export async function generateFeaturedPromotion(): Promise<Promotion> {
   const { data, error } = await supabase.functions.invoke('generate-promotion', {
     body: { mode: 'featured' },
   });
-  if (error) throw error;
+  if (error) throw await unwrapFunctionError(error);
   if (data?.error) throw new Error(data.error);
   const [withTargets] = await attachTargets([data.post as SocialPost]);
   return withTargets;
 }
 
 /** Same caption/headline generation, but the graphic is a true AI diffusion image
- * (OpenAI gpt-image-1) instead of the templated SVG render — costs real money per call. */
+ * (OpenAI gpt-image-2) instead of the templated SVG render — costs real money per call. */
 export async function generateFeaturedPromotionOpenAI(): Promise<Promotion> {
   const { data, error } = await supabase.functions.invoke('generate-promotion', {
     body: { mode: 'featured_openai' },
   });
-  if (error) throw error;
+  if (error) throw await unwrapFunctionError(error);
   if (data?.error) throw new Error(data.error);
   const [withTargets] = await attachTargets([data.post as SocialPost]);
   return withTargets;
@@ -186,11 +203,24 @@ export async function approvePromotion(id: string): Promise<void> {
 
 export async function publishInstagramTarget(
   postId: string,
+  useVideo?: boolean,
 ): Promise<{ published: boolean; platform_post_id: string }> {
   const { data, error } = await supabase.functions.invoke('social-publish-instagram', {
+    body: { social_post_id: postId, use_video: !!useVideo },
+  });
+  if (error) throw await unwrapFunctionError(error);
+  return data;
+}
+
+/** Polls the Shotstack render status for a promotion's Reel video, resolving the
+ * `video_status`/`video_url` set by generate-promotion once the render finishes. */
+export async function checkVideoRenderStatus(
+  postId: string,
+): Promise<{ video_status: SocialPost['video_status']; video_url: string | null }> {
+  const { data, error } = await supabase.functions.invoke('check-video-render', {
     body: { social_post_id: postId },
   });
-  if (error) throw error;
+  if (error) throw await unwrapFunctionError(error);
   return data;
 }
 

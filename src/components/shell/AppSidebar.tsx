@@ -130,7 +130,7 @@ const PROJECT_NAV = [
 
 const SOCIAL_ITEM = {
   id: "social",
-  label: "Promotions",
+  label: "Social",
   icon: "share2",
   route: "/dashboard/social",
 };

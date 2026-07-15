@@ -448,7 +448,8 @@ function SocialWorkspace() {
   const [featured, setFeatured] = useState<Promotion | null>(null);
   const [loadingFeatured, setLoadingFeatured] = useState(true);
   const [generatingFeatured, setGeneratingFeatured] = useState(false);
-  const [generatingFeaturedOpenAI, setGeneratingFeaturedOpenAI] = useState(false);
+  const [generatingFeaturedOpenAI, setGeneratingFeaturedOpenAI] =
+    useState(false);
   const [drafts, setDrafts] = useState<Promotion[]>([]);
   const [published, setPublished] = useState<Promotion[]>([]);
   const [publishTarget, setPublishTarget] = useState<Promotion | null>(null);
@@ -638,7 +639,7 @@ function SocialWorkspace() {
     <div className="space-y-6 md:space-y-8">
       <div>
         <h1 className="text-3xl md:text-4xl font-bold text-balance mb-1">
-          Promotions
+          Social
         </h1>
         <p className="text-sm md:text-base text-muted-foreground">
           AI-drafted promotion graphics, captions, and competitor tracking
@@ -714,7 +715,9 @@ function SocialWorkspace() {
                       )}
                       {generatingFeatured ? "Generating…" : "Generate with AI"}
                     </Button>
-                    <p className="text-xs text-emerald-600">~$0.001 · text + template render</p>
+                    <p className="text-xs text-emerald-600">
+                      ~$0.001 · text + template render
+                    </p>
                   </div>
                   <div className="flex flex-col items-center gap-1.5">
                     <Button
@@ -727,9 +730,13 @@ function SocialWorkspace() {
                       ) : (
                         <OpenAIIcon className="w-4 h-4 mr-2" />
                       )}
-                      {generatingFeaturedOpenAI ? "Generating…" : "Generate with OpenAI"}
+                      {generatingFeaturedOpenAI
+                        ? "Generating…"
+                        : "Generate with OpenAI"}
                     </Button>
-                    <p className="text-xs text-amber-600">~$0.04 · gpt-image-1 diffusion image</p>
+                    <p className="text-xs text-amber-600">
+                      ~$0.05 · gpt-image-2 diffusion image + Reel video
+                    </p>
                   </div>
                 </div>
                 <Button variant="ghost" onClick={() => setTab("draft")}>

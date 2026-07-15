@@ -38,7 +38,7 @@ export function PromotionList({
                     variant="outline"
                     className="text-xs capitalize"
                   >
-                    {t.platform}
+                    {t.platform === "instagram_reel" ? "Instagram Reel" : t.platform}
                   </Badge>
                 ))}
               </div>
