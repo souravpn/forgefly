@@ -464,3 +464,21 @@ export interface CompetitorSiteIntel {
   raw_extract: Record<string, unknown> | null;
   scraped_at: string;
 }
+
+export interface DocumentationSection {
+  id: string;
+  category: string;
+  category_label: string;
+  category_order: number;
+  slug: string;
+  title: string;
+  body: string;
+  sort_order: number;
+}
+
+export interface DocumentationCategory {
+  category: string;
+  category_label: string;
+  category_order: number;
+  sections: DocumentationSection[];
+}

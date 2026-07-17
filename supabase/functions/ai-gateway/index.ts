@@ -1109,10 +1109,38 @@ async function fetchUserContext(supabase: ReturnType<typeof createClient>, userI
   };
 }
 
+// Full-context-stuffing, not vector search: the documentation corpus is
+// small enough (a handful of short sections) that it's simplest and
+// cheapest-to-maintain to inject the whole thing into the support-bucket
+// system prompt on every call, rather than standing up embeddings/RAG
+// infra for a corpus this size. Revisit if the corpus grows large enough
+// that this meaningfully bloats input tokens.
+async function fetchDocumentationContext(supabase: ReturnType<typeof createClient>): Promise<string> {
+  const { data, error } = await supabase
+    .from('documentation_sections')
+    .select('category_label, title, body')
+    .order('category_order', { ascending: true })
+    .order('sort_order', { ascending: true });
+
+  if (error || !data || data.length === 0) return '';
+
+  const byCategory = new Map<string, string[]>();
+  for (const row of data as { category_label: string; title: string; body: string }[]) {
+    const entries = byCategory.get(row.category_label) ?? [];
+    entries.push(`### ${row.title}\n${row.body.trim()}`);
+    byCategory.set(row.category_label, entries);
+  }
+
+  return [...byCategory.entries()]
+    .map(([label, entries]) => `## ${label}\n${entries.join('\n\n')}`)
+    .join('\n\n');
+}
+
 function buildChatSystem(
   context: ReturnType<typeof fetchUserContext> extends Promise<infer T> ? T : never,
   currentPage?: string,
   intent?: 'query' | 'support',
+  documentation?: string,
 ): string {
   const { profile, clients, projects, proposals, invoices, subscription, business, stats } = context;
   const extracted = business?.extracted_data as Record<string, unknown> | null;
@@ -1168,7 +1196,10 @@ IMPORTANT RULES:
 - You are read-mostly: you surface info, drafts content, and answer questions. You never silently write to business data
 ${intent === 'query' ? '- This message was classified as a data question. Answer using the numbers already given to you above — if a number isn\'t present in this context, say you don\'t have that broken down yet rather than estimating or guessing.' : ''}
 - Current page: ${currentPage || 'dashboard'}
-
+${documentation ? `
+FORGEFLY DOCUMENTATION (ground how-to / "what does X do" questions in this — it's the real, current behavior; don't invent or guess at behavior not described here):
+${documentation}
+` : ''}
 Your entire reply must be a single valid JSON object matching RESPONSE FORMAT above — nothing before it, nothing after it, no markdown code fence around it. Do not write conversational text outside the "message" field's string value.`;
 }
 
@@ -1211,11 +1242,15 @@ async function handleChat(
   const isQuick = quickKeywords.some(kw => message.toLowerCase().includes(kw)) && message.length < 80;
   const model = _intent === 'query' ? SONNET : (isQuick ? HAIKU : SONNET);
 
+  // Skip for 'query' — those are numeric/data lookups, not how-to questions,
+  // no need to spend the extra input tokens on the doc corpus.
+  const documentation = _intent === 'query' ? '' : await fetchDocumentationContext(supabase);
+
   const result = await callAnthropic({
     model,
     max_tokens: 1000,
     temperature: 0.5,
-    system: buildChatSystem(context, current_page, _intent),
+    system: buildChatSystem(context, current_page, _intent, documentation),
     messages: [{ role: 'user', content: message }],
   });
 
