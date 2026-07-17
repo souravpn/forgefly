@@ -42,6 +42,8 @@ function getClientBadge(client: Client): ClientBadge {
   }
 
   switch (s) {
+    case 'prospect':
+      return { label: 'Prospect', className: 'bg-gray-500/10 text-gray-600 border-gray-500/20 dark:text-gray-400' };
     case 'lead':
       return { label: 'Lead', className: 'bg-gray-500/10 text-gray-600 border-gray-500/20 dark:text-gray-400' };
     case 'engaged':

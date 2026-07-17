@@ -148,7 +148,14 @@ export default function DocumentationPage() {
             }}
             className="ff-docs-grid"
           >
-            <nav style={{ position: "sticky", top: "120px" }}>
+            <nav
+              style={{
+                position: "sticky",
+                top: "120px",
+                maxHeight: "calc(100vh - 140px)",
+                overflowY: "auto",
+              }}
+            >
               {categories.map((cat) => (
                 <div key={cat.category} style={{ marginBottom: "24px" }}>
                   <p
