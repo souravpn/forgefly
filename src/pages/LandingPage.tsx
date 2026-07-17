@@ -1525,6 +1525,164 @@ export default function LandingPage() {
                 </div>
               ),
             },
+            {
+              title: "Freeda, your AI copilot",
+              desc: "One panel, always open. Ask what your pipeline looks like, update a price, or draft a follow-up — Freeda reads your real data, never guesses, and never touches anything without showing you first.",
+              reverse: false,
+              visual: (
+                <div
+                  style={{
+                    background: S.bg2,
+                    border: `1px solid ${S.border}`,
+                    borderRadius: "16px",
+                    padding: "28px",
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "flex-end",
+                      marginBottom: "12px",
+                    }}
+                  >
+                    <p
+                      style={{
+                        background: "rgba(255,255,255,0.04)",
+                        border: `1px solid ${S.border2}`,
+                        borderRadius: "10px",
+                        padding: "9px 12px",
+                        color: S.text,
+                        fontSize: "0.82rem",
+                        maxWidth: "78%",
+                      }}
+                    >
+                      Which client owes me the most right now?
+                    </p>
+                  </div>
+                  <div
+                    style={{
+                      background: "rgba(16,185,129,0.05)",
+                      border: `1px solid ${S.border}`,
+                      borderRadius: "10px",
+                      padding: "12px",
+                    }}
+                  >
+                    <p
+                      style={{
+                        color: S.text,
+                        fontSize: "0.82rem",
+                        lineHeight: 1.6,
+                        marginBottom: "10px",
+                      }}
+                    >
+                      Novo Agency — $2,400 outstanding, 6 days overdue. Want me
+                      to draft a reminder?
+                    </p>
+                    <span
+                      style={{
+                        display: "inline-block",
+                        padding: "5px 11px",
+                        borderRadius: "999px",
+                        fontSize: "0.72rem",
+                        fontWeight: 600,
+                        background: "rgba(16,185,129,0.12)",
+                        color: S.em,
+                        border: `1px solid rgba(16,185,129,0.25)`,
+                      }}
+                    >
+                      Draft reminder →
+                    </span>
+                  </div>
+                </div>
+              ),
+            },
+            {
+              title: "AI-drafted social promotions",
+              desc: "A photo, a caption, and a short Reel — generated from your business and ready to review. Connect Instagram and Facebook once; publishing after that is one click.",
+              reverse: true,
+              visual: (
+                <div
+                  style={{
+                    background: S.bg2,
+                    border: `1px solid ${S.border}`,
+                    borderRadius: "16px",
+                    padding: "28px",
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      marginBottom: "16px",
+                    }}
+                  >
+                    <span
+                      style={{
+                        color: S.em,
+                        fontSize: "0.68rem",
+                        fontWeight: 600,
+                        textTransform: "uppercase",
+                        letterSpacing: "0.08em",
+                      }}
+                    >
+                      Promotion ready
+                    </span>
+                    <span style={{ color: S.dim, fontSize: "0.72rem" }}>
+                      Photo + Reel
+                    </span>
+                  </div>
+                  <div
+                    style={{
+                      background: "rgba(255,255,255,0.025)",
+                      border: `1px solid ${S.border2}`,
+                      borderRadius: "10px",
+                      padding: "14px",
+                      marginBottom: "14px",
+                    }}
+                  >
+                    <p
+                      style={{
+                        color: S.text,
+                        fontSize: "0.82rem",
+                        lineHeight: 1.6,
+                      }}
+                    >
+                      "Fresh batch, fresh week 🍞 Custom cakes made to order —
+                      link in bio to get started."
+                    </p>
+                  </div>
+                  {["Instagram", "Facebook"].map((p, i) => (
+                    <div
+                      key={p}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        padding: "9px 0",
+                        borderBottom: i === 0 ? `1px solid ${S.border2}` : "none",
+                      }}
+                    >
+                      <span style={{ color: S.mid, fontSize: "0.82rem" }}>
+                        {p}
+                      </span>
+                      <span
+                        style={{
+                          padding: "3px 9px",
+                          borderRadius: "6px",
+                          fontSize: "0.68rem",
+                          background: "rgba(16,185,129,0.1)",
+                          color: S.em,
+                          border: `1px solid rgba(16,185,129,0.18)`,
+                        }}
+                      >
+                        Connected
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ),
+            },
           ].map((feat, i) => (
             <div
               key={feat.title}
@@ -1534,7 +1692,7 @@ export default function LandingPage() {
                 gridTemplateColumns: "1fr 1fr",
                 gap: "60px",
                 alignItems: "center",
-                marginBottom: i < 5 ? "96px" : "0",
+                marginBottom: i < 7 ? "96px" : "0",
               }}
             >
               <div
@@ -1568,6 +1726,71 @@ export default function LandingPage() {
               </div>
             </div>
           ))}
+        </div>
+      </section>
+
+      {/* ── About ───────────────────────────────────────────────────────────── */}
+      <section id="about" style={{ padding: "120px 0", background: S.bg2 }}>
+        <div
+          style={{ maxWidth: "760px", margin: "0 auto", padding: "0 24px" }}
+        >
+          <div className="ff-fade-up" style={{ textAlign: "center" }}>
+            <p
+              style={{
+                color: S.em,
+                fontSize: "0.75rem",
+                fontWeight: 600,
+                textTransform: "uppercase",
+                letterSpacing: "0.1em",
+                marginBottom: "12px",
+              }}
+            >
+              About
+            </p>
+            <h2
+              style={{
+                fontFamily: sora,
+                fontWeight: 600,
+                fontSize: "clamp(1.8rem, 3.5vw, 2.8rem)",
+                color: S.text,
+                letterSpacing: "-0.02em",
+                marginBottom: "28px",
+              }}
+            >
+              Built for people who'd rather
+              <br />
+              <span style={{ color: S.mid, fontWeight: 400 }}>
+                be doing the work.
+              </span>
+            </h2>
+            <p
+              style={{
+                color: S.mid,
+                lineHeight: 1.8,
+                fontSize: "1.02rem",
+              }}
+            >
+              Most freelancers end up running their business out of five
+              tools that don't talk to each other — one for invoices, one for
+              the portfolio, one for messages, a spreadsheet named
+              "FINAL_v3." Forgefly is what happens when all of it lives in
+              one place: built from a single description of your business,
+              kept moving by an AI copilot that actually knows what's in it,
+              and ready to post, invoice, and follow up without you
+              copy-pasting between tabs to make it happen.
+            </p>
+            <p
+              style={{
+                color: S.mid,
+                lineHeight: 1.8,
+                fontSize: "1.02rem",
+                marginTop: "18px",
+              }}
+            >
+              No procurement process, no onboarding call. Describe your
+              business, and it's already running.
+            </p>
+          </div>
         </div>
       </section>
 
