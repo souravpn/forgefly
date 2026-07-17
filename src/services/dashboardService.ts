@@ -62,6 +62,7 @@ export interface OverviewData {
   projectsThisMonth: number;
   projectsCompleted: number;
   featuredPromotion: { id: string; headline: string | null; caption: string } | null;
+  hasDraftPromotions: boolean;
 }
 
 // This is the single source of truth for "what's on the Dashboard" — both
@@ -80,6 +81,7 @@ export async function loadOverviewData(userId: string, businessId?: string): Pro
     { count: portalVisits },
     { data: calendarEvents },
     { data: featuredPromotionRow },
+    { count: draftPromotionsCount },
   ] = await Promise.all([
     supabase.from('invoices').select('*, client:clients(name)').eq('user_id', userId),
     supabase.from('projects').select('*, client:clients(name)').eq('user_id', userId).order('created_at', { ascending: false }),
@@ -106,6 +108,9 @@ export async function loadOverviewData(userId: string, businessId?: string): Pro
           .eq('status', 'draft')
           .maybeSingle()
       : Promise.resolve({ data: null }),
+    businessId
+      ? supabase.from('social_posts').select('id', { count: 'exact', head: true }).eq('business_id', businessId).eq('status', 'draft')
+      : Promise.resolve({ count: 0 }),
   ]);
 
   const allInvoices: Invoice[] = invoices ?? [];
@@ -214,5 +219,6 @@ export async function loadOverviewData(userId: string, businessId?: string): Pro
     portalVisits30d: portalVisits ?? 0,
     projectsThisMonth, projectsCompleted,
     featuredPromotion: featuredPromotionRow ?? null,
+    hasDraftPromotions: (draftPromotionsCount ?? 0) > 0,
   };
 }

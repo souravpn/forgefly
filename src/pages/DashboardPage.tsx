@@ -8,7 +8,9 @@ import {
   Crown,
   DollarSign,
   Eye,
+  Facebook,
   FileText,
+  Instagram,
   Plus,
   Sparkles,
   TrendingUp,
@@ -17,8 +19,7 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { MilestoneCard } from "@/components/common/MilestoneCard";
-import { QuickWinNudge } from "@/components/common/QuickWinNudge";
+import { GettingStartedChecklist } from "@/components/common/GettingStartedChecklist";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -64,16 +65,10 @@ function urgencyClass(u: UpcomingItem['urgency']) {
   return 'text-muted-foreground';
 }
 
-function milestonesAllDone(business: { onboarding_milestones?: { business_created: boolean; services_reviewed: boolean; portfolio_shared: boolean; prospect_added: boolean; proposal_sent: boolean } | null } | null) {
-  const m = business?.onboarding_milestones;
-  if (!m) return false;
-  return m.business_created && m.services_reviewed && m.portfolio_shared && m.prospect_added && m.proposal_sent;
-}
-
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
-  const { user } = useAuth();
+  const { user, isAgency } = useAuth();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { business, extractedData, isLoading: bizLoading } = useBusiness();
@@ -93,31 +88,6 @@ export default function DashboardPage() {
   }, [user, business?.id]);
 
   const identity = extractedData?.identity;
-  const milestonesComplete = !bizLoading && !!business && milestonesAllDone(business);
-  const showMilestone = !bizLoading && !!business && !milestonesComplete;
-
-  // #75 — visibility deferral: nudge unlocks after portfolio shared OR account > 3 days old
-  const nudgeUnlocked = (() => {
-    if (!business) return false;
-    if (business.onboarding_milestones?.portfolio_shared) return true;
-    const ageDays = (Date.now() - new Date(business.created_at).getTime()) / 86_400_000;
-    return ageDays >= 3;
-  })();
-
-  const showNudge = milestonesComplete && nudgeUnlocked;
-
-  // Context for AI nudge (#73)
-  const nudgeContext = data && business ? {
-    business_name: business.name,
-    account_age_days: Math.floor((Date.now() - new Date(business.created_at).getTime()) / 86_400_000),
-    received_this_month_usd: data.receivedThisMonth,
-    outstanding_usd: data.outstanding,
-    overdue_usd: data.overdueTotal,
-    pipeline_lead_count: data.pipelineLeadCount,
-    proposals_sent_this_month: data.proposalsSentThisMonth,
-    days_since_last_proposal: data.proposalsSentThisMonth > 0 ? 0 : null,
-    portfolio_shared: !!(business.onboarding_milestones?.portfolio_shared),
-  } : null;
 
   // Merge viewed proposals + overdue invoices into attention items (max 4)
   const attentionItems: { label: string; sublabel: string; badge: string; badgeClass: string; route: string }[] = [];
@@ -261,6 +231,8 @@ export default function DashboardPage() {
           );
         })()}
 
+        <GettingStartedChecklist />
+
         {/* ── Row 1: 2-col ─────────────────────────────────────────────────── */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
@@ -350,23 +322,29 @@ export default function DashboardPage() {
 
         </div>
 
-        {/* ── Quick win row card ────────────────────────────────────────────── */}
-        {(showMilestone || (showNudge && nudgeContext) || milestonesComplete) && (
-          <div className="rounded-lg border border-primary/20 bg-primary/5 p-4 space-y-3">
-            <div className="flex items-center justify-end gap-1.5 text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
-              <Sparkles className="w-3.5 h-3.5" />
-              Quick Wins
+        {/* ── AI promotions ready row ──────────────────────────────────────── */}
+        {isAgency && data?.hasDraftPromotions && (
+          <button
+            type="button"
+            onClick={() => navigate('/dashboard/social')}
+            className="promo-glow-border relative w-full text-left rounded-lg p-4 overflow-hidden bg-gradient-to-r from-fuchsia-500/10 via-purple-500/10 to-pink-500/10"
+          >
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5 text-[10px] font-medium text-fuchsia-500 uppercase tracking-wide mb-1">
+                  <Sparkles className="w-3.5 h-3.5" />
+                  AI promotions ready
+                </div>
+                <p className="text-sm font-medium truncate">
+                  Your AI-crafted promotions are ready. Review and publish.
+                </p>
+              </div>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <Instagram className="w-4 h-4 text-fuchsia-500" />
+                <Facebook className="w-4 h-4 text-fuchsia-500" />
+              </div>
             </div>
-            {showMilestone ? (
-              <MilestoneCard />
-            ) : showNudge && nudgeContext ? (
-              <QuickWinNudge businessId={business!.id} context={nudgeContext} />
-            ) : (
-              <p className="text-sm text-muted-foreground leading-relaxed text-pretty">
-                You're making progress. Check back in a few days.
-              </p>
-            )}
-          </div>
+          </button>
         )}
 
         {/* ── Featured promotion row ──────────────────────────────────────── */}

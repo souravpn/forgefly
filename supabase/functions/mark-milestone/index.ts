@@ -12,6 +12,7 @@ const VALID_MILESTONES = [
   'portfolio_shared',
   'prospect_added',
   'proposal_sent',
+  'social_connected',
 ] as const;
 
 serve(async (req) => {

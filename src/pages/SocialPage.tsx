@@ -40,6 +40,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/contexts/AuthContext";
 import { useBusiness } from "@/contexts/CurrentBusinessContext";
+import { supabase } from "@/db/supabase";
 import {
   deletePromotion,
   draftPromotion,
@@ -88,10 +89,19 @@ function ConnectionsTab({
   const [waConnectLoading, setWaConnectLoading] = useState(false);
   const [fbConnectLoading, setFbConnectLoading] = useState(false);
   const [fbSelectingPage, setFbSelectingPage] = useState(false);
+  const { business, refetch: refetchBusiness } = useBusiness();
 
   const load = () => {
     getSocialConnections(businessId)
-      .then(setConnections)
+      .then((result) => {
+        setConnections(result);
+        const anyConnected = result.some((c) => c.status === "connected");
+        if (anyConnected && business && !business.onboarding_milestones?.social_connected) {
+          supabase.functions
+            .invoke("mark-milestone", { body: { milestone: "social_connected" } })
+            .then(() => refetchBusiness());
+        }
+      })
       .catch(() => {})
       .finally(() => setLoading(false));
   };

@@ -9,6 +9,7 @@ export interface OnboardingMilestones {
   portfolio_shared: boolean
   prospect_added: boolean
   proposal_sent: boolean
+  social_connected: boolean
 }
 
 export interface Business {
@@ -31,6 +32,7 @@ export interface Business {
   completeness_score: number | null
   onboarding_seen: boolean | null
   onboarding_milestones: OnboardingMilestones | null
+  getting_started_dismissed: boolean | null
   status: 'active' | 'archived'
   created_at: string
   updated_at: string
