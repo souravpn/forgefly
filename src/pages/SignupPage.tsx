@@ -1,13 +1,13 @@
+import { ArrowRight, CheckCircle2, Eye, EyeOff } from "lucide-react";
+import { motion } from "motion/react";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { useAuth } from "@/contexts/AuthContext";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox";
-import { ArrowRight, Eye, EyeOff, CheckCircle2 } from "lucide-react";
-import { toast } from "sonner";
-import { motion } from "motion/react";
+import { useAuth } from "@/contexts/AuthContext";
 
 function GoogleIcon() {
   return (
@@ -144,7 +144,7 @@ export default function SignupPage() {
       setLoading(false);
     } else {
       toast.success("Account created! Let's get started.");
-      navigate("/onboarding");
+      navigate("/dashboard");
     }
   };
 

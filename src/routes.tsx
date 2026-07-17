@@ -1,37 +1,36 @@
 import type { ReactNode } from "react";
 import { Navigate } from "react-router-dom";
-import LandingPage from "./pages/LandingPage";
 import AuthCallbackPage from "./pages/AuthCallbackPage";
-import GeneratedPortalPage from "./pages/GeneratedPortalPage";
-import LoginPage from "./pages/LoginPage";
-import SignupPage from "./pages/SignupPage";
-import OnboardingPage from "./pages/OnboardingPage";
-import DashboardPage from "./pages/DashboardPage";
-import ClientsPage from "./pages/ClientsPage";
-import ProjectsPage from "./pages/ProjectsPage";
-import PackagesPage from "./pages/PackagesPage";
-import FinancesPage from "./pages/FinancesPage";
-import CalendarPage from "./pages/CalendarPage";
-import ProposalsPage from "./pages/ProposalsPage";
 import AutomationsPage from "./pages/AutomationsPage";
-import SettingsPage from "./pages/SettingsPage";
-import PipelinePage from "./pages/PipelinePage";
 import BrandKitPage from "./pages/BrandKitPage";
+import CalendarPage from "./pages/CalendarPage";
 import ClientPortalPage from "./pages/ClientPortalPage";
-import PaymentSuccessPage from "./pages/PaymentSuccessPage";
-import PaymentCancelPage from "./pages/PaymentCancelPage";
-import PublicPortfolioPage from "./pages/PublicPortfolioPage";
-import RequestsPage from "./pages/RequestsPage";
-import VisibilityPage from "./pages/VisibilityPage";
-import OutreachKitPage from "./pages/OutreachKitPage";
+import ClientsPage from "./pages/ClientsPage";
+import ContactPage from "./pages/ContactPage";
+import DashboardPage from "./pages/DashboardPage";
+import DocumentationPage from "./pages/DocumentationPage";
+import FinancesPage from "./pages/FinancesPage";
+import GeneratedPortalPage from "./pages/GeneratedPortalPage";
+import LandingPage from "./pages/LandingPage";
+import LoginPage from "./pages/LoginPage";
 import MessagesPage from "./pages/MessagesPage";
-import ReviewSubmitPage from "./pages/ReviewSubmitPage";
-import ReviewsPage from "./pages/ReviewsPage";
+import OutreachKitPage from "./pages/OutreachKitPage";
+import PackagesPage from "./pages/PackagesPage";
+import PaymentCancelPage from "./pages/PaymentCancelPage";
+import PaymentSuccessPage from "./pages/PaymentSuccessPage";
+import PipelinePage from "./pages/PipelinePage";
 import PortfolioPage from "./pages/PortfolioPage";
 import ProjectPage from "./pages/ProjectPage";
+import ProjectsPage from "./pages/ProjectsPage";
+import ProposalsPage from "./pages/ProposalsPage";
+import PublicPortfolioPage from "./pages/PublicPortfolioPage";
+import RequestsPage from "./pages/RequestsPage";
+import ReviewSubmitPage from "./pages/ReviewSubmitPage";
+import ReviewsPage from "./pages/ReviewsPage";
+import SettingsPage from "./pages/SettingsPage";
+import SignupPage from "./pages/SignupPage";
 import SocialPage from "./pages/SocialPage";
-import ContactPage from "./pages/ContactPage";
-import DocumentationPage from "./pages/DocumentationPage";
+import VisibilityPage from "./pages/VisibilityPage";
 
 export interface RouteConfig {
   name: string;
@@ -106,11 +105,6 @@ export const routes: RouteConfig[] = [
   },
 
   // ─── Protected routes (inside AppShell via MainLayout) ────────────────────
-  {
-    name: "Onboarding",
-    path: "/onboarding",
-    element: <OnboardingPage />,
-  },
   {
     name: "Dashboard",
     path: "/dashboard",

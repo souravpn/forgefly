@@ -1,8 +1,8 @@
 import { useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
+import { getProfile } from "@/contexts/AuthContext";
 // @ts-ignore
 import { supabase } from "@/db/supabase";
-import { getProfile } from "@/contexts/AuthContext";
 
 async function saveBusiness(
   userId: string,
@@ -137,7 +137,10 @@ export default function AuthCallbackPage() {
       const savedNewBusiness = await savePendingPortal(userId);
       const profile = await getProfile(userId);
       if (!profile) {
-        navigate("/onboarding", { replace: true });
+        // No profile and (per savePendingPortal above) nothing pending to
+        // save either — a brand-new signed-in user with no business yet.
+        // AppShell renders NoBusinessPage automatically for this case.
+        navigate("/dashboard", { replace: true });
       } else if (savedNewBusiness) {
         // New business just created — land on Visibility to set their playbook
         navigate("/dashboard/visibility", { replace: true });
