@@ -1,0 +1,844 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Forgefly — Architecture Report</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;500;600;700;800&family=Sora:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #080d0b;
+    --bg-soft: #0a0f0d;
+    --bg-elevated: #0d1512;
+    --bg-recessed: #060a08;
+    --surface: #0d1512;
+    --surface-2: #101a16;
+    --border: rgba(232,237,232,0.10);
+    --border-soft: rgba(232,237,232,0.06);
+    --text: #e8ede8;
+    --text-dim: #a8c0a3;
+    --text-muted: #6d8768;
+    --accent: #16c98d;
+    --accent2: #f5a623;
+    --accent3: #8b7cf6;
+    --accent4: #7fb2fb;
+    --shadow-alpha: 44;
+    --font-display: 'Bricolage Grotesque', sans-serif;
+    --font-body: 'Sora', sans-serif;
+    --font-mono: 'IBM Plex Mono', monospace;
+  }
+  body.light {
+    --bg: #f6f7f4;
+    --bg-soft: #eef1ec;
+    --bg-elevated: #ffffff;
+    --bg-recessed: #e9ece6;
+    --surface: #ffffff;
+    --surface-2: #f2f4ef;
+    --border: rgba(10,20,12,0.12);
+    --border-soft: rgba(10,20,12,0.07);
+    --text: #0e1712;
+    --text-dim: #3d4f3f;
+    --text-muted: #6b7d6d;
+    --shadow-alpha: 18;
+  }
+
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--bg);
+    color: var(--text-dim);
+    font-family: var(--font-body);
+    font-size: 15px;
+    line-height: 1.6;
+    overflow-x: hidden;
+    overflow-wrap: break-word;
+  }
+  [style*="display: grid"] > *, [style*="display: flex"] > * { min-width: 0; }
+
+  h1, h2, h3 { font-family: var(--font-display); color: var(--text); letter-spacing: -0.01em; }
+  em { font-style: normal; color: var(--accent); }
+  code, .mono { font-family: var(--font-mono); }
+
+  /* ── theme toggle ─────────────────────────────────────────── */
+  .theme-toggle {
+    position: fixed; top: 16px; right: 16px; z-index: 200;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 20px; padding: 7px 13px; cursor: pointer;
+    font-size: 15px; color: var(--text-muted);
+    transition: border-color 0.2s, color 0.2s;
+  }
+  .theme-toggle:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* ── layout with TOC ──────────────────────────────────────── */
+  .report-layout {
+    display: grid; grid-template-columns: 190px 1fr; gap: 32px;
+    max-width: 1400px; margin: 0 auto; padding: 0 24px;
+  }
+  .toc {
+    position: sticky; top: 24px; align-self: start;
+    max-height: calc(100vh - 48px); overflow-y: auto; padding-top: 56px;
+  }
+  .toc__title {
+    font-family: var(--font-mono); font-size: 9px; font-weight: 700; letter-spacing: 3px;
+    color: var(--text-muted); text-transform: uppercase; margin-bottom: 12px; padding-left: 12px;
+  }
+  .toc__inner { display: flex; flex-direction: column; gap: 1px; }
+  .toc__link {
+    font-family: var(--font-mono); font-size: 11px; color: var(--text-muted);
+    text-decoration: none; padding: 7px 12px; border-left: 2px solid transparent;
+    border-radius: 0 4px 4px 0; transition: color 0.2s, border-color 0.2s, background 0.2s;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .toc__link:hover { color: var(--text); background: rgba(22,201,141,0.05); }
+  .toc__link.active { color: var(--accent); border-left-color: var(--accent); background: rgba(22,201,141,0.07); }
+
+  .report-wrap { max-width: none; margin: 0; padding: 56px 0 64px; }
+
+  .af-section { padding: 56px 28px; border-radius: 20px; margin-bottom: 28px; position: relative; opacity: 0; transform: translateY(20px); transition: opacity 0.6s cubic-bezier(0.16,1,0.3,1), transform 0.6s cubic-bezier(0.16,1,0.3,1); }
+  .af-section.visible { opacity: 1; transform: translateY(0); }
+  .af-section.full-bleed { padding: 0; background: none !important; }
+
+  .eyebrow {
+    font-family: var(--font-mono); font-size: 10px; font-weight: 700; letter-spacing: 3px;
+    text-transform: uppercase; color: var(--accent); margin-bottom: 14px;
+  }
+
+  /* ── section atmospheres (each section gets a unique one) ─── */
+  #overview { background: radial-gradient(ellipse 900px 500px at 15% -10%, rgba(22,201,141,0.09), transparent 60%), var(--bg-elevated); border: 1px solid var(--border); }
+  #metrics { background: var(--bg-soft); }
+  #dataflow { background: radial-gradient(ellipse 700px 400px at 90% 10%, rgba(139,124,246,0.07), transparent 60%), var(--bg-elevated); border: 1px solid var(--border); }
+  #components { background: var(--bg-recessed); border: 1px solid var(--border-soft); }
+  #services { background: linear-gradient(135deg, var(--bg-soft), var(--bg-elevated)); border: 1px solid var(--border); }
+  #insights { background:
+      radial-gradient(circle at 10% 20%, rgba(22,201,141,0.05), transparent 40%),
+      radial-gradient(circle at 90% 80%, rgba(245,166,35,0.05), transparent 40%),
+      var(--bg-soft);
+  }
+  #references { background: var(--bg-recessed); border: 1px solid var(--border-soft); }
+
+  /* ── magazine opener (exec summary) ──────────────────────── */
+  .opener h1 { font-size: clamp(30px, 4.4vw, 56px); line-height: 1.06; margin-bottom: 18px; text-wrap: balance; }
+  .opener p.lede { font-size: 16px; color: var(--text-dim); max-width: 720px; line-height: 1.75; margin-bottom: 22px; }
+  .opener .meta { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); display: flex; gap: 18px; flex-wrap: wrap; }
+  .pill-row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 24px; }
+  .pill {
+    font-family: var(--font-mono); font-size: 11px; font-weight: 600; padding: 6px 13px;
+    border-radius: 999px; background: rgba(22,201,141,0.09); border: 1px solid rgba(22,201,141,0.22); color: var(--accent);
+  }
+
+  /* ── metric strip ─────────────────────────────────────────── */
+  .metric-strip { display: grid; grid-template-columns: repeat(5, 1fr); }
+  .metric-cell { padding: 6px 22px; border-right: 1px solid var(--border); text-align: left; }
+  .metric-cell:last-child { border-right: none; }
+  .metric-num { font-family: var(--font-display); font-weight: 700; font-size: clamp(30px, 3.4vw, 46px); color: var(--text); line-height: 1; }
+  .metric-label { font-family: var(--font-mono); font-size: 9.5px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--text-muted); margin-top: 8px; }
+  @media (max-width: 900px) { .metric-strip { grid-template-columns: repeat(2, 1fr); } .metric-cell { border-right: none; border-bottom: 1px solid var(--border); padding: 16px 8px; } }
+
+  /* ── diagram hero ─────────────────────────────────────────── */
+  .diagram-shell { padding: 12px 4px 0; }
+  .s-phase-banner {
+    font-family: var(--font-mono); font-size: 12.5px; padding: 11px 18px;
+    border: 1px solid var(--border); border-radius: 10px; background: var(--surface);
+    color: var(--accent); width: 100%; text-align: center; margin-bottom: 18px;
+    transition: color 0.3s, border-color 0.3s; min-height: 40px; display: flex; align-items: center; justify-content: center;
+  }
+  .arch-svg { width: 100%; height: auto; max-height: 72vh; display: block; }
+  .group-box { fill: var(--surface); stroke: var(--border); transition: stroke 0.4s, filter 0.4s; }
+  .group-box.recessed { fill: var(--bg-recessed); stroke-dasharray: 5 4; }
+  .source-box { fill: var(--surface-2); stroke: var(--border); transition: stroke 0.4s, filter 0.4s; }
+  .comp-box { fill: var(--bg-soft); stroke: var(--border-soft); transition: stroke 0.4s, filter 0.4s; }
+  .arrow-path { stroke: var(--text-muted); fill: none; stroke-width: 1.5; transition: stroke 0.4s; }
+  .group-box.lit, .source-box.lit { filter: drop-shadow(0 0 12px var(--glow-color)); stroke: var(--glow-color); stroke-width: 2; }
+  .comp-box.lit { filter: drop-shadow(0 0 8px var(--glow-color)); stroke: var(--glow-color); stroke-width: 1.5; }
+  .arrow-path.lit { stroke: var(--glow-color); stroke-width: 2.5; }
+  .grouplabel { font-family: var(--font-mono); letter-spacing: 1.6px; text-transform: uppercase; fill: var(--text-muted); }
+  .grouplabel.sub { letter-spacing: 0.4px; text-transform: none; fill: var(--text-muted); opacity: 0.85; }
+  .compname { font-family: var(--font-body); font-weight: 600; fill: var(--text); }
+  .compsub { font-family: var(--font-mono); fill: var(--text-muted); }
+  .flowlabel { font-family: var(--font-body); fill: var(--text-muted); }
+  .srcname { font-family: var(--font-body); font-weight: 600; fill: var(--text); }
+  .srcsub { font-family: var(--font-mono); fill: var(--text-muted); }
+
+  .diagram-legend { display: flex; gap: 18px; flex-wrap: wrap; justify-content: center; margin-top: 18px; font-family: var(--font-mono); font-size: 10.5px; color: var(--text-muted); }
+  .diagram-legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .diagram-legend i { width: 8px; height: 8px; border-radius: 2px; display: inline-block; }
+
+  /* ── insight pull-quote ───────────────────────────────────── */
+  .pull-quote {
+    font-family: 'Sora', sans-serif; font-style: italic; font-weight: 400;
+    font-size: clamp(19px, 2.4vw, 25px); line-height: 1.55; color: var(--text);
+    max-width: 880px; padding-left: 22px; border-left: 3px solid var(--accent2);
+  }
+  .pull-quote cite { display: block; font-style: normal; font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); margin-top: 14px; }
+
+  /* ── component table ──────────────────────────────────────── */
+  .table-wrap { overflow-x: auto; border-radius: 12px; border: 1px solid var(--border); background: var(--bg-body, var(--bg)); box-shadow: inset 0 1px 3px rgba(0,0,0,0.3); }
+  table.comp-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  table.comp-table th {
+    font-family: var(--font-mono); font-size: 9.5px; letter-spacing: 1.3px; text-transform: uppercase;
+    color: var(--text-muted); text-align: left; padding: 12px 16px; border-bottom: 1px solid var(--border); white-space: nowrap;
+  }
+  table.comp-table td { padding: 10px 16px; border-bottom: 1px solid var(--border-soft); color: var(--text-dim); vertical-align: top; }
+  table.comp-table tr:hover td { background: rgba(22,201,141,0.03); }
+  table.comp-table td.fn { font-family: var(--font-mono); color: var(--text); font-size: 12.5px; }
+  .tag { font-family: var(--font-mono); font-size: 9.5px; font-weight: 700; padding: 3px 9px; border-radius: 999px; white-space: nowrap; }
+  .tag.freeda { background: rgba(22,201,141,0.12); color: var(--accent); border: 1px solid rgba(22,201,141,0.28); }
+  .tag.social { background: rgba(139,124,246,0.12); color: var(--accent3); border: 1px solid rgba(139,124,246,0.28); }
+  .tag.pay { background: rgba(245,166,35,0.12); color: var(--accent2); border: 1px solid rgba(245,166,35,0.28); }
+  .tag.portal { background: rgba(96,165,250,0.12); color: var(--accent4); border: 1px solid rgba(96,165,250,0.28); }
+  .tag.misc { background: rgba(232,237,232,0.06); color: var(--text-muted); border: 1px solid var(--border); }
+
+  /* ── data flow: timeline pipeline ─────────────────────────── */
+  .flow-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; margin-top: 28px; }
+  @media (max-width: 980px) { .flow-grid { grid-template-columns: 1fr; } }
+  .flow-card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 22px; }
+  .flow-card h3 { font-size: 15px; margin-bottom: 4px; }
+  .flow-card .flow-sub { font-family: var(--font-mono); font-size: 10.5px; color: var(--text-muted); margin-bottom: 16px; }
+  .timeline { position: relative; padding-left: 20px; }
+  .timeline::before { content: ""; position: absolute; left: 4px; top: 6px; bottom: 6px; width: 2px; background: var(--border); }
+  .t-step { position: relative; padding-bottom: 16px; }
+  .t-step:last-child { padding-bottom: 0; }
+  .t-step::before { content: ""; position: absolute; left: -20px; top: 3px; width: 9px; height: 9px; border-radius: 50%; background: var(--dot, var(--accent)); box-shadow: 0 0 0 3px var(--bg-soft); }
+  .t-step .t-title { font-size: 12.5px; font-weight: 600; color: var(--text); }
+  .t-step .t-desc { font-size: 11.5px; color: var(--text-muted); margin-top: 2px; line-height: 1.5; }
+
+  .mermaid-wrap { display: flex; justify-content: center; align-items: center; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 22px; overflow: auto; min-height: 260px; }
+
+  /* ── external services grid ──────────────────────────────── */
+  .svc-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 26px; }
+  @media (max-width: 900px) { .svc-grid { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 600px) { .svc-grid { grid-template-columns: 1fr; } }
+  .svc-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 18px; border-top: 3px solid var(--c, var(--accent)); }
+  .svc-card h4 { font-size: 14px; margin-bottom: 4px; }
+  .svc-card .svc-type { font-family: var(--font-mono); font-size: 9.5px; letter-spacing: 1px; text-transform: uppercase; color: var(--c, var(--accent)); margin-bottom: 8px; }
+  .svc-card p { font-size: 12px; color: var(--text-muted); line-height: 1.55; }
+
+  /* ── insights: asymmetric grid ────────────────────────────── */
+  .insight-lead { background: var(--bg-elevated); border-radius: 16px; border: 1px solid var(--border); border-left: 4px solid var(--accent); padding: 26px 28px; margin-top: 26px; box-shadow: 0 4px 20px rgba(0,0,0,0.18); }
+  .insight-lead h4 { font-size: 16px; margin-bottom: 6px; }
+  .insight-lead p { font-size: 13.5px; color: var(--text-dim); line-height: 1.6; }
+  .insight-rest { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 14px; }
+  @media (max-width: 900px) { .insight-rest { grid-template-columns: 1fr 1fr; } }
+  @media (max-width: 600px) { .insight-rest { grid-template-columns: 1fr; } }
+  .insight-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px; border-top: 3px solid var(--c); }
+  .insight-card h5 { font-size: 12.5px; color: var(--text); margin-bottom: 6px; }
+  .insight-card p { font-size: 11.5px; color: var(--text-muted); line-height: 1.55; }
+
+  /* ── code references (collapsible) ───────────────────────── */
+  details.ref-group { border-bottom: 1px solid var(--border-soft); padding: 10px 0; }
+  details.ref-group summary {
+    font-family: var(--font-mono); font-size: 12px; font-weight: 600; color: var(--text);
+    cursor: pointer; list-style: none; display: flex; align-items: center; gap: 8px;
+  }
+  details.ref-group summary::-webkit-details-marker { display: none; }
+  details.ref-group summary::before { content: "▸"; color: var(--accent); transition: transform 0.2s; display: inline-block; }
+  details.ref-group[open] summary::before { transform: rotate(90deg); }
+  .ref-list { padding: 10px 0 4px 20px; display: flex; flex-direction: column; gap: 7px; }
+  .ref-list .rf { font-family: var(--font-mono); font-size: 11.5px; color: var(--text); }
+  .ref-list .rf span { color: var(--text-muted); font-family: var(--font-body); margin-left: 10px; }
+
+  footer.af-foot { text-align: center; padding: 40px 24px 60px; font-family: var(--font-mono); font-size: 10.5px; color: var(--text-muted); }
+
+  @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+  .live-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); animation: blink 1.8s infinite; margin-right: 6px; }
+
+  @media (max-width: 1000px) {
+    .report-layout { grid-template-columns: 1fr; gap: 0; padding: 0; }
+    .toc { position: sticky; top: 0; z-index: 90; max-height: none; padding: 10px 0; background: var(--bg); border-bottom: 1px solid var(--border); }
+    .toc__title { display: none; }
+    .toc__inner { flex-direction: row; gap: 0; overflow-x: auto; padding: 0 16px; -webkit-overflow-scrolling: touch; }
+    .toc__link { border-left: none; border-bottom: 2px solid transparent; border-radius: 0; padding: 10px 12px; flex-shrink: 0; }
+    .toc__link.active { border-bottom-color: var(--accent); border-left-color: transparent; }
+    .report-layout .report-wrap { padding: 16px 16px 40px; }
+    .af-section { padding: 34px 18px; }
+    .metric-strip, .flow-grid, .svc-grid, .insight-rest { grid-template-columns: 1fr; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+  }
+
+  /* ═══════════════════ PRINT ═══════════════════ */
+  @media print {
+    :root, [data-theme="dark"] {
+      --bg: #ffffff; --bg-soft: #fafbfa; --bg-elevated: #ffffff; --bg-recessed: #f4f6f3;
+      --surface: #ffffff; --surface-2: #f4f6f3;
+      --border: #d7ddd4; --border-soft: #e5e9e2;
+      --text: #0e1712; --text-dim: #3d4f3f; --text-muted: #6b7d6d;
+    }
+    html, body, .af-section, .flow-card, .svc-card, .insight-card, .insight-lead, .table-wrap, .diagram-shell, .toc {
+      print-color-adjust: exact; -webkit-print-color-adjust: exact;
+    }
+    .theme-toggle, .toc { display: none !important; }
+    .report-layout { display: block; padding: 0; }
+    .report-wrap { padding: 0; }
+    body { font-size: 10pt; line-height: 1.5; }
+    h1 { font-size: 30pt; line-height: 1.08; }
+    h2 { font-size: 17pt; }
+    h3 { font-size: 12pt; }
+    .metric-num { font-size: 22pt; }
+    .mono, .eyebrow, .toc__link { font-size: 8pt; }
+    .af-section { opacity: 1 !important; transform: none !important; break-inside: avoid; padding: 18pt 0; border-radius: 0; margin-bottom: 0; }
+    #overview.af-section { break-after: page; }
+    .diagram-shell { break-inside: avoid; }
+    table.comp-table tr, .t-step, .svc-card, .insight-card { break-inside: avoid; }
+    h1, h2, h3 { break-after: avoid; }
+    @page { size: A4 landscape; margin: 14mm; }
+  }
+</style>
+</head>
+<body>
+
+<button class="theme-toggle" onclick="document.body.classList.toggle('light');localStorage.setItem('archflow-theme',document.body.classList.contains('light')?'light':'dark')">&#9684;</button>
+
+<div class="report-layout">
+  <nav class="toc" id="toc">
+    <div class="toc__inner">
+      <div class="toc__title">Contents</div>
+      <a class="toc__link" href="#overview">Overview</a>
+      <a class="toc__link" href="#metrics">Metrics</a>
+      <a class="toc__link" href="#architecture">Architecture</a>
+      <a class="toc__link" href="#dataflow">Data Flow</a>
+      <a class="toc__link" href="#components">Components</a>
+      <a class="toc__link" href="#services">External Services</a>
+      <a class="toc__link" href="#insights">Insights</a>
+      <a class="toc__link" href="#references">Code References</a>
+    </div>
+  </nav>
+
+  <div class="report-wrap">
+
+    <!-- ══════════════════ OVERVIEW ══════════════════ -->
+    <section class="af-section opener" id="overview" style="--i:0">
+      <p class="eyebrow"><span class="live-dot"></span>Architecture Report</p>
+      <h1>Forgefly runs its operations on <em>agents</em>, not headcount.</h1>
+      <p class="lede">
+        Forgefly is an AI-powered business OS for freelancers — client portal, proposals, invoicing, time tracking,
+        and social promotion, generated from a single prompt and kept running by an AI copilot instead of a support team.
+        The backend is a Deno/TypeScript edge-function layer (Supabase) that routes every judgment call — classify,
+        draft, generate, decide — to Claude or OpenAI, while every deterministic task (read, write, charge, log) stays
+        plain code against Postgres, row-level-security scoped to the signed-in business.
+      </p>
+      <div class="meta">
+        <span>REACT 18 + TYPESCRIPT · SUPABASE · STRIPE</span>
+        <span>ANTHROPIC CLAUDE (HAIKU + SONNET) · OPENAI GPT-IMAGE-2</span>
+        <span>GENERATED FROM LIVE CODEBASE ANALYSIS</span>
+      </div>
+      <div class="pill-row">
+        <span class="pill">46 edge functions</span>
+        <span class="pill">5 agentic flows</span>
+        <span class="pill">6 external integrations</span>
+        <span class="pill">1 security boundary</span>
+      </div>
+    </section>
+
+    <!-- ══════════════════ METRICS ══════════════════ -->
+    <section class="af-section" id="metrics" style="--i:1">
+      <p class="eyebrow">At a glance</p>
+      <div class="metric-strip">
+        <div class="metric-cell"><div class="metric-num">46</div><div class="metric-label">Edge functions</div></div>
+        <div class="metric-cell"><div class="metric-num">15</div><div class="metric-label">Domain services</div></div>
+        <div class="metric-cell"><div class="metric-num">35</div><div class="metric-label">Routed pages</div></div>
+        <div class="metric-cell"><div class="metric-num">5</div><div class="metric-label">Agentic flows</div></div>
+        <div class="metric-cell"><div class="metric-num">2</div><div class="metric-label">Model providers</div></div>
+      </div>
+    </section>
+
+    <!-- ══════════════════ ARCHITECTURE (HERO) ══════════════════ -->
+    <section class="af-section full-bleed" id="architecture" style="--i:2">
+      <div style="padding: 0 4px 20px;">
+        <p class="eyebrow" style="padding-left: 4px;">Hero diagram</p>
+        <h2 style="font-size: clamp(20px,2.6vw,30px); padding-left: 4px;">One orchestration hub, four agentic flows, one enforcement boundary</h2>
+      </div>
+      <div class="diagram-shell">
+        <div class="s-phase-banner" id="phase-banner">▶ Initializing…</div>
+        <svg class="arch-svg" viewBox="0 0 1520 580" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <marker id="arrowhead" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M0,1 L9,5 L0,9" fill="var(--text-muted)"/>
+            </marker>
+          </defs>
+
+          <!--
+            LAYOUT GRID:
+            Spine row: y=90..350 (arrow y=190)
+            Branch row: y=390..510
+            Read-back lane: y=30..90 (above spine)
+            Columns: Entry 20..190 | gap | Hub 310..760 | gap | Agents 880..1150 | gap | Data 1270..1490
+            Branch: CRUD 60..600 @ y=390..510
+          -->
+
+          <!-- flow labels (above spine arrows) -->
+          <text x="250" y="175" class="flowlabel" font-size="9" text-anchor="middle">request / update</text>
+          <text x="820" y="175" class="flowlabel" font-size="9" text-anchor="middle">classify · draft</text>
+          <text x="1210" y="175" class="flowlabel" font-size="9" text-anchor="middle">RLS read/write</text>
+
+          <!-- spine arrows -->
+          <path class="arrow-path" id="arr-1" d="M190,190 L310,190" marker-end="url(#arrowhead)"/>
+          <path class="arrow-path" id="arr-2" d="M760,190 L880,190" marker-end="url(#arrowhead)"/>
+          <path class="arrow-path" id="arr-3" d="M1150,190 L1270,190" marker-end="url(#arrowhead)"/>
+
+          <!-- ENTRY (source box) -->
+          <rect class="source-box" id="src-entry" x="20" y="125" width="170" height="130" rx="9"/>
+          <text x="105" y="158" class="srcname" font-size="13" text-anchor="middle">End-User Surfaces</text>
+          <text x="105" y="185" class="srcsub" font-size="9.5" text-anchor="middle">
+            <tspan x="105" dy="0">Landing · Ask Freeda</tspan>
+            <tspan x="105" dy="14">Social · Automations</tspan>
+            <tspan x="105" dy="14">Client Portal</tspan>
+          </text>
+
+          <!-- HUB (hero group) -->
+          <rect class="group-box" id="grp-hero" x="310" y="90" width="450" height="260" rx="12" style="stroke-width:1.5"/>
+          <text x="330" y="112" class="grouplabel" font-size="11.5" font-weight="700">ORCHESTRATION HUB</text>
+          <text x="330" y="126" class="grouplabel sub" font-size="9">ai-gateway · 40+ Deno edge functions, one TS runtime</text>
+
+          <rect class="comp-box" id="hero-1" x="330" y="140" width="410" height="40" rx="7"/>
+          <text x="345" y="156" class="compname" font-size="12">Freeda Router</text>
+          <text x="345" y="171" class="compsub" font-size="9.5">ai-gateway · mode: freeda — 5-bucket intent classify</text>
+
+          <rect class="comp-box" id="hero-2" x="330" y="188" width="410" height="40" rx="7"/>
+          <text x="345" y="204" class="compname" font-size="12">Promotion Generator</text>
+          <text x="345" y="219" class="compsub" font-size="9.5">generate-promotion + check-video-render</text>
+
+          <rect class="comp-box" id="hero-3" x="330" y="236" width="410" height="40" rx="7"/>
+          <text x="345" y="252" class="compname" font-size="12">Nudge Engine</text>
+          <text x="345" y="267" class="compsub" font-size="9.5">trigger-nudges — cron + event-driven</text>
+
+          <rect class="comp-box" id="hero-4" x="330" y="284" width="410" height="40" rx="7"/>
+          <text x="345" y="300" class="compname" font-size="12">Seed → OS Extractor</text>
+          <text x="345" y="315" class="compsub" font-size="9.5">ai-gateway · mode: extract / classify</text>
+
+          <!-- AGENTS & EXTERNAL SERVICES -->
+          <rect class="group-box" id="grp-agents" x="880" y="90" width="270" height="260" rx="12"/>
+          <text x="898" y="112" class="grouplabel" font-size="11.5" font-weight="700">AGENTS &amp; SERVICES</text>
+          <text x="898" y="126" class="grouplabel sub" font-size="9">models this hub calls out to</text>
+
+          <rect class="comp-box" id="ag-1" x="898" y="140" width="234" height="40" rx="7"/>
+          <text x="913" y="156" class="compname" font-size="12">Claude Haiku</text>
+          <text x="913" y="171" class="compsub" font-size="9.5">classify · route · quick answers</text>
+
+          <rect class="comp-box" id="ag-2" x="898" y="188" width="234" height="40" rx="7"/>
+          <text x="913" y="204" class="compname" font-size="12">Claude Sonnet</text>
+          <text x="913" y="219" class="compsub" font-size="9.5">generation · grounded reasoning</text>
+
+          <rect class="comp-box" id="ag-3" x="898" y="236" width="234" height="40" rx="7"/>
+          <text x="913" y="252" class="compname" font-size="12">OpenAI gpt-image-2</text>
+          <text x="913" y="267" class="compsub" font-size="9.5">promotion image generation</text>
+
+          <rect class="comp-box" id="ag-4" x="898" y="284" width="234" height="40" rx="7"/>
+          <text x="913" y="300" class="compname" font-size="12">External APIs</text>
+          <text x="913" y="315" class="compsub" font-size="9.5">Meta Graph · Stripe · Shotstack</text>
+
+          <!-- DATA LAYER -->
+          <rect class="group-box" id="grp-data" x="1270" y="90" width="220" height="260" rx="12"/>
+          <text x="1288" y="112" class="grouplabel" font-size="11.5" font-weight="700">DATA LAYER</text>
+          <text x="1288" y="126" class="grouplabel sub" font-size="9">the only source of truth</text>
+
+          <rect class="comp-box" id="data-1" x="1288" y="140" width="184" height="40" rx="7"/>
+          <text x="1303" y="156" class="compname" font-size="12">Postgres</text>
+          <text x="1303" y="171" class="compsub" font-size="9.5">RLS scoped to auth.uid()</text>
+
+          <rect class="comp-box" id="data-2" x="1288" y="188" width="184" height="40" rx="7"/>
+          <text x="1303" y="204" class="compname" font-size="12">Supabase Storage</text>
+          <text x="1303" y="219" class="compsub" font-size="9.5">work samples · receipts · media</text>
+
+          <rect class="comp-box" id="data-3" x="1288" y="236" width="184" height="40" rx="7"/>
+          <text x="1303" y="252" class="compname" font-size="12">Supabase Auth</text>
+          <text x="1303" y="267" class="compsub" font-size="9.5">session identity</text>
+
+          <!-- BRANCH: Plain CRUD bypass -->
+          <path class="arrow-path" id="arr-crud-down" d="M105,255 L105,390" marker-end="url(#arrowhead)"/>
+          <text x="90" y="325" class="flowlabel" font-size="9.5" text-anchor="end">clients · leads · invoices · projects</text>
+
+          <rect class="group-box recessed" id="grp-crud" x="60" y="390" width="540" height="120" rx="12"/>
+          <text x="80" y="412" class="grouplabel" font-size="11" font-weight="700">PLAIN CRUD — DELIBERATELY NOT AGENTIC</text>
+
+          <rect class="comp-box" id="crud-1" x="80" y="424" width="240" height="66" rx="7"/>
+          <text x="200" y="450" class="compname" font-size="12" text-anchor="middle">src/services/*.ts</text>
+          <text x="200" y="468" class="compsub" font-size="9" text-anchor="middle">one file per domain</text>
+          <text x="200" y="481" class="compsub" font-size="9" text-anchor="middle">no LLM in this path, ever</text>
+
+          <rect class="comp-box" id="crud-2" x="340" y="424" width="240" height="66" rx="7"/>
+          <text x="460" y="450" class="compname" font-size="12" text-anchor="middle">Direct to Postgres</text>
+          <text x="460" y="468" class="compsub" font-size="9" text-anchor="middle">same RLS boundary</text>
+          <text x="460" y="481" class="compsub" font-size="9" text-anchor="middle">as the agentic flows</text>
+
+          <path class="arrow-path" id="arr-crud-across" d="M600,450 L1380,450 L1380,350" marker-end="url(#arrowhead)"/>
+          <text x="990" y="437" class="flowlabel" font-size="9.5" text-anchor="middle">RLS-scoped — same boundary the agentic flows rely on</text>
+
+          <!-- BRANCH: live read-back -->
+          <path class="arrow-path" id="arr-readback" d="M1380,90 L1380,50 L105,50 L105,125" marker-end="url(#arrowhead)"/>
+          <text x="742" y="40" class="flowlabel" font-size="9.5" text-anchor="middle">live numbers — never computed by a model</text>
+        </svg>
+        <div class="diagram-legend">
+          <span><i style="background:var(--accent)"></i>Orchestration / hero</span>
+          <span><i style="background:var(--accent2)"></i>Agents &amp; services</span>
+          <span><i style="background:var(--accent3)"></i>Data layer</span>
+          <span><i style="background:var(--text-muted)"></i>Plain CRUD (no agent)</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══════════════════ PULL-QUOTE ══════════════════ -->
+    <section class="af-section" style="--i:3; background: linear-gradient(120deg, var(--bg-soft) 0%, var(--bg-recessed) 100%); border: 1px solid var(--border-soft);">
+      <p class="pull-quote">
+        "The discipline isn't AI everywhere — it's knowing where a judgment call belongs to a model, and where it doesn't.
+        That restraint is what makes the agentic flows trustworthy rather than decorative."
+        <cite>— from the CRUD bypass branch in the hero diagram above</cite>
+      </p>
+    </section>
+
+    <!-- ══════════════════ DATA FLOW DETAIL ══════════════════ -->
+    <section class="af-section" id="dataflow" style="--i:4">
+      <p class="eyebrow">Data flow detail</p>
+      <h2 style="font-size: clamp(20px,2.4vw,26px); margin-bottom: 6px;">The five flows, traced step by step</h2>
+      <p style="font-size: 13px; color: var(--text-muted); max-width: 720px;">Freeda branches into five intents, so it's shown as a flowchart. The other four are linear — shown as timelines.</p>
+
+      <div class="mermaid-wrap" style="margin-top: 24px;">
+        <pre class="mermaid">
+flowchart TD
+  A["Ask Freeda panel<br/>any page, one input"] --> B["Intent router<br/>Claude Haiku"]
+  B -->|update| C["Extract diff<br/>Sonnet"] --> C2["Review card<br/>Apply / Dismiss"] --> C3["Write extracted_data<br/>owner id from session"]
+  B -->|query| D["Match KPI id<br/>Haiku, catalog only"] --> D2["Fetch live number<br/>dashboardService"] --> D3["Answer<br/>can't drift from screen"]
+  B -->|action| E["Propose<br/>recipients + draft"] --> E2["Edit &amp; confirm<br/>explicit Send click"] --> E3["Execute<br/>WhatsApp send"]
+  B -->|support| F["Ground<br/>business + doc corpus"] --> F2["Answer<br/>Sonnet"]
+  B -->|off-topic| G["Redirect<br/>Haiku, one line"]
+        </pre>
+      </div>
+
+      <div class="flow-grid">
+        <div class="flow-card" style="--dot: var(--accent3)">
+          <h3>Seed → OS Generator</h3>
+          <div class="flow-sub">Landing page → saved business</div>
+          <div class="timeline">
+            <div class="t-step"><div class="t-title">Prompt in</div><div class="t-desc">One paragraph describing the business — no account yet.</div></div>
+            <div class="t-step"><div class="t-title">classify (Haiku, parallel)</div><div class="t-desc">Estimates a presence tier so the preview's brand color appears early.</div></div>
+            <div class="t-step"><div class="t-title">extract (Haiku/Sonnet)</div><div class="t-desc">Fixed schema: identity, services, pipeline, brand, proposal, contacts. Guarded retry if empty.</div></div>
+            <div class="t-step"><div class="t-title">Write</div><div class="t-desc">pending_businesses (pre-auth) or businesses.extracted_data (post-auth).</div></div>
+            <div class="t-step"><div class="t-title">Sign in to save</div><div class="t-desc">Promotes the preview — nothing regenerates.</div></div>
+          </div>
+        </div>
+        <div class="flow-card" style="--dot: var(--accent2)">
+          <h3>AI-Drafted Promotions</h3>
+          <div class="flow-sub">Generate → review → publish</div>
+          <div class="timeline">
+            <div class="t-step"><div class="t-title">Generate</div><div class="t-desc">One click on Social → Create / Featured.</div></div>
+            <div class="t-step"><div class="t-title">Caption (Haiku)</div><div class="t-desc">Grounded in real services and brand voice.</div></div>
+            <div class="t-step"><div class="t-title">Image (gpt-image-2)</div><div class="t-desc">Text-free illustration — baked-in AI text renders unreliably.</div></div>
+            <div class="t-step"><div class="t-title">Reel (Shotstack)</div><div class="t-desc">Ken Burns render from the still; check-video-render polls status.</div></div>
+            <div class="t-step"><div class="t-title">Human review</div><div class="t-desc">Draft tab — Edit / Delete / Send. Nothing publishes on its own.</div></div>
+            <div class="t-step"><div class="t-title">Publish (Meta Graph)</div><div class="t-desc">Photo then Reel, per platform — independent legs.</div></div>
+          </div>
+        </div>
+        <div class="flow-card" style="--dot: var(--accent)">
+          <h3>Nudges &amp; Automations</h3>
+          <div class="flow-sub">Cron or manual trigger</div>
+          <div class="timeline">
+            <div class="t-step"><div class="t-title">Trigger</div><div class="t-desc">Daily cron (9am UTC) or "Run check now" — same code path.</div></div>
+            <div class="t-step"><div class="t-title">trigger-nudges evaluates</div><div class="t-desc">Overdue invoice, stale lead, unsent proposal, tax deadline, rate insight, 1099 threshold, drafts ready.</div></div>
+            <div class="t-step"><div class="t-title">Copy (Haiku)</div><div class="t-desc">Per qualifying event, with a deterministic fallback template if the call fails.</div></div>
+            <div class="t-step"><div class="t-title">In-app alert only</div><div class="t-desc">Nothing external fires from this path.</div></div>
+            <div class="t-step"><div class="t-title">Parallel: reactive WhatsApp</div><div class="t-desc">Proposal approved / invoice paid / file shared — fires from the event itself, no model call.</div></div>
+          </div>
+        </div>
+        <div class="flow-card" style="--dot: var(--text-muted)">
+          <h3>Plain CRUD</h3>
+          <div class="flow-sub">Deliberately not agentic</div>
+          <div class="timeline">
+            <div class="t-step"><div class="t-title">User surface</div><div class="t-desc">Clients, Leads, Services, Finances, Projects, Calendar.</div></div>
+            <div class="t-step"><div class="t-title">src/services/*.ts</div><div class="t-desc">One file per domain, calling Supabase directly.</div></div>
+            <div class="t-step"><div class="t-title">Postgres, RLS-scoped</div><div class="t-desc">Ownership from the session — same boundary the agentic flows rely on.</div></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══════════════════ COMPONENT DIRECTORY ══════════════════ -->
+    <section class="af-section" id="components" style="--i:5">
+      <p class="eyebrow">Component directory</p>
+      <h2 style="font-size: clamp(20px,2.4vw,26px); margin-bottom: 18px;">46 edge functions, by area</h2>
+      <div class="table-wrap">
+        <table class="comp-table">
+          <thead><tr><th>Area</th><th>Function</th><th>Role</th></tr></thead>
+          <tbody>
+            <tr><td><span class="tag freeda">Freeda / AI</span></td><td class="fn">ai-gateway</td><td>Sole LLM entry point — extract, freeda (5-bucket router), chat</td></tr>
+            <tr><td><span class="tag freeda">Freeda / AI</span></td><td class="fn">extract-receipt</td><td>AI-extracts expense data from a receipt photo</td></tr>
+            <tr><td><span class="tag freeda">Freeda / AI</span></td><td class="fn">generate-visibility-kit</td><td>Generates channel-specific outreach copy</td></tr>
+            <tr><td><span class="tag freeda">Freeda / AI</span></td><td class="fn">research-company / research-competitor</td><td>AI research for outreach and competitor intel</td></tr>
+            <tr><td><span class="tag freeda">Freeda / AI</span></td><td class="fn">quarterly-review-insight</td><td>AI-generated quarterly business review</td></tr>
+            <tr><td><span class="tag freeda">Freeda / AI</span></td><td class="fn">trigger-nudges</td><td>Evaluates and drafts background nudge copy</td></tr>
+            <tr><td><span class="tag social">Social &amp; Promotions</span></td><td class="fn">social-oauth-callback</td><td>Instagram / Facebook / WhatsApp token exchange</td></tr>
+            <tr><td><span class="tag social">Social &amp; Promotions</span></td><td class="fn">social-facebook-select-page</td><td>Multi-Page Facebook account picker</td></tr>
+            <tr><td><span class="tag social">Social &amp; Promotions</span></td><td class="fn">social-publish-instagram / -facebook</td><td>Publishes photo + Reel per platform</td></tr>
+            <tr><td><span class="tag social">Social &amp; Promotions</span></td><td class="fn">generate-promotion / check-video-render</td><td>AI caption + image + Reel render pipeline</td></tr>
+            <tr><td><span class="tag social">Social &amp; Promotions</span></td><td class="fn">whatsapp-webhook / handle-reply-intent</td><td>Inbound WhatsApp + reply-intent parsing</td></tr>
+            <tr><td><span class="tag pay">Payments</span></td><td class="fn">create-checkout-session / create-invoice-checkout</td><td>Stripe Checkout — generic and invoice-specific</td></tr>
+            <tr><td><span class="tag pay">Payments</span></td><td class="fn">create-subscription-checkout</td><td>Pro / Agency tier upgrade checkout</td></tr>
+            <tr><td><span class="tag pay">Payments</span></td><td class="fn">stripe-webhook / subscription-webhook</td><td>Payment and subscription lifecycle events</td></tr>
+            <tr><td><span class="tag pay">Payments</span></td><td class="fn">create-connect-account / get-connect-status</td><td>Stripe Connect payouts to the freelancer</td></tr>
+            <tr><td><span class="tag portal">Client Portal</span></td><td class="fn">generate-portal-link</td><td>Mints a portal token on first proposal/invoice send</td></tr>
+            <tr><td><span class="tag portal">Client Portal</span></td><td class="fn">portal-approve-proposal</td><td>Client-side approval — advances pipeline stage, notifies</td></tr>
+            <tr><td><span class="tag portal">Client Portal</span></td><td class="fn">upload-portal-file / notify-portal-file-shared</td><td>Portal file exchange + owner-side notification</td></tr>
+            <tr><td><span class="tag misc">Onboarding</span></td><td class="fn">mark-milestone</td><td>Records Getting Started checklist progress</td></tr>
+            <tr><td><span class="tag misc">Reviews / outreach</span></td><td class="fn">submit-review / send-review-requests / schedule-review-request</td><td>7-day-post-payment automatic review request cycle</td></tr>
+            <tr><td><span class="tag misc">Misc</span></td><td class="fn">send-email / send-daily-digest / generate-wallet-pass / connect-toggl</td><td>Transactional email, digests, wallet passes, time-tracking sync</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ══════════════════ EXTERNAL SERVICES ══════════════════ -->
+    <section class="af-section" id="services" style="--i:6">
+      <p class="eyebrow">External services</p>
+      <h2 style="font-size: clamp(20px,2.4vw,26px); margin-bottom: 6px;">Six integrations, each doing one job</h2>
+      <div class="svc-grid">
+        <div class="svc-card" style="--c: var(--accent)">
+          <h4>Anthropic Claude</h4><div class="svc-type">Haiku + Sonnet</div>
+          <p>Every judgment call in the product — intent routing, captions, grounded answers, nudge copy.</p>
+        </div>
+        <div class="svc-card" style="--c: var(--accent)">
+          <h4>OpenAI gpt-image-2</h4><div class="svc-type">Image generation</div>
+          <p>Text-free promotion imagery — the one non-Anthropic model call in the stack.</p>
+        </div>
+        <div class="svc-card" style="--c: var(--accent2)">
+          <h4>Stripe</h4><div class="svc-type">Payments + Connect</div>
+          <p>Invoice checkout, subscription billing, and payout routing to the freelancer.</p>
+        </div>
+        <div class="svc-card" style="--c: var(--accent3)">
+          <h4>Meta Graph API</h4><div class="svc-type">Instagram · Facebook · WhatsApp</div>
+          <p>One Meta app covers OAuth and publishing for all three surfaces.</p>
+        </div>
+        <div class="svc-card" style="--c: var(--accent3)">
+          <h4>Shotstack</h4><div class="svc-type">Video render</div>
+          <p>Turns a still promotion image into a Ken Burns-style Reel.</p>
+        </div>
+        <div class="svc-card" style="--c: var(--accent4)">
+          <h4>Toggl</h4><div class="svc-type">Time-tracking sync</div>
+          <p>Read-only sync into the Finances → Time tab — not a built-in timer.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══════════════════ INSIGHTS ══════════════════ -->
+    <section class="af-section" id="insights" style="--i:7">
+      <p class="eyebrow">Architecture insights</p>
+      <h2 style="font-size: clamp(20px,2.4vw,26px);">What the code reveals</h2>
+
+      <div class="insight-lead">
+        <h4>The security boundary is the actual product moat.</h4>
+        <p>An LLM's output is only ever treated as data — a KPI catalog id, a recipient-selector mode, a caption string —
+        never as query logic. It cannot name a table, a row, or a business id. Row-level security scoped to
+        <code>auth.uid()</code> is the real enforcement layer; app-code discipline alone is never trusted to hold it.</p>
+      </div>
+      <div class="insight-rest">
+        <div class="insight-card" style="--c: var(--accent)">
+          <h5>Propose / execute, always two calls</h5>
+          <p>Freeda's action bucket drafts a message and recipient list in one call; nothing sends until the user edits and explicitly confirms in a second, separate call.</p>
+        </div>
+        <div class="insight-card" style="--c: var(--accent2)">
+          <h5>Numbers are fetched, never computed</h5>
+          <p>The KPI catalog match returns only an id — the frontend fetches the live value via the same code the Dashboard renders, so Freeda's answer can't drift from the screen.</p>
+        </div>
+        <div class="insight-card" style="--c: var(--accent3)">
+          <h5>Full-context stuffing over vector RAG</h5>
+          <p>The documentation corpus grounding Freeda's support answers is injected whole into the system prompt — no embeddings pipeline, chosen deliberately for a corpus this size.</p>
+        </div>
+        <div class="insight-card" style="--c: var(--accent4)">
+          <h5>Model tiering by cost, not habit</h5>
+          <p>Haiku handles classification and quick lookups; Sonnet is reserved for generation and grounded reasoning — a wrong number is worse than a slow one.</p>
+        </div>
+        <div class="insight-card" style="--c: var(--accent)">
+          <h5>Two portal tables, easy to conflate</h5>
+          <p><code>clients.status</code> and <code>contacts.lifecycle_status</code> track similar-sounding but distinct lifecycles — a real source of a UI badge bug found and fixed this session.</p>
+        </div>
+        <div class="insight-card" style="--c: var(--accent2)">
+          <h5>Dead routes get found by tracing, not assuming</h5>
+          <p><code>/dashboard/requests</code> turned out to be a redirect stub; <code>OnboardingPage.tsx</code> looked dead but was still live-wired from two signup paths — both required reading the actual call sites.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══════════════════ CODE REFERENCES ══════════════════ -->
+    <section class="af-section" id="references" style="--i:8">
+      <p class="eyebrow">Code references</p>
+      <h2 style="font-size: clamp(20px,2.4vw,26px); margin-bottom: 10px;">Key files analyzed</h2>
+
+      <details class="ref-group" open>
+        <summary>Freeda / AI Gateway</summary>
+        <div class="ref-list">
+          <div class="rf">supabase/functions/ai-gateway/index.ts<span>routeIntent, buildChatSystem, handleActionPropose/Execute, matchKpiCatalog</span></div>
+          <div class="rf">src/components/layouts/AICopilot.tsx<span>single Freeda surface, renders kind-tagged responses</span></div>
+          <div class="rf">src/lib/businessDiff.ts<span>diff builder + applyBusinessDiff — the reference security pattern</span></div>
+          <div class="rf">src/config/freedaKpiCatalog.ts + src/services/dashboardService.ts<span>KPI catalog + single source of truth for Dashboard numbers</span></div>
+        </div>
+      </details>
+      <details class="ref-group">
+        <summary>Social &amp; Promotions</summary>
+        <div class="ref-list">
+          <div class="rf">supabase/functions/generate-promotion/index.ts<span>caption + image + Reel render submission</span></div>
+          <div class="rf">supabase/functions/social-publish-instagram / -facebook<span>per-platform publish, independent legs</span></div>
+          <div class="rf">src/components/promotions/*.tsx<span>Draft / Edit / Publish workflow components</span></div>
+        </div>
+      </details>
+      <details class="ref-group">
+        <summary>Data layer &amp; CRUD</summary>
+        <div class="ref-list">
+          <div class="rf">src/services/*.ts<span>one file per domain, RLS-scoped, no LLM in this path</span></div>
+          <div class="rf">src/pages/ClientsPage.tsx<span>getClientBadge() — fixed missing 'prospect' status case</span></div>
+        </div>
+      </details>
+      <details class="ref-group">
+        <summary>Onboarding &amp; Getting Started</summary>
+        <div class="ref-list">
+          <div class="rf">supabase/functions/mark-milestone/index.ts<span>allow-listed milestone names, logs to onboarding_events</span></div>
+          <div class="rf">src/components/common/GettingStartedChecklist.tsx<span>persistent checklist replacing the one-at-a-time nudge</span></div>
+          <div class="rf">src/pages/NoBusinessPage.tsx<span>the real, current generate-then-gate flow for signed-in users</span></div>
+        </div>
+      </details>
+    </section>
+
+    <footer class="af-foot">Forgefly · architecture report generated by archflow · live codebase analysis</footer>
+  </div>
+</div>
+
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+  if (localStorage.getItem('archflow-theme') === 'light') document.body.classList.add('light');
+  const isDark = !document.body.classList.contains('light');
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'base',
+    themeVariables: {
+      primaryColor: isDark ? '#10251c' : '#e3f7ee',
+      primaryBorderColor: '#16c98d',
+      primaryTextColor: isDark ? '#e8ede8' : '#0e1712',
+      lineColor: isDark ? '#5a7a5a' : '#94a3b8',
+      fontSize: '13px',
+      fontFamily: 'Sora, sans-serif',
+    }
+  });
+</script>
+
+<script>
+  // ── PHASE ENGINE ──────────────────────────────────────────────
+  const phases = [
+    { label: "Phase 0 — entry: Landing page, Ask Freeda, Social, Automations, and the Client Portal all originate a request here.", groups: [], sources: ["src-entry"], arrows: [], color: "#16c98d" },
+    { label: "Phase 1 — Orchestration Hub receives it: ai-gateway and 40+ Deno edge functions share one TypeScript runtime.", groups: ["grp-hero"], sources: [], arrows: ["arr-1"], color: "#16c98d", comps: [] },
+    { label: "Phase 2 — Freeda's 5-bucket router classifies the message: update, query, action, support, or off-topic.", groups: [], sources: [], arrows: [], color: "#16c98d", comps: ["hero-1"] },
+    { label: "Phase 3 — the other three AI-driven flows: promotion generation, background nudges, and the seed → OS extractor.", groups: [], sources: [], arrows: [], color: "#16c98d", comps: ["hero-2","hero-3","hero-4"] },
+    { label: "Phase 4 — Agents & Services execute: Claude Haiku/Sonnet, OpenAI gpt-image-2, Meta Graph, Stripe, Shotstack.", groups: ["grp-agents"], sources: [], arrows: ["arr-2"], color: "#f5a623", comps: ["ag-1","ag-2","ag-3","ag-4"] },
+    { label: "Phase 5 — the Data Layer persists it: Postgres, row-level security scoped to auth.uid().", groups: ["grp-data"], sources: [], arrows: ["arr-3"], color: "#8b7cf6", comps: ["data-1","data-2","data-3"] },
+    { label: "Branch — Plain CRUD bypass: most of the app talks straight to Postgres, no model call, ever.", groups: ["grp-crud"], sources: [], arrows: ["arr-crud-down","arr-crud-across"], color: "#6d8768", comps: ["crud-1","crud-2"] },
+    { label: "Branch — live read-back: a number Freeda states is always fetched fresh from this same Data Layer, never computed by a model.", groups: [], sources: ["src-entry"], arrows: ["arr-readback"], color: "#16c98d", comps: [] },
+  ];
+  let phase = 0;
+
+  function resetSvg() {
+    document.querySelectorAll('.group-box, .source-box, .comp-box').forEach(el => {
+      el.classList.remove('lit');
+      el.style.removeProperty('--glow-color');
+    });
+    document.querySelectorAll('.arrow-path').forEach(el => {
+      el.classList.remove('lit');
+      el.style.removeProperty('--glow-color');
+    });
+  }
+
+  function applyPhase() {
+    const p = phases[phase];
+    const banner = document.getElementById('phase-banner');
+    banner.textContent = '▶ ' + p.label;
+    banner.style.color = p.color;
+    banner.style.borderColor = p.color + '55';
+    resetSvg();
+    (p.groups || []).forEach(id => { const el = document.getElementById(id); if (el) { el.style.setProperty('--glow-color', p.color); el.classList.add('lit'); } });
+    (p.sources || []).forEach(id => { const el = document.getElementById(id); if (el) { el.style.setProperty('--glow-color', p.color); el.classList.add('lit'); } });
+    (p.comps || []).forEach(id => { const el = document.getElementById(id); if (el) { el.style.setProperty('--glow-color', p.color); el.classList.add('lit'); } });
+    (p.arrows || []).forEach(id => { const el = document.getElementById(id); if (el) { el.style.stroke = p.color; el.classList.add('lit'); } });
+  }
+
+  let phaseTimer = null;
+  function startPhases() { phaseTimer = setInterval(() => { phase = (phase + 1) % phases.length; applyPhase(); }, 2200); }
+  function stopPhases() { if (phaseTimer) clearInterval(phaseTimer); phaseTimer = null; }
+
+  applyPhase();
+  startPhases();
+
+  // ── PRINT: composite snapshot (every group + arrow lit) ───────
+  function applyCompositePhase() {
+    stopPhases();
+    resetSvg();
+    const banner = document.getElementById('phase-banner');
+    if (banner) banner.textContent = '▶ Architecture overview — all phases';
+    const allGroups = new Set(), allSources = new Set(), allArrows = new Set(), allComps = new Set();
+    phases.forEach(p => {
+      (p.groups || []).forEach(id => allGroups.add(id));
+      (p.sources || []).forEach(id => allSources.add(id));
+      (p.arrows || []).forEach(id => allArrows.add(id));
+      (p.comps || []).forEach(id => allComps.add(id));
+    });
+    const litColor = '#16c98d';
+    [...allGroups, ...allSources, ...allComps].forEach(id => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.style.setProperty('--glow-color', litColor);
+      el.classList.add('lit');
+    });
+    allArrows.forEach(id => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.style.stroke = litColor;
+      el.classList.add('lit');
+    });
+  }
+  window.addEventListener('beforeprint', applyCompositePhase);
+  window.addEventListener('afterprint', () => startPhases());
+  if (window.matchMedia && window.matchMedia('print').matches) applyCompositePhase();
+
+  // ── TOC SCROLL SPY ─────────────────────────────────────────────
+  (function() {
+    const tocLinks = document.querySelectorAll('.toc__link');
+    if (!tocLinks.length) return;
+    const sections = [];
+    tocLinks.forEach(link => {
+      const id = link.getAttribute('href')?.replace('#', '');
+      const section = id && document.getElementById(id);
+      if (section) sections.push({ id, el: section, link });
+    });
+    const observer = new IntersectionObserver(entries => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          tocLinks.forEach(l => l.classList.remove('active'));
+          const match = sections.find(s => s.el === entry.target);
+          if (match) {
+            match.link.classList.add('active');
+            if (window.innerWidth <= 1000) match.link.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+          }
+        }
+      });
+    }, { rootMargin: '-20% 0px -70% 0px', threshold: 0 });
+    sections.forEach(s => observer.observe(s.el));
+    tocLinks.forEach(link => {
+      link.addEventListener('click', e => {
+        e.preventDefault();
+        const id = link.getAttribute('href')?.replace('#', '');
+        const target = id && document.getElementById(id);
+        if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    });
+  })();
+
+  // ── SECTION ENTRANCE REVEAL ────────────────────────────────────
+  (function() {
+    const sections = document.querySelectorAll('.af-section');
+    const io = new IntersectionObserver(entries => {
+      entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('visible'); io.unobserve(e.target); } });
+    }, { threshold: 0.08 });
+    sections.forEach(s => io.observe(s));
+  })();
+</script>
+</body>
+</html>
