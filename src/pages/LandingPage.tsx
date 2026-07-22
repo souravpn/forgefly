@@ -423,7 +423,7 @@ export default function LandingPage() {
 
           {/* ── SEED PROMPT + PILLS ────────────────────────────────────────── */}
           <div className="max-w-3xl mx-auto animate-in fade-in slide-in-from-bottom-6 duration-700 delay-400">
-            <div className="rounded-2xl border border-white/15 bg-white/5 backdrop-blur-sm shadow-2xl overflow-hidden">
+            <div className="rounded-2xl border border-white/45 bg-white/10 backdrop-blur-sm shadow-2xl overflow-hidden">
               <textarea
                 ref={seedTextareaRef}
                 value={seedPrompt}
@@ -432,7 +432,7 @@ export default function LandingPage() {
                   setActiveChip(null);
                 }}
                 placeholder="Describe your business - For Example: What do you do? Where are you based? Who is your potential clientele? What Services/Packagaes/Options you provide? Any Brand specific color?  ** You can always add/edit these after creating the Business OS."
-                className="w-full bg-transparent text-white text-base italic leading-relaxed p-6 pb-4 resize-none outline-none placeholder:text-gray-500 placeholder:italic min-h-[100px]"
+                className="w-full bg-transparent text-white text-base italic leading-relaxed p-6 pb-4 resize-none outline-none placeholder:text-gray-400 placeholder:italic min-h-[100px]"
                 rows={3}
                 a
               />
@@ -451,7 +451,7 @@ export default function LandingPage() {
             {/* Full-width button outside the card */}
             <Button
               size="lg"
-              className="w-4/5 mt-3 bg-emerald-500 text-white hover:bg-emerald-600 font-base py-4 text-base disabled:opacity-60"
+              className="w-4/5 mt-3 bg-emerald-500 text-white hover:bg-emerald-600 font-base py-4 text-base disabled:opacity-70"
               onClick={handleGenerate}
               disabled={generating || !seedPrompt.trim()}
             >
@@ -479,7 +479,7 @@ export default function LandingPage() {
                   className={`px-4 py-2 rounded-full text-sm border transition-colors ${
                     activeChip === i
                       ? "border-emerald-500/60 text-emerald-400 bg-emerald-500/10"
-                      : "border-white/20 text-gray-400 hover:border-white/40 hover:text-gray-200"
+                      : "border-white/80 text-white/80 hover:border-white/40 hover:text-gray-200"
                   }`}
                 >
                   {chip}
@@ -492,7 +492,7 @@ export default function LandingPage() {
                     setActiveChip(null);
                     setSeedPrompt("");
                   }}
-                  className="px-4 py-2 rounded-full text-sm border border-white/10 text-gray-500 hover:border-white/30 hover:text-gray-300 transition-colors"
+                  className="px-4 py-2 rounded-full text-sm border border-white/80 text-white/80 hover:border-white/40 hover:text-gray-200 transition-colors"
                 >
                   Cancel
                 </button>
@@ -1660,7 +1660,8 @@ export default function LandingPage() {
                         alignItems: "center",
                         justifyContent: "space-between",
                         padding: "9px 0",
-                        borderBottom: i === 0 ? `1px solid ${S.border2}` : "none",
+                        borderBottom:
+                          i === 0 ? `1px solid ${S.border2}` : "none",
                       }}
                     >
                       <span style={{ color: S.mid, fontSize: "0.82rem" }}>
@@ -1729,11 +1730,10 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── About ───────────────────────────────────────────────────────────── */}
+      {/* Commenting for now - Will re-think this later */}
+      {/* ── About ─────────────────────────────────────────────────────────────
       <section id="about" style={{ padding: "120px 0", background: S.bg2 }}>
-        <div
-          style={{ maxWidth: "760px", margin: "0 auto", padding: "0 24px" }}
-        >
+        <div style={{ maxWidth: "760px", margin: "0 auto", padding: "0 24px" }}>
           <div className="ff-fade-up" style={{ textAlign: "center" }}>
             <p
               style={{
@@ -1770,14 +1770,14 @@ export default function LandingPage() {
                 fontSize: "1.02rem",
               }}
             >
-              Most freelancers end up running their business out of five
-              tools that don't talk to each other — one for invoices, one for
-              the portfolio, one for messages, a spreadsheet named
-              "FINAL_v3." Forgefly is what happens when all of it lives in
-              one place: built from a single description of your business,
-              kept moving by an AI copilot that actually knows what's in it,
-              and ready to post, invoice, and follow up without you
-              copy-pasting between tabs to make it happen.
+              Most freelancers end up running their business out of five tools
+              that don't talk to each other — one for invoices, one for the
+              portfolio, one for messages, a spreadsheet named "FINAL_v3."
+              Forgefly is what happens when all of it lives in one place: built
+              from a single description of your business, kept moving by an AI
+              copilot that actually knows what's in it, and ready to post,
+              invoice, and follow up without you copy-pasting between tabs to
+              make it happen.
             </p>
             <p
               style={{
@@ -1792,7 +1792,7 @@ export default function LandingPage() {
             </p>
           </div>
         </div>
-      </section>
+      </section> */}
 
       {/* ── Pricing ─────────────────────────────────────────────────────────── */}
       <section id="pricing" style={{ padding: "120px 0", background: S.bg }}>
