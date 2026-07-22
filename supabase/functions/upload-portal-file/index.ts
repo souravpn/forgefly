@@ -6,6 +6,22 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+const MAX_FILE_BYTES = 25 * 1024 * 1024; // 25MB
+
+// Anything not in this list is stored as application/octet-stream — forces
+// a download instead of inline rendering, so an attacker-supplied MIME type
+// (e.g. text/html) can never get the browser to execute uploaded content.
+const SAFE_CONTENT_TYPES = new Set([
+  'image/jpeg', 'image/png', 'image/gif', 'image/webp',
+  'application/pdf',
+  'application/zip',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'text/plain',
+]);
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
@@ -44,16 +60,22 @@ serve(async (req) => {
 
     // Decode base64 → Uint8Array
     const raw = atob(body.fileBase64);
+    if (raw.length > MAX_FILE_BYTES) {
+      return new Response(JSON.stringify({ error: 'File is too large (25MB max)' }), {
+        status: 413, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
     const bytes = new Uint8Array(raw.length);
     for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
 
     const safeName = body.fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
     const storagePath = `${contact.id}/${Date.now()}_${safeName}`;
+    const safeContentType = SAFE_CONTENT_TYPES.has(body.mimeType ?? '') ? body.mimeType! : 'application/octet-stream';
 
     const { error: uploadErr } = await adminClient.storage
       .from('portal-files')
       .upload(storagePath, bytes, {
-        contentType: body.mimeType ?? 'application/octet-stream',
+        contentType: safeContentType,
         cacheControl: '3600',
         upsert: false,
       });

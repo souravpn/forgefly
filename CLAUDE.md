@@ -100,6 +100,10 @@ This applies to every current and future `ai-gateway` mode (`extract`, `chat`, a
 
 This is what keeps prompt injection from becoming a database compromise. It does not come for free when adding new AI-driven capabilities — it has to be deliberately preserved each time.
 
+### Application security — read `sec-rev/APPSEC.md` for anything sensitive
+
+The AI-to-database boundary above is one piece of a broader application-security reference at **`sec-rev/APPSEC.md`** — prompt injection from third parties, webhook signature verification, RLS patterns (including the "anyone with a token can read row X" pattern that RLS's `using (true)` cannot safely express), edge-function caller-identity checks, SSRF guarding for any external fetch, file upload validation, and OTP/verification-code hardening. Six auto-firing skills back it (`.claude/skills/appsec-*`) that trigger when their area is touched, plus `.claude/skills/security-review` — a re-runnable full-codebase security review loop, distinct from `/security-review`'s diff-only scope. Past review cycles are logged in `sec-rev/findings/`.
+
 ### Social & Promotions
 
 `SocialPage.tsx` (`/dashboard/social`, agency-tier gated) is the workspace for connecting social accounts and running AI-drafted promotions. See `src/components/promotions/` for the component breakdown if working on this area.

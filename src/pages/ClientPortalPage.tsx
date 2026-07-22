@@ -1,3 +1,5 @@
+// @ts-ignore
+import { createClient } from "@supabase/supabase-js";
 import {
   AlertCircle,
   ArrowRight,
@@ -39,8 +41,16 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
-// @ts-ignore
-import { supabase } from "@/db/supabase";
+import { supabase, supabaseAnonKey, supabaseUrl } from "@/db/supabase";
+
+// engagements' public-read RLS policy matches on this header (see migration
+// 00051) rather than allowing an unrestricted anonymous SELECT — a client
+// must present the exact portal_token it already has to read that one row.
+function engagementClientFor(token: string) {
+  return createClient(supabaseUrl, supabaseAnonKey, {
+    global: { headers: { "x-portal-token": token } },
+  });
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -3177,7 +3187,7 @@ export default function ClientPortalPage() {
       }
 
       // 2. Fall back to engagements.portal_token (legacy links)
-      const { data: eng } = await supabase
+      const { data: eng } = await engagementClientFor(token)
         .from("engagements")
         .select("*, contacts(*)")
         .eq("portal_token", token)

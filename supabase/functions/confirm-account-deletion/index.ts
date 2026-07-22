@@ -37,9 +37,10 @@ serve(async (req) => {
     }
 
     // Verify OTP
+    const MAX_ATTEMPTS = 5;
     const { data: otpRow } = await adminClient
       .from('deletion_otps')
-      .select('code, expires_at')
+      .select('code, expires_at, attempts')
       .eq('user_id', user.id)
       .maybeSingle();
 
@@ -48,14 +49,21 @@ serve(async (req) => {
         status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
-    if (otpRow.code !== code.trim()) {
-      return new Response(JSON.stringify({ error: 'Incorrect code. Please try again.' }), {
-        status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
     if (new Date(otpRow.expires_at) < new Date()) {
       await adminClient.from('deletion_otps').delete().eq('user_id', user.id);
       return new Response(JSON.stringify({ error: 'Code has expired. Please request a new one.' }), {
+        status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+    if (otpRow.attempts >= MAX_ATTEMPTS) {
+      await adminClient.from('deletion_otps').delete().eq('user_id', user.id);
+      return new Response(JSON.stringify({ error: 'Too many incorrect attempts. Please request a new code.' }), {
+        status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+    if (otpRow.code !== code.trim()) {
+      await adminClient.from('deletion_otps').update({ attempts: otpRow.attempts + 1 }).eq('user_id', user.id);
+      return new Response(JSON.stringify({ error: 'Incorrect code. Please try again.' }), {
         status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }

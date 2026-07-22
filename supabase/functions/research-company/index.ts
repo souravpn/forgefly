@@ -1,4 +1,5 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
+import { safeFetch } from '../_shared/safeFetch.ts';
 
 const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY');
 const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
@@ -25,7 +26,7 @@ async function fetchPageText(url: string): Promise<string> {
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 10000);
-    const res = await fetch(url, {
+    const res = await safeFetch(url, {
       signal: controller.signal,
       headers: { 'User-Agent': 'Mozilla/5.0 (compatible; research-bot/1.0)' },
     });

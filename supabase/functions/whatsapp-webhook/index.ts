@@ -1,4 +1,5 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2';
+import { verifyMetaSignature } from '../_shared/verifyMetaSignature.ts';
 
 // No JWT verification — Meta calls this directly with no user auth context.
 // Deploy with: supabase functions deploy whatsapp-webhook --no-verify-jwt
@@ -35,7 +36,17 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const payload = await req.json();
+    // Verify this really came from Meta before trusting any of it — HMAC
+    // must run over the raw body, so read text first and parse JSON after.
+    const rawBody = await req.text();
+    const signature = req.headers.get('x-hub-signature-256');
+    const appSecret = Deno.env.get('META_APP_SECRET') ?? '';
+    if (!(await verifyMetaSignature(rawBody, signature, appSecret))) {
+      console.error('whatsapp-webhook: invalid or missing X-Hub-Signature-256');
+      return new Response('Forbidden', { status: 403 });
+    }
+
+    const payload = JSON.parse(rawBody);
     const service = getServiceClient();
 
     const entries = payload.entry ?? [];

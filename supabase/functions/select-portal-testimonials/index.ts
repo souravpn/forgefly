@@ -85,6 +85,16 @@ serve(async (req) => {
   }
 
   try {
+    // Internal, function-to-function only (invoked by submit-review) — the
+    // anon key is public and doesn't gate anything, so require the service
+    // role key explicitly rather than accepting any caller with business_id.
+    const authHeader = req.headers.get('Authorization') ?? '';
+    if (authHeader !== `Bearer ${SERVICE_KEY}`) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+        status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     const { business_id } = await req.json();
     if (!business_id) {
       return new Response(JSON.stringify({ error: 'business_id required' }), {

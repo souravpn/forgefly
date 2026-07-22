@@ -138,6 +138,20 @@ serve(async (req) => {
       });
     }
 
+    // Owner-only tool (Visibility page) — verify the caller actually owns
+    // this business before spending anything on AI generation for it.
+    const authClient = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+      { global: { headers: { Authorization: req.headers.get('Authorization') ?? '' } } },
+    );
+    const { data: { user }, error: userErr } = await authClient.auth.getUser();
+    if (userErr || !user) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+        status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
@@ -145,11 +159,11 @@ serve(async (req) => {
 
     const { data: business, error: bizErr } = await supabase
       .from('businesses')
-      .select('id, name, slug, bio, extracted_data')
+      .select('id, name, slug, bio, extracted_data, user_id')
       .eq('id', body.business_id)
       .single();
 
-    if (bizErr || !business) {
+    if (bizErr || !business || business.user_id !== user.id) {
       return new Response(JSON.stringify({ error: 'Business not found' }), {
         status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });

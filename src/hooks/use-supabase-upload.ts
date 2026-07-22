@@ -1,6 +1,6 @@
+import {type SupabaseClient} from '@supabase/supabase-js'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { type FileError, type FileRejection, useDropzone } from 'react-dropzone'
-import {type SupabaseClient} from '@supabase/supabase-js'
 
 interface FileWithPreview extends File {
   preview?: string
@@ -60,7 +60,7 @@ const useSupabaseUpload = (options: UseSupabaseUploadOptions) => {
     bucketName,
     path,
     allowedMimeTypes = [],
-    maxFileSize = Number.POSITIVE_INFINITY,
+    maxFileSize = 10 * 1024 * 1024, // 10MB — callers can override for a legitimate larger-file case
     maxFiles = 1,
     cacheControl = 3600,
     upsert = false,

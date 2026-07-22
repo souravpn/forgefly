@@ -40,7 +40,7 @@ serve(async (req) => {
 
     const { error: storeErr } = await adminClient
       .from('deletion_otps')
-      .upsert({ user_id: user.id, code, expires_at: expiresAt.toISOString() });
+      .upsert({ user_id: user.id, code, expires_at: expiresAt.toISOString(), attempts: 0 });
 
     if (storeErr) {
       console.error('OTP store error:', storeErr);
