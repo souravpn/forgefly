@@ -272,7 +272,7 @@ const INTENT_ROUTER_SYSTEM = `You are an intent router for Freeda, the AI assist
 Buckets:
 - "update": the user wants to ADD or CHANGE their stored business data — add a client, add/reprice a service, change a brand detail, add a pipeline lead. This bucket can only add or edit fields — it cannot remove/delete anything. Never route a removal request here.
 - "query": a question answerable from THEIR OWN stored business data — revenue, client counts, invoice status, project stats.
-- "action": the user wants Freeda to SEND or MESSAGE something to one or more of their clients over WhatsApp — a reminder, a follow-up, a service announcement, or general text. This covers messages to explicitly named clients, to "all clients", or to a clear rule like "clients with pending/overdue invoices". It does NOT cover creating a proposal or invoice (that's "support" — different mechanism) or anything not about messaging a client.
+- "action": the user wants Freeda to SEND or MESSAGE something to one or more of their clients over WhatsApp — a reminder, a follow-up, a service announcement, general text, or sharing a link/asset they already have (their public portfolio, a file, a resource). This covers messages to explicitly named clients, to "all clients", or to a clear rule like "clients with pending/overdue invoices". It does NOT cover creating a proposal or invoice (that's "support" — different mechanism) or anything not about messaging a client.
 - "support": everything else Freeda can help with conversationally — creating/drafting a proposal, generating or explaining an invoice, how-to questions about Forgefly, work-related judgment calls (pricing research, industry rates, drafting a message, sourcing costs), or a request to REMOVE/DELETE a client, service, or other stored record (deletion isn't automatable yet — Freeda explains that conversationally and points to the right page). This bucket already has its own handling for proposal/invoice creation and deletion requests — do not route those to "action" or "update".
 - "off_topic": unrelated to running their freelance business — general trivia, math, coding help unrelated to Forgefly, or anything a generic assistant would answer identically regardless of what business the person runs.
 
@@ -290,6 +290,8 @@ Examples:
 "send Xin Zu and Lina Santini a message about my new service" → {"bucket":"action"}
 "let all my clients know I now offer a new package" → {"bucket":"action"}
 "message a few of my clients about the schedule change" → {"bucket":"action"} (who exactly is unresolved — that's handled by asking the user to pick, not by this router)
+"share my public portfolio with Lance Solo via WhatsApp" → {"bucket":"action"}
+"send my portfolio link to all clients" → {"bucket":"action"}
 "create a proposal" / "create a proposal for Xin Zu" → {"bucket":"support"}
 "generate an invoice" / "help me send an invoice" → {"bucket":"support"}
 "remove client Xin Zu" / "delete the service called X" → {"bucket":"support"}
@@ -1516,12 +1518,25 @@ async function handleActionPropose(
     model: SONNET,
     max_tokens: 300,
     temperature: 0.4,
-    system: `Draft a short, friendly WhatsApp message for a freelancer to send to their client(s), based on their request below. Use {client_name} for personalization. If the request is about an unpaid or overdue invoice, you may also use {invoice_number}, {amount}, {payment_link} as placeholders — never invent real values for any placeholder. Return ONLY the message text, no preamble, no markdown.`,
+    system: `Draft a short, friendly WhatsApp message for a freelancer to send to their client(s), based on their request below. Use {client_name} for personalization. If the request is about an unpaid or overdue invoice, you may also use {invoice_number}, {amount}, {payment_link} as placeholders. If the request is about sharing their public portfolio, use {portfolio_link} as a placeholder for the link — never invent a real URL yourself. Never invent real values for any placeholder. Return ONLY the message text, no preamble, no markdown.`,
     messages: [{ role: 'user', content: prompt }],
   });
 
-  const messageDraft = draftResult.content[0]?.text?.trim() ?? '';
+  let messageDraft = draftResult.content[0]?.text?.trim() ?? '';
   await logUsage(supabase, userId, null, SONNET, 'action_propose', draftResult.usage.input_tokens, draftResult.usage.output_tokens);
+
+  // Resolve {portfolio_link} now (not just at execute time) so the preview
+  // the user reviews shows the real URL, not a raw placeholder string.
+  if (messageDraft.includes('{portfolio_link}')) {
+    const { data: business } = await supabase
+      .from('businesses')
+      .select('slug')
+      .eq('user_id', userId)
+      .eq('status', 'active')
+      .maybeSingle();
+    const portfolioLink = business?.slug ? `${SITE_URL}/p/${business.slug}` : '';
+    messageDraft = messageDraft.replaceAll('{portfolio_link}', portfolioLink);
+  }
 
   return new Response(JSON.stringify({
     kind: 'action',
@@ -1563,7 +1578,7 @@ async function handleActionExecute(
 
   const { data: business } = await service
     .from('businesses')
-    .select('id')
+    .select('id, slug')
     .eq('user_id', userId)
     .eq('status', 'active')
     .maybeSingle();
@@ -1574,6 +1589,7 @@ async function handleActionExecute(
     });
   }
 
+  const portfolioLink = business.slug ? `${SITE_URL}/p/${business.slug}` : '';
   const results: { client_id: string; name: string; sent: boolean; reason?: string }[] = [];
 
   for (const r of recipients) {
@@ -1611,12 +1627,15 @@ async function handleActionExecute(
     // Fill known placeholders with real values only — never a fabricated
     // payment link. {payment_link} is left blank if present, since
     // invoice-based portal-link generation isn't wired into this path yet —
-    // sending a broken literal "{payment_link}" would be worse.
+    // sending a broken literal "{payment_link}" would be worse. {portfolio_link}
+    // IS resolvable here (just business.slug, no per-recipient lookup needed),
+    // so it's filled with the real public portfolio URL.
     const personalized = message
       .replaceAll('{client_name}', r.name)
       .replaceAll('{invoice_number}', r.invoice_number ?? '')
       .replaceAll('{amount}', r.amount != null ? `$${r.amount.toLocaleString()}` : '')
-      .replaceAll('{payment_link}', '');
+      .replaceAll('{payment_link}', '')
+      .replaceAll('{portfolio_link}', portfolioLink);
 
     const result = await sendWhatsapp(service, {
       businessId: business.id,

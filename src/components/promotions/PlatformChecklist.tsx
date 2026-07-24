@@ -1,4 +1,4 @@
-import { Facebook, Home, Instagram, Linkedin, Twitter } from "lucide-react";
+import { Facebook, Home, Instagram, Linkedin, Pin, Twitter } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Tooltip,
@@ -17,6 +17,7 @@ const PLATFORM_META: Record<
   nextdoor: { label: "Nextdoor", icon: Home },
   x: { label: "X", icon: Twitter },
   linkedin: { label: "LinkedIn", icon: Linkedin },
+  pinterest: { label: "Pinterest", icon: Pin },
 };
 
 const ALL_PLATFORMS: PromotionPlatform[] = [
@@ -25,6 +26,7 @@ const ALL_PLATFORMS: PromotionPlatform[] = [
   "nextdoor",
   "x",
   "linkedin",
+  "pinterest",
 ];
 
 export function PlatformChecklist({

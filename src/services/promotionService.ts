@@ -8,7 +8,7 @@ import type {
   SocialPostTarget,
 } from '@/types/types';
 
-const ALL_PLATFORMS: PromotionPlatform[] = ['instagram', 'facebook', 'nextdoor', 'x', 'linkedin'];
+const ALL_PLATFORMS: PromotionPlatform[] = ['instagram', 'facebook', 'nextdoor', 'x', 'linkedin', 'pinterest'];
 export const LIVE_PLATFORMS: PromotionPlatform[] = ['instagram', 'facebook'];
 
 /** supabase-js collapses every non-2xx edge function response into the same generic

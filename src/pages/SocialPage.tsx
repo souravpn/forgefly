@@ -10,6 +10,7 @@ import {
   MessageCircle,
   MessageSquare,
   Music,
+  Pin,
   Search,
   Share2,
   Sparkles,
@@ -58,6 +59,7 @@ import {
   getCompetitorIntel,
   getCompetitors,
   getSocialConnections,
+  requestPlatform,
   type SocialConnectionStatus,
   selectFacebookPage,
   startFacebookConnect,
@@ -226,6 +228,13 @@ function ConnectionsTab({
           comingSoon
         />
         <PlatformCard
+          icon={<Pin className="w-6 h-6 text-white" />}
+          iconClassName="bg-[#E60023]"
+          name="Pinterest"
+          description="Pin your work to boards and drive traffic from Pinterest."
+          comingSoon
+        />
+        <PlatformCard
           icon={<Twitter className="w-6 h-6 text-white" />}
           iconClassName="bg-black"
           name="X"
@@ -287,7 +296,67 @@ function ConnectionsTab({
           comingSoon
         />
       </div>
+      <RequestPlatformCard />
     </div>
+  );
+}
+
+function RequestPlatformCard() {
+  const [url, setUrl] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+
+  async function handleSubmit() {
+    if (!url.trim()) {
+      toast.error("Add the platform's homepage URL first");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await requestPlatform(url.trim());
+      setSubmitted(true);
+      setUrl("");
+    } catch {
+      toast.error("Couldn't send your request — try again");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <Card className="mt-4 rounded-2xl">
+      <CardContent className="p-5 flex flex-col sm:flex-row sm:items-center gap-3">
+        <div className="flex-1">
+          <p className="font-semibold">
+            Don't see your preferred social network? Let us know.
+          </p>
+          <p className="text-sm text-muted-foreground mt-1">
+            Tell us its homepage URL and we'll consider it for a future
+            integration.
+          </p>
+        </div>
+        {submitted ? (
+          <p className="text-sm text-success shrink-0">
+            Thanks — we've got your request.
+          </p>
+        ) : (
+          <div className="flex gap-2 shrink-0 w-full sm:w-auto">
+            <Input
+              placeholder="https://example.com"
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              className="sm:w-64"
+            />
+            <Button onClick={handleSubmit} disabled={submitting}>
+              {submitting ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : null}
+              Request
+            </Button>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 

@@ -418,7 +418,7 @@ export interface SocialPost {
   video_status: 'rendering' | 'ready' | 'failed' | null;
 }
 
-export type PromotionPlatform = 'instagram' | 'facebook' | 'nextdoor' | 'x' | 'linkedin';
+export type PromotionPlatform = 'instagram' | 'facebook' | 'nextdoor' | 'x' | 'linkedin' | 'pinterest';
 export type SocialPostTargetStatus = 'pending' | 'approved' | 'published' | 'skipped' | 'failed';
 
 // 'instagram_reel'/'facebook_reel' aren't selectable "Promote on" platforms (see

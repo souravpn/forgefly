@@ -196,6 +196,19 @@ export async function disconnectSocialPlatform(
   if (error) throw error;
 }
 
+// ─── Platform requests ──────────────────────────────────────────────────────
+
+export async function requestPlatform(homepageUrl: string): Promise<void> {
+  const user = await currentUser();
+  const businessId = await resolveBusinessId(user.id);
+
+  const { error } = await supabase
+    .from('platform_requests')
+    .insert({ business_id: businessId, homepage_url: homepageUrl });
+
+  if (error) throw error;
+}
+
 // ─── Competitors ────────────────────────────────────────────────────────────
 
 export async function getCompetitors(): Promise<CompetitorProfile[]> {
