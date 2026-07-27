@@ -29,6 +29,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { NavIcon } from "./NavIcon";
+import { LogTimeWidget } from "@/components/common/LogTimeWidget";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
 
@@ -122,9 +123,15 @@ const PROJECT_NAV = [
   },
   {
     id: "project",
-    label: "Project",
+    label: "Projects",
     icon: "layers",
-    route: "/dashboard/project",
+    route: "/dashboard/projects",
+  },
+  {
+    id: "market-research",
+    label: "Market Research",
+    icon: "compass",
+    route: "/dashboard/market-research",
   },
 ];
 
@@ -284,6 +291,10 @@ export function AppSidebar({
           {MAIN_NAV.map((item) => (
             <NavLink key={item.id} item={item} onClick={onNavigate} />
           ))}
+
+          <div className="px-0.5 py-1">
+            <LogTimeWidget />
+          </div>
 
           <SectionLabel label="Tools" />
           {TOOLS_NAV.map((item) => (

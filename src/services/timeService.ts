@@ -64,8 +64,7 @@ export async function getTimeEntriesByProject(projectId: string): Promise<TimeEn
 }
 
 export interface CreateTimeEntryInput {
-  project_id?: string | null;
-  client_id?: string | null;
+  project_id: string;
   date: string;
   hours: number;
   note?: string | null;
@@ -77,9 +76,18 @@ export async function createTimeEntry(input: CreateTimeEntryInput): Promise<Time
   const user = await currentUser();
   const bizId = await resolveBusinessId(user.id);
 
+  // Time tracking is always per-project — the client is inferred from the
+  // project rather than selected/passed in independently.
+  const { data: project, error: projectErr } = await supabase
+    .from('projects')
+    .select('client_id')
+    .eq('id', input.project_id)
+    .single();
+  if (projectErr) throw projectErr;
+
   const { data, error } = await supabase
     .from('time_entries')
-    .insert({ ...input, user_id: user.id, business_id: bizId })
+    .insert({ ...input, client_id: project.client_id, user_id: user.id, business_id: bizId })
     .select(SELECT)
     .single();
   if (error) throw error;

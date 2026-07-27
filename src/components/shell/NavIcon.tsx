@@ -18,6 +18,8 @@ import {
   Share2,
   Send,
   BookOpen,
+  Clock,
+  Compass,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -41,6 +43,8 @@ const ICON_MAP: Record<string, LucideIcon> = {
   'share2': Share2,
   'send': Send,
   'book-open': BookOpen,
+  'clock': Clock,
+  'compass': Compass,
 }
 
 export function NavIcon({ name, className }: { name: string; className?: string }) {

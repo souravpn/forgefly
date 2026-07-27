@@ -31,9 +31,15 @@ export const NAV_ITEMS = [
   },
   {
     id: "project",
-    label: "Project",
+    label: "Projects",
     icon: "layers",
-    route: "/dashboard/project",
+    route: "/dashboard/projects",
+  },
+  {
+    id: "market-research",
+    label: "Market Research",
+    icon: "compass",
+    route: "/dashboard/market-research",
   },
   {
     id: "clients",

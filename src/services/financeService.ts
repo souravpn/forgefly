@@ -2,7 +2,6 @@ import { supabase } from '@/db/supabase';
 import type {
   Transaction,
   MileageLog,
-  TimeEntry,
   ContractorPayment,
   ExpenseCategory,
 } from '@/types/types';
@@ -138,49 +137,6 @@ export async function createMileageLog(input: MileageLogInsert): Promise<Mileage
 
 export async function deleteMileageLog(id: string): Promise<void> {
   const { error } = await supabase.from('mileage_logs').delete().eq('id', id);
-  if (error) throw error;
-}
-
-// ─── Time Entries ─────────────────────────────────────────────────────────────
-
-export type TimeEntryInsert = Omit<
-  TimeEntry,
-  'id' | 'business_id' | 'tax_year' | 'created_at' | 'project'
->;
-
-export async function getTimeEntries(year?: number): Promise<TimeEntry[]> {
-  const user = await currentUser();
-  const businessId = await resolveBusinessId(user.id);
-
-  let query = supabase
-    .from('time_entries')
-    .select('*, project:projects(*)')
-    .eq('business_id', businessId)
-    .order('entry_date', { ascending: false });
-
-  if (year) query = query.eq('tax_year', year);
-
-  const { data, error } = await query;
-  if (error) throw error;
-  return data ?? [];
-}
-
-export async function createTimeEntry(input: TimeEntryInsert): Promise<TimeEntry> {
-  const user = await currentUser();
-  const businessId = await resolveBusinessId(user.id);
-
-  const { data, error } = await supabase
-    .from('time_entries')
-    .insert({ ...input, business_id: businessId })
-    .select('*, project:projects(*)')
-    .single();
-
-  if (error) throw error;
-  return data;
-}
-
-export async function deleteTimeEntry(id: string): Promise<void> {
-  const { error } = await supabase.from('time_entries').delete().eq('id', id);
   if (error) throw error;
 }
 

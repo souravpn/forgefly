@@ -8,8 +8,8 @@ import {
   Copy,
   Edit2,
   Eye,
-  FileCheck,
   FileText,
+  FolderPlus,
   Loader2,
   Mail,
   MessageSquare,
@@ -39,6 +39,16 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuPortal,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Sheet, SheetContent, SheetHeader } from '@/components/ui/sheet';
 import { Separator } from '@/components/ui/separator';
 import { Input } from '@/components/ui/input';
@@ -49,7 +59,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useBusiness } from '@/contexts/CurrentBusinessContext';
 import { supabase } from '@/db/supabase';
 import { cn } from '@/lib/utils';
-import type { Client, Proposal, ProposalOrigin, ProposalStatus } from '@/types/types';
+import type { Client, Project, Proposal, ProposalOrigin, ProposalStatus } from '@/types/types';
 import { formatDistanceToNow, format } from 'date-fns';
 
 // ─── Local types ─────────────────────────────────────────────────────────────
@@ -254,6 +264,7 @@ export default function ProposalsPage() {
 
   const [proposals, setProposals] = useState<Proposal[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [originFilter, setOriginFilter] = useState<OriginFilter>('all');
@@ -312,9 +323,19 @@ export default function ProposalsPage() {
 
   // ── Load ───────────────────────────────────────────────────────────────────
 
-  // Auto-open new proposal wizard when navigated with ?action=new
+  // Auto-open new proposal wizard when navigated with ?action=new, optionally
+  // prefilling the client from a lead card's "Create proposal" link.
   useEffect(() => {
     if (searchParams.get('action') === 'new') {
+      const clientId = searchParams.get('client_id');
+      const clientName = searchParams.get('client_name');
+      if (clientId) {
+        setWizardClientMode('existing');
+        setWizardClientId(clientId);
+      } else if (clientName) {
+        setWizardClientMode('new');
+        setWizardNewName(clientName);
+      }
       setWizardOpen(true);
       setSearchParams({}, { replace: true });
     }
@@ -334,10 +355,18 @@ export default function ProposalsPage() {
   async function loadAll() {
     setLoading(true);
     try {
-      await Promise.all([loadProposals(), loadClients()]);
+      await Promise.all([loadProposals(), loadClients(), loadProjects()]);
     } finally {
       setLoading(false);
     }
+  }
+
+  async function loadProjects() {
+    const { data } = await supabase
+      .from('projects')
+      .select('*, client:clients(*)')
+      .order('created_at', { ascending: false });
+    setProjects(data ?? []);
   }
 
   async function loadProposals() {
@@ -1169,18 +1198,60 @@ export default function ProposalsPage() {
     }
   }
 
-  // ── Create invoice shortcut ────────────────────────────────────────────────
+  // ── Add a project shortcut ─────────────────────────────────────────────────
 
-  function handleCreateInvoice(p: Proposal) {
+  async function handleLinkExistingProject(p: Proposal, projectId: string) {
+    try {
+      await supabase.from('proposals').update({ project_id: projectId, updated_at: new Date().toISOString() }).eq('id', p.id);
+      toast.success('Project linked');
+      await loadProposals();
+    } catch {
+      toast.error('Failed to link project');
+    }
+  }
+
+  function handleAddNewProject(p: Proposal) {
     const params = new URLSearchParams();
     if (p.client_id) params.set('client_id', p.client_id);
-    if (p.total_amount ?? p.pricing) params.set('amount', String(p.total_amount ?? p.pricing));
-    params.set('description', p.title);
-    params.set('tab', 'invoices');
-    navigate(`/dashboard/finances?${params.toString()}`);
+    params.set('proposal_id', p.id);
+    params.set('action', 'new');
+    navigate(`/dashboard/projects?${params.toString()}`);
   }
 
   // ── Row action buttons ─────────────────────────────────────────────────────
+
+  function AddProjectMenu({ p }: { p: Proposal }) {
+    const clientProjects = p.client_id ? projects.filter((pr) => pr.client_id === p.client_id) : [];
+    return (
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button size="sm" className="h-7 gap-1.5 text-xs glow-accent">
+            <FolderPlus className="h-3 w-3" />
+            Add a Project
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger disabled={clientProjects.length === 0}>
+              Existing Project
+            </DropdownMenuSubTrigger>
+            <DropdownMenuPortal>
+              <DropdownMenuSubContent>
+                {clientProjects.map((pr) => (
+                  <DropdownMenuItem key={pr.id} onClick={() => handleLinkExistingProject(p, pr.id)}>
+                    {pr.name}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuSubContent>
+            </DropdownMenuPortal>
+          </DropdownMenuSub>
+          <DropdownMenuItem onClick={() => handleAddNewProject(p)}>
+            New Project
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    );
+  }
 
   function ActionButtons({ p }: { p: Proposal }) {
     const origin = p.initiated_by ?? 'freelancer';
@@ -1223,10 +1294,7 @@ export default function ProposalsPage() {
       if (status === 'accepted') {
         return (
           <div className="flex gap-1.5 shrink-0">
-            <Button size="sm" className="h-7 gap-1.5 text-xs glow-accent" onClick={() => handleCreateInvoice(p)}>
-              <FileCheck className="h-3 w-3" />
-              Create invoice
-            </Button>
+            <AddProjectMenu p={p} />
           </div>
         );
       }
@@ -1279,10 +1347,7 @@ export default function ProposalsPage() {
     if (status === 'accepted') {
       return (
         <div className="flex gap-1.5 shrink-0">
-          <Button size="sm" className="h-7 gap-1.5 text-xs glow-accent" onClick={() => handleCreateInvoice(p)}>
-            <FileCheck className="h-3 w-3" />
-            Create invoice
-          </Button>
+          <AddProjectMenu p={p} />
         </div>
       );
     }

@@ -4,13 +4,24 @@ import { getProfile } from "@/contexts/AuthContext";
 // @ts-ignore
 import { supabase } from "@/db/supabase";
 
+// The AI-generated preview always includes example pipeline leads so the
+// preview UI has something to show — those are illustrative only and must
+// never be carried into a real save (PipelinePage would otherwise seed them
+// as real contacts/pipeline_leads rows the first time Leads loads).
+function stripDummyPipelineLeads(extracted_data: Record<string, unknown>): Record<string, unknown> {
+  const pipeline = extracted_data?.pipeline as Record<string, unknown> | undefined;
+  if (!pipeline || !Array.isArray(pipeline.leads) || pipeline.leads.length === 0) return extracted_data;
+  return { ...extracted_data, pipeline: { ...pipeline, leads: [] } };
+}
+
 async function saveBusiness(
   userId: string,
-  extracted_data: Record<string, unknown>,
+  rawExtractedData: Record<string, unknown>,
   prompt: string | null,
   confidence_map: Record<string, string> | null,
   completeness_score: number,
 ): Promise<boolean> {
+  const extracted_data = stripDummyPipelineLeads(rawExtractedData);
   const identity = (extracted_data?.identity ?? {}) as Record<string, string>;
   const businessName = identity.businessName ?? identity.name ?? 'My Business';
 
@@ -59,6 +70,14 @@ async function saveBusiness(
     } else {
       bizId = inserted?.id ?? null;
     }
+  }
+
+  if (bizId) {
+    // Fire-and-forget — never blocks onboarding, and a failure here must not
+    // fail business creation itself.
+    supabase.functions.invoke('generate-market-research', { body: {} }).catch((err: unknown) => {
+      console.warn('generate-market-research invoke failed (non-fatal):', err);
+    });
   }
 
   if (bizId && prompt) {

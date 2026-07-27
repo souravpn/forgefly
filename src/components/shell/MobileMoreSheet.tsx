@@ -15,8 +15,8 @@ function toSlug(name: string) {
   return name.toLowerCase().replace(/\s+/g, '')
 }
 
-// Secondary nav: Services, Proposals, Project, Brand Kit from NAV_ITEMS
-const SECONDARY_IDS = ['services', 'proposals', 'project', 'brandkit']
+// Secondary nav: Services, Proposals, Project, Market Research, Brand Kit from NAV_ITEMS
+const SECONDARY_IDS = ['services', 'proposals', 'project', 'market-research', 'brandkit']
 const SHEET_NAV = NAV_ITEMS.filter(i => SECONDARY_IDS.includes(i.id))
 
 // From MORE_ITEMS, omit Automations on mobile (it's being replaced by the nudge engine)
@@ -27,9 +27,10 @@ const SOCIAL_ITEM = MORE_ITEMS.find(i => i.id === 'social')!
 interface MobileMoreSheetProps {
   open: boolean
   onClose: () => void
+  onOpenLogTime: () => void
 }
 
-export function MobileMoreSheet({ open, onClose }: MobileMoreSheetProps) {
+export function MobileMoreSheet({ open, onClose, onOpenLogTime }: MobileMoreSheetProps) {
   const { navigateTo, activeNavId } = useAppNavigation()
   const { user, profile, signOut } = useAuth()
   const { business } = useBusiness()
@@ -61,6 +62,14 @@ export function MobileMoreSheet({ open, onClose }: MobileMoreSheetProps) {
 
         {/* Nav items */}
         <nav className="px-3 pb-1 space-y-0.5">
+          <button
+            type="button"
+            onClick={() => { onOpenLogTime(); onClose() }}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors text-left text-foreground hover:bg-accent"
+          >
+            <NavIcon name="clock" className="h-4 w-4 shrink-0" />
+            Log Time
+          </button>
           {[...SHEET_NAV, ...SHEET_MORE].map(item => (
             <button
               key={item.id}

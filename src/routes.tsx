@@ -13,6 +13,7 @@ import FinancesPage from "./pages/FinancesPage";
 import GeneratedPortalPage from "./pages/GeneratedPortalPage";
 import LandingPage from "./pages/LandingPage";
 import LoginPage from "./pages/LoginPage";
+import MarketResearchPage from "./pages/MarketResearchPage";
 import MessagesPage from "./pages/MessagesPage";
 import OutreachKitPage from "./pages/OutreachKitPage";
 import PackagesPage from "./pages/PackagesPage";
@@ -20,7 +21,6 @@ import PaymentCancelPage from "./pages/PaymentCancelPage";
 import PaymentSuccessPage from "./pages/PaymentSuccessPage";
 import PipelinePage from "./pages/PipelinePage";
 import PortfolioPage from "./pages/PortfolioPage";
-import ProjectPage from "./pages/ProjectPage";
 import ProjectsPage from "./pages/ProjectsPage";
 import ProposalsPage from "./pages/ProposalsPage";
 import PublicPortfolioPage from "./pages/PublicPortfolioPage";
@@ -176,9 +176,9 @@ export const routes: RouteConfig[] = [
     element: <FinancesPage />,
   },
   {
-    name: "Project",
-    path: "/dashboard/project",
-    element: <ProjectPage />,
+    name: "Market Research",
+    path: "/dashboard/market-research",
+    element: <MarketResearchPage />,
   },
   {
     name: "Social",

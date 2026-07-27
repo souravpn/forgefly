@@ -1,6 +1,7 @@
 import { GripVertical } from "lucide-react";
 import { type ReactNode, useCallback, useRef, useState } from "react";
 import { AICopilot } from "@/components/layouts/AICopilot";
+import { QuickLogTimeDialog } from "@/components/common/QuickLogTimeDialog";
 import { CurrentBusinessProvider, useBusiness } from "@/contexts/CurrentBusinessContext";
 import { useNudges } from "@/hooks/useNudges";
 import { useReviewNotification } from "@/hooks/useReviewNotification";
@@ -18,6 +19,7 @@ const PANEL_DEFAULT_WIDTH = 665; // 1.75x the old 380px default
 function AppShellContent({ children }: { children: ReactNode }) {
   const [moreOpen, setMoreOpen] = useState(false);
   const [copilotOpen, setCopilotOpen] = useState(false);
+  const [logTimeOpen, setLogTimeOpen] = useState(false);
   const [panelWidth, setPanelWidth] = useState(PANEL_DEFAULT_WIDTH);
   const isResizingRef = useRef(false);
   const contentColumnRef = useRef<HTMLDivElement>(null);
@@ -132,7 +134,13 @@ function AppShellContent({ children }: { children: ReactNode }) {
         onMoreOpen={() => setMoreOpen(true)}
         isMoreOpen={moreOpen}
       />
-      <MobileMoreSheet open={moreOpen} onClose={() => setMoreOpen(false)} />
+      <MobileMoreSheet
+        open={moreOpen}
+        onClose={() => setMoreOpen(false)}
+        onOpenLogTime={() => setLogTimeOpen(true)}
+      />
+
+      <QuickLogTimeDialog open={logTimeOpen} onOpenChange={setLogTimeOpen} />
     </div>
   );
 }

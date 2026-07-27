@@ -38,7 +38,7 @@ VITE_SUPABASE_ANON_KEY=...
 
 Supabase Edge Functions require secrets set server-side (Supabase dashboard → Edge Functions → Secrets), grouped by what they power:
 - **Core**: `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` / `SUPABASE_SERVICE_KEY`, `SITE_URL`
-- **AI**: `ANTHROPIC_API_KEY` (Freeda, promotion captions), `OPENAI_API_KEY` (gpt-image-2 promotion images)
+- **AI**: `ANTHROPIC_API_KEY` (Freeda, promotion captions), `OPENAI_API_KEY` (gpt-image-2 promotion images), `PERPLEXITY_API_KEY` (Sonar search-grounded research, market research pipeline)
 - **Payments**: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_AGENCY_MONTHLY_PRICE_ID`, `STRIPE_AGENCY_YEARLY_PRICE_ID`
 - **Social**: `META_APP_ID` / `META_APP_SECRET` (Instagram + Facebook + WhatsApp OAuth and publishing, one Meta app for all three), `INSTAGRAM_APP_ID` / `INSTAGRAM_APP_SECRET`, `WHATSAPP_WEBHOOK_VERIFY_TOKEN`
 - **Promotions video**: `SHOTSTACK_API_KEY` (currently pinned to Shotstack's free/watermarked sandbox endpoint — swap to a production key + endpoint before relying on unwatermarked Reels)
@@ -67,7 +67,7 @@ Located in `supabase/functions/`, written in Deno/TypeScript. Grouped by area (s
 
 | Area | Functions |
 |---|---|
-| **Freeda / AI** | `ai-gateway` (sole LLM entry point — see Freeda section below), `extract-receipt`, `generate-visibility-kit`, `research-company`, `research-competitor`, `quarterly-review-insight`, `trigger-nudges` |
+| **Freeda / AI** | `ai-gateway` (sole LLM entry point — see Freeda section below), `extract-receipt`, `generate-visibility-kit`, `research-company`, `research-competitor`, `quarterly-review-insight`, `trigger-nudges`, `generate-market-research` (Perplexity Sonar research + Claude synthesis, see below) |
 | **Social & Promotions** | `social-oauth-callback`, `social-facebook-select-page`, `social-disconnect`, `get-social-status`, `social-publish-instagram`, `social-publish-facebook`, `social-send-whatsapp`, `send-whatsapp-message`, `whatsapp-webhook`, `handle-reply-intent`, `generate-promotion`, `check-video-render` |
 | **Payments/billing** | `create-checkout-session`, `create-invoice-checkout`, `create-subscription-checkout`, `portal-create-checkout`, `verify-stripe-payment`, `stripe-webhook`, `subscription-webhook`, `create-connect-account`, `get-connect-status` |
 | **Client portal** | `generate-portal-link`, `portal-approve-proposal`, `upload-portal-file`, `notify-portal-file-shared`, `select-portal-testimonials` |
@@ -112,6 +112,16 @@ The AI-to-database boundary above is one piece of a broader application-security
 - **Generate**: `generate-promotion` uses Claude Haiku for the caption and OpenAI's gpt-image-2 for a text-free illustrative image (baked-in AI text renders unreliably), and — for the `featured_openai` path only — also submits a short Ken Burns pan/zoom video render to Shotstack for an Instagram/Facebook Reel; `check-video-render` polls that render's status.
 - **Review & publish**: drafts live on the Draft tab (`DraftPromotionCard.tsx` → `EditPromotionModal.tsx` → `PublishWorkflowModal.tsx`), which publishes photo then Reel sequentially per platform via `social-publish-instagram` / `social-publish-facebook`, each leg failing independently. `promotionService.ts` (`LIVE_PLATFORMS = ['instagram', 'facebook']`) and `socialService.ts` (connection status, competitor intel) back this end to end.
 - WhatsApp is used both for the social module (broadcast via `social-send-whatsapp`) and separately for transactional sends like invoice payment links (`send-whatsapp-message`); inbound replies land via `whatsapp-webhook` (Meta-called, `--no-verify-jwt`) and `handle-reply-intent`.
+
+### Market Research (in progress — schema, edge function, and trigger exist, no review UI yet)
+
+`generate-market-research` produces a per-business landscape report: Perplexity's Sonar API runs three fixed, never-model-chosen research angles (local competitors, referral-partner leads, discovery channels) in parallel, then a single Claude Sonnet call synthesizes the results into a `market_summary` plus a fixed allow-list of item types (`outreach_draft`, `channel_signup_suggestion`, `pricing_note`, `positioning_insight`), each tagged `actionable` or `fyi` — the tag is derived server-side from `item_type`, never trusted from the model. Actionable items get a real outreach message drafted by a parallel per-item Claude Haiku fan-out (one call each, so one failure never blocks the rest); fyi items use the synthesis step's insight text directly. Perplexity's returned research is third-party web content and is explicitly framed as untrusted reference data in the synthesis prompt, never as instructions.
+
+Storage: `market_research` (one job/status row per business — `pending`/`running`/`ready`/`failed`, holds `market_summary` + `citations`) and `market_research_items` (the individual items, `status` lifecycle `new` → `approved`/`rejected`/`dismissed` → `sent`). RLS is select-only on `market_research` and select+update on `market_research_items` for authenticated users — both tables are only ever written by the edge function's service-role client. Currently runs once per business (no re-run yet); a `trigger_source` column (`generate_call` | `manual`) already anticipates a future manual re-run path, which should also add a cooldown before it ships.
+
+Triggered fire-and-forget (not awaited, never blocks onboarding, failure is non-fatal) right after a *new* business row is created — both onboarding paths call it: `AuthCallbackPage.tsx`'s `saveBusiness()` (email-verification redirect flow) and `useCurrentBusiness.ts`'s `fetchBusiness()` insert branch (already-logged-in flow). Deliberately not called from the `existing?.id` update branch in either file — this only ever fires once, for a genuinely new business.
+
+**Not yet built**: the swipe-approve queue UI and the Market Research tab. Approving an actionable item is scoped to only ever flip its `status` — the real send must still go through Freeda's existing propose/execute two-phase confirm (see the AI-to-database security boundary above), never fire directly from an approval.
 
 ### Onboarding & Getting Started
 

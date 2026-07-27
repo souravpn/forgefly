@@ -23,7 +23,7 @@ import {
 } from '@dnd-kit/core';
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Plus, Edit, Trash2, DollarSign, Briefcase, Sparkles, Link2, ExternalLink, ChevronRight, UserPlus, Users, Send } from 'lucide-react';
+import { Plus, Edit, Trash2, DollarSign, Briefcase, Sparkles, Link2, ExternalLink, ChevronRight, UserPlus, Users, Send, FileText } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/db/supabase';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -111,11 +111,13 @@ function LeadCard({
   lead,
   onEdit,
   onDelete,
+  onCreateProposal,
   overlay = false,
 }: {
   lead: Lead;
   onEdit: () => void;
   onDelete: () => void;
+  onCreateProposal: () => void;
   overlay?: boolean;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
@@ -180,6 +182,15 @@ function LeadCard({
                 <Edit className="w-3 h-3 mr-1" />
                 Edit
               </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground"
+                title="Create proposal"
+                onClick={e => { e.stopPropagation(); onCreateProposal(); }}
+              >
+                <FileText className="w-3 h-3" />
+              </Button>
               {portalUrl && (
                 <>
                   <Button
@@ -226,12 +237,14 @@ function StageColumn({
   onAddLead,
   onEdit,
   onDelete,
+  onCreateProposal,
 }: {
   stage: Stage;
   leads: Lead[];
   onAddLead: (stage: Stage) => void;
   onEdit: (lead: Lead) => void;
   onDelete: (lead: Lead) => void;
+  onCreateProposal: (lead: Lead) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: stage });
   const cfg = STAGE_CONFIG[stage];
@@ -274,6 +287,7 @@ function StageColumn({
               lead={lead}
               onEdit={() => onEdit(lead)}
               onDelete={() => onDelete(lead)}
+              onCreateProposal={() => onCreateProposal(lead)}
             />
           ))}
         </SortableContext>
@@ -563,7 +577,14 @@ export default function PipelinePage() {
     }
   }, []);
 
-  // ── Load from pipeline_leads table, seed from extracted_data if empty ────
+  // ── Load from pipeline_leads table ───────────────────────────────────────
+  // Note: this used to also seed fictional example leads from
+  // extracted_data.pipeline.leads (the AI-generated preview data) the first
+  // time this page loaded for an empty pipeline. That's gone — the preview's
+  // example leads are illustrative only and are now stripped before a
+  // business is ever saved (see stripDummyPipelineLeads in
+  // AuthCallbackPage.tsx / useCurrentBusiness.ts), so there's nothing left to
+  // seed from and a new business's Leads page just starts empty.
 
   const loadLeads = useCallback(async () => {
     if (!business) return;
@@ -574,67 +595,21 @@ export default function PipelinePage() {
       .eq('business_id', business.id)
       .order('created_at', { ascending: true });
 
-    if (data && data.length > 0) {
-      setLeads(data.map(l => {
-        const c = l.contacts as { name: string; lifecycle_status: string; portal_token: string | null } | null;
-        return {
-          _id: l.id,
-          contactId: l.contact_id ?? null,
-          name: c?.name ?? 'Unknown',
-          stage: toStage(l.stage),
-          value: l.value ?? '',
-          service: l.service_name ?? '',
-          lifecycleStatus: c?.lifecycle_status ?? 'prospect',
-          portalToken: c?.portal_token ?? null,
-        };
-      }));
-      setLoaded(true);
-      return;
-    }
-
-    // Seed from extracted_data if table is empty
-    const raw = (extractedData?.pipeline?.leads ?? []) as Array<{
-      name: string; stage: string; value: string; service: string;
-    }>;
-
-    if (raw.length === 0) { setLoaded(true); return; }
-
-    const seeded: Lead[] = [];
-    for (const item of raw) {
-      const { data: contact } = await supabase
-        .from('contacts')
-        .insert({ business_id: business.id, name: item.name })
-        .select('id')
-        .single();
-      if (!contact) continue;
-
-      const { data: pl } = await supabase
-        .from('pipeline_leads')
-        .insert({
-          business_id: business.id,
-          contact_id: contact.id,
-          stage: toStage(item.stage),
-          value: item.value || null,
-          service_name: item.service || null,
-        })
-        .select('id')
-        .single();
-      if (!pl) continue;
-
-      seeded.push({
-        _id: pl.id,
-        contactId: contact.id,
-        name: item.name,
-        stage: toStage(item.stage),
-        value: item.value ?? '',
-        service: item.service ?? '',
-        lifecycleStatus: 'prospect',
-        portalToken: null,
-      });
-    }
-    setLeads(seeded);
+    setLeads((data ?? []).map(l => {
+      const c = l.contacts as { name: string; lifecycle_status: string; portal_token: string | null } | null;
+      return {
+        _id: l.id,
+        contactId: l.contact_id ?? null,
+        name: c?.name ?? 'Unknown',
+        stage: toStage(l.stage),
+        value: l.value ?? '',
+        service: l.service_name ?? '',
+        lifecycleStatus: c?.lifecycle_status ?? 'prospect',
+        portalToken: c?.portal_token ?? null,
+      };
+    }));
     setLoaded(true);
-  }, [business, extractedData]);
+  }, [business]);
 
   useEffect(() => {
     if (business && !loaded) loadLeads();
@@ -692,6 +667,18 @@ export default function PipelinePage() {
       editId: lead._id,
       initial: { ...EMPTY_FORM, name: lead.name, stage: lead.stage, value: lead.value, service: lead.service },
     });
+  }
+
+  function handleCreateProposal(lead: Lead) {
+    const client = clients.find(c => c.contact_id === lead.contactId);
+    const params = new URLSearchParams();
+    params.set('action', 'new');
+    if (client) {
+      params.set('client_id', client.id);
+    } else if (lead.name) {
+      params.set('client_name', lead.name);
+    }
+    navigate(`/dashboard/proposals?${params.toString()}`);
   }
 
   async function handleSaveLead(data: LeadFormData, avatarFile: File | null) {
@@ -910,6 +897,7 @@ export default function PipelinePage() {
                   onAddLead={openAdd}
                   onEdit={openEdit}
                   onDelete={setDeleteTarget}
+                  onCreateProposal={handleCreateProposal}
                 />
               ))}
             </div>
@@ -921,6 +909,7 @@ export default function PipelinePage() {
                 lead={activeDragLead}
                 onEdit={() => {}}
                 onDelete={() => {}}
+                onCreateProposal={() => {}}
                 overlay
               />
             )}

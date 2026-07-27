@@ -15,10 +15,10 @@ import { DndContext, DragEndEvent, DragOverlay, DragStartEvent, PointerSensor, u
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import type { Project, ProjectStatus, Client } from '@/types/types';
+import type { Project, ProjectStatus, Client, TimeEntry } from '@/types/types';
 import { getProjects, createProject, updateProject, updateProjectStatus, deleteProject, subscribeToProjects } from '@/services/projectService';
 import { getClients } from '@/services/clientService';
-import { getTimeEntriesByProject } from '@/services/timeService';
+import { getTimeEntriesByProject, getTimeEntries } from '@/services/timeService';
 import { supabase } from '@/db/supabase';
 import { useBusiness } from '@/contexts/CurrentBusinessContext';
 import LogTimeDialog from '@/components/common/LogTimeDialog';
@@ -190,8 +190,12 @@ export default function ProjectsPage() {
     client_visible_note: '',
   });
   const [submitting, setSubmitting] = useState(false);
+  const [linkProposalId, setLinkProposalId] = useState<string | null>(null);
   const [logTimeProject, setLogTimeProject] = useState<Project | null>(null);
   const [projectHours, setProjectHours] = useState<Record<string, number>>({});
+  const [timeLogsOpen, setTimeLogsOpen] = useState(false);
+  const [timeEntries, setTimeEntries] = useState<TimeEntry[]>([]);
+  const [loadingTimeEntries, setLoadingTimeEntries] = useState(false);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -201,9 +205,24 @@ export default function ProjectsPage() {
     })
   );
 
-  // Auto-open create modal when navigated with ?action=new
+  // Auto-open create modal when navigated with ?action=new, optionally
+  // prefilling the client and remembering a proposal to link once created
+  // (e.g. from the "Add a Project" action on an accepted proposal).
   useEffect(() => {
     if (searchParams.get('action') === 'new') {
+      const clientId = searchParams.get('client_id');
+      const proposalId = searchParams.get('proposal_id');
+      setFormData({
+        name: '',
+        description: '',
+        client_id: clientId ?? '',
+        value: '',
+        deadline: '',
+        status: 'lead',
+        client_visible_status: '',
+        client_visible_note: '',
+      });
+      setLinkProposalId(proposalId);
       setIsCreateModalOpen(true);
       setSearchParams({}, { replace: true });
     }
@@ -257,6 +276,15 @@ export default function ProjectsPage() {
     } catch (error) {
       console.error('Error loading projects:', error);
     }
+  }
+
+  function openTimeLogs() {
+    setTimeLogsOpen(true);
+    setLoadingTimeEntries(true);
+    getTimeEntries()
+      .then(setTimeEntries)
+      .catch(() => toast.error('Failed to load time logs'))
+      .finally(() => setLoadingTimeEntries(false));
   }
 
   function openCreateModal() {
@@ -336,9 +364,13 @@ export default function ProjectsPage() {
         toast.success('Project updated successfully!');
         setIsEditModalOpen(false);
       } else {
-        await createProject(projectData);
+        const newProject = await createProject(projectData);
         toast.success('Project created successfully!');
         setIsCreateModalOpen(false);
+        if (linkProposalId) {
+          await supabase.from('proposals').update({ project_id: newProject.id }).eq('id', linkProposalId);
+          setLinkProposalId(null);
+        }
       }
 
       // Email client when status becomes visible — fire-and-forget
@@ -444,10 +476,16 @@ export default function ProjectsPage() {
           <h1 className="text-3xl md:text-4xl font-bold text-balance mb-2">Projects</h1>
           <p className="text-sm md:text-base text-muted-foreground">Manage your projects with Kanban board</p>
         </div>
-        <Button size="lg" className="glow-accent w-full md:w-auto" onClick={openCreateModal}>
-          <Plus className="w-5 h-5 mr-2" />
-          Add Project
-        </Button>
+        <div className="flex gap-2 w-full md:w-auto">
+          <Button size="lg" variant="outline" className="flex-1 md:flex-none" onClick={openTimeLogs}>
+            <Clock className="w-5 h-5 mr-2" />
+            Time Logs
+          </Button>
+          <Button size="lg" className="glow-accent flex-1 md:flex-none" onClick={openCreateModal}>
+            <Plus className="w-5 h-5 mr-2" />
+            Add Project
+          </Button>
+        </div>
       </div>
 
       <div className="relative">
@@ -692,6 +730,42 @@ export default function ProjectsPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Time Logs Modal */}
+      <Dialog open={timeLogsOpen} onOpenChange={setTimeLogsOpen}>
+        <DialogContent className="max-w-[calc(100%-2rem)] md:max-w-2xl max-h-[85dvh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Clock className="w-4 h-4" />
+              Time Logs
+            </DialogTitle>
+            <DialogDescription>All time logged across your projects.</DialogDescription>
+          </DialogHeader>
+          {loadingTimeEntries ? (
+            <p className="text-sm text-muted-foreground py-6 text-center">Loading…</p>
+          ) : timeEntries.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-6 text-center">No time logged yet.</p>
+          ) : (
+            <div className="space-y-1">
+              {timeEntries.map((entry) => (
+                <div
+                  key={entry.id}
+                  className="flex items-center justify-between gap-3 px-3 py-2 rounded-md hover:bg-muted/50 text-sm"
+                >
+                  <div className="min-w-0">
+                    <p className="font-medium truncate">{entry.project?.name ?? 'No project'}</p>
+                    <p className="text-xs text-muted-foreground truncate">
+                      {new Date(entry.date).toLocaleDateString()}
+                      {entry.note ? ` · ${entry.note}` : ''}
+                    </p>
+                  </div>
+                  <span className="font-medium tabular-nums shrink-0">{entry.hours.toFixed(2)} hrs</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       <LogTimeDialog
         open={logTimeProject !== null}

@@ -465,6 +465,50 @@ export interface CompetitorSiteIntel {
   scraped_at: string;
 }
 
+export type MarketResearchStatus = 'pending' | 'running' | 'ready' | 'failed';
+export type MarketResearchTriggerSource = 'generate_call' | 'manual';
+
+export interface MarketResearchCitation {
+  title: string;
+  url: string;
+}
+
+export interface MarketResearch {
+  id: string;
+  business_id: string;
+  status: MarketResearchStatus;
+  trigger_source: MarketResearchTriggerSource;
+  market_summary: string | null;
+  citations: MarketResearchCitation[] | null;
+  error: string | null;
+  created_at: string;
+  completed_at: string | null;
+}
+
+export type MarketResearchItemType = 'outreach_draft' | 'channel_signup_suggestion' | 'pricing_note' | 'positioning_insight';
+export type MarketResearchItemKind = 'actionable' | 'fyi';
+export type MarketResearchItemStatus = 'new' | 'approved' | 'rejected' | 'dismissed' | 'sent';
+
+export interface MarketResearchLeadContact {
+  email: string | null;
+  phone: string | null;
+  url: string | null;
+}
+
+export interface MarketResearchItem {
+  id: string;
+  market_research_id: string;
+  item_type: MarketResearchItemType;
+  kind: MarketResearchItemKind;
+  title: string;
+  summary: string;
+  lead_name: string | null;
+  lead_contact: MarketResearchLeadContact | null;
+  status: MarketResearchItemStatus;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface DocumentationSection {
   id: string;
   category: string;

@@ -46,6 +46,16 @@ export interface UseCurrentBusinessResult {
   refetch: () => void
 }
 
+// The AI-generated preview always includes example pipeline leads so the
+// preview UI has something to show — those are illustrative only and must
+// never be carried into a real save (PipelinePage would otherwise seed them
+// as real contacts/pipeline_leads rows the first time Leads loads).
+function stripDummyPipelineLeads(extracted_data: Record<string, any>): Record<string, any> {
+  const pipeline = extracted_data?.pipeline as Record<string, any> | undefined
+  if (!pipeline || !Array.isArray(pipeline.leads) || pipeline.leads.length === 0) return extracted_data
+  return { ...extracted_data, pipeline: { ...pipeline, leads: [] } }
+}
+
 async function ensureSlug(biz: Business): Promise<Business> {
   if (biz.slug) return biz
   const base = biz.name.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 20) || 'business'
@@ -86,7 +96,8 @@ export function useCurrentBusiness(): UseCurrentBusinessResult {
       const raw = localStorage.getItem('pending_portal')
       if (raw) {
         try {
-          const { extracted_data, prompt, confidence_map, completeness_score } = JSON.parse(raw)
+          const { extracted_data: rawExtractedData, prompt, confidence_map, completeness_score } = JSON.parse(raw)
+          const extracted_data = stripDummyPipelineLeads(rawExtractedData)
           const identity = (extracted_data as Record<string, any>)?.identity ?? {}
           const businessName = identity.businessName ?? identity.name ?? 'My Business'
 
@@ -125,6 +136,14 @@ export function useCurrentBusiness(): UseCurrentBusinessResult {
               inserted = retried.data
             }
             bizId = inserted?.id ?? null
+
+            if (bizId) {
+              // Fire-and-forget — new business only (the existing?.id branch above is
+              // an update, not a fresh onboarding), never blocks, failure is non-fatal.
+              supabase.functions.invoke('generate-market-research', { body: {} }).catch((err: unknown) => {
+                console.warn('generate-market-research invoke failed (non-fatal):', err)
+              })
+            }
           }
 
           if (bizId && prompt) {

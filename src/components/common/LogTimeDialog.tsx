@@ -66,6 +66,8 @@ export default function LogTimeDialog({ open, onOpenChange, projects, defaultPro
   useEffect(() => () => stopInterval(), [stopInterval]);
 
   function startTimer() {
+    if (!timerProjectId) { setError('Select a project first.'); return; }
+    setError('');
     const now = new Date();
     setTimerStartedAt(now);
     setElapsed(0);
@@ -78,7 +80,7 @@ export default function LogTimeDialog({ open, onOpenChange, projects, defaultPro
   async function stopAndSaveTimer() {
     stopInterval();
     setTimerRunning(false);
-    if (!timerStartedAt || elapsed < 60) {
+    if (!timerStartedAt || !timerProjectId || elapsed < 60) {
       setElapsed(0);
       return;
     }
@@ -88,7 +90,7 @@ export default function LogTimeDialog({ open, onOpenChange, projects, defaultPro
     setSavingTimer(true);
     try {
       await createTimeEntry({
-        project_id: timerProjectId || null,
+        project_id: timerProjectId,
         date: timerStartedAt.toISOString().slice(0, 10),
         hours: elapsedHours,
         note: timerNote || null,
@@ -110,13 +112,14 @@ export default function LogTimeDialog({ open, onOpenChange, projects, defaultPro
   async function saveManual() {
     setError('');
     const h = parseFloat(hours);
+    if (!projectId) { setError('Select a project.'); return; }
     if (!hours || isNaN(h) || h <= 0) { setError('Enter a valid number of hours.'); return; }
     if (!date) { setError('Pick a date.'); return; }
 
     setSaving(true);
     try {
       await createTimeEntry({
-        project_id: projectId || null,
+        project_id: projectId,
         date,
         hours: h,
         note: note || null,
@@ -150,11 +153,10 @@ export default function LogTimeDialog({ open, onOpenChange, projects, defaultPro
             {/* ── Manual ── */}
             <TabsContent value="manual" className="mt-4 space-y-4">
               <div className="space-y-1.5">
-                <Label>Project</Label>
+                <Label>Project *</Label>
                 <Select value={projectId} onValueChange={setProjectId}>
-                  <SelectTrigger><SelectValue placeholder="No project" /></SelectTrigger>
+                  <SelectTrigger><SelectValue placeholder="Select a project" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">No project</SelectItem>
                     {projects.map(p => (
                       <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
                     ))}
@@ -194,7 +196,7 @@ export default function LogTimeDialog({ open, onOpenChange, projects, defaultPro
 
               <div className="flex justify-end gap-2 pt-1">
                 <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-                <Button onClick={saveManual} disabled={saving}>
+                <Button onClick={saveManual} disabled={saving || !projectId}>
                   {saving ? <><Loader2 className="w-4 h-4 mr-1.5 animate-spin" />Saving…</> : 'Save'}
                 </Button>
               </div>
@@ -203,11 +205,10 @@ export default function LogTimeDialog({ open, onOpenChange, projects, defaultPro
             {/* ── Timer ── */}
             <TabsContent value="timer" className="mt-4 space-y-4">
               <div className="space-y-1.5">
-                <Label>Project</Label>
+                <Label>Project *</Label>
                 <Select value={timerProjectId} onValueChange={setTimerProjectId} disabled={timerRunning}>
-                  <SelectTrigger><SelectValue placeholder="No project" /></SelectTrigger>
+                  <SelectTrigger><SelectValue placeholder="Select a project" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">No project</SelectItem>
                     {projects.map(p => (
                       <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
                     ))}
@@ -239,7 +240,7 @@ export default function LogTimeDialog({ open, onOpenChange, projects, defaultPro
 
               <div className="flex gap-2">
                 {!timerRunning ? (
-                  <Button className="flex-1" onClick={startTimer}>
+                  <Button className="flex-1" onClick={startTimer} disabled={!timerProjectId}>
                     <Play className="w-4 h-4 mr-1.5" />Start
                   </Button>
                 ) : (
