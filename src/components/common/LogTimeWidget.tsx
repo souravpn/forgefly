@@ -4,7 +4,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Play, Square, Clock, Loader2 } from 'lucide-react';
+import { Play, Square, Clock, ChevronDown, Loader2 } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { getProjects } from '@/services/projectService';
@@ -25,6 +26,16 @@ interface Props {
   bare?: boolean;
 }
 
+const LOG_TIME_COLLAPSED_KEY = 'log-time-widget-collapsed';
+
+function loadCollapsed(): boolean {
+  try {
+    return localStorage.getItem(LOG_TIME_COLLAPSED_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
+
 function formatElapsed(seconds: number): string {
   const h = Math.floor(seconds / 3600);
   const m = Math.floor((seconds % 3600) / 60);
@@ -42,7 +53,12 @@ export function LogTimeWidget({ onSaved, onDismiss, showHeader = true, bare = fa
   const [stoppedAt, setStoppedAt] = useState<Date | null>(null);
   const [name, setName] = useState('');
   const [saving, setSaving] = useState(false);
+  const [collapsed, setCollapsed] = useState(loadCollapsed);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // An active or unsaved session always stays visible, regardless of the
+  // collapsed toggle — collapsing must never hide a running/unsaved timer.
+  const expanded = !showHeader || !collapsed || running || stopped;
 
   useEffect(() => {
     getProjects().then(setProjects).catch(() => {});
@@ -89,6 +105,18 @@ export function LogTimeWidget({ onSaved, onDismiss, showHeader = true, bare = fa
     setName(`Time entry — ${format(new Date(), 'MMM d, h:mm a')}`);
   }
 
+  function toggleCollapsed() {
+    setCollapsed((c) => {
+      const next = !c;
+      try {
+        localStorage.setItem(LOG_TIME_COLLAPSED_KEY, String(next));
+      } catch {
+        // storage unavailable (private browsing, etc.) — state still works in-memory
+      }
+      return next;
+    });
+  }
+
   function handleCancel() {
     reset();
     onDismiss?.();
@@ -124,12 +152,21 @@ export function LogTimeWidget({ onSaved, onDismiss, showHeader = true, bare = fa
   const body = (
     <>
         {showHeader && (
-          <div className="flex items-center gap-1.5 text-xs font-semibold text-sidebar-foreground/70">
-            <Clock className="h-3.5 w-3.5" />
-            Log Time
-          </div>
+          <button
+            type="button"
+            onClick={toggleCollapsed}
+            className="w-full flex items-center justify-between gap-1.5 text-xs font-semibold text-sidebar-foreground/70"
+          >
+            <span className="flex items-center gap-1.5">
+              <Clock className="h-3.5 w-3.5" />
+              Log Time
+            </span>
+            <ChevronDown className={cn('h-3.5 w-3.5 shrink-0 transition-transform', !expanded && '-rotate-90')} />
+          </button>
         )}
 
+        {expanded && (
+        <>
         <Select
           value={projectId}
           onValueChange={setProjectId}
@@ -184,6 +221,8 @@ export function LogTimeWidget({ onSaved, onDismiss, showHeader = true, bare = fa
             </>
           )}
         </div>
+        </>
+        )}
     </>
   );
 

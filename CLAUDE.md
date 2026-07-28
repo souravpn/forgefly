@@ -131,7 +131,7 @@ Triggered fire-and-forget (not awaited, never blocks onboarding, failure is non-
 
 ### Subscription tiers
 
-`isAgency` in `AuthContext` is `true` only when `subscription.tier === 'agency' && subscription.status === 'active'`. Agency-only features (Social/Promotions is the current example) are gated behind this flag. The `UpgradeModal` component handles upsell prompts. Stripe Checkout for the upgrade itself runs through `create-subscription-checkout` / `subscription-webhook`; Stripe Connect (`create-connect-account`, `get-connect-status`) is separate — it's for routing client payments to the freelancer, not for the Forgefly subscription itself.
+`isAgency` in `AuthContext` is `true` only when `subscription.tier === 'agency' && subscription.status === 'active'`. **Agency-tier gating is currently disabled repo-wide (temporary — "for now").** It used to gate Social/Promotions (`SocialPage.tsx`), the team-member invite on `ClientsPage.tsx`, and the AI-promotions-ready banner on `DashboardPage.tsx` — those `isAgency` checks were removed so every feature is available to every user regardless of tier. `isAgency` itself is left intact and unused in `AuthContext` so re-enabling gating later is a small diff (add the checks back), not a rebuild. Stripe Checkout for the upgrade itself still runs through `create-subscription-checkout` / `subscription-webhook`; Stripe Connect (`create-connect-account`, `get-connect-status`) is separate — it's for routing client payments to the freelancer, not for the Forgefly subscription itself.
 
 ### UI
 

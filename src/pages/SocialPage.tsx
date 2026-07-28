@@ -1,5 +1,4 @@
 import {
-  Crown,
   ExternalLink,
   Facebook,
   HelpCircle,
@@ -27,7 +26,6 @@ import {
 } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
-import { UpgradeModal } from "@/components/common/UpgradeModal";
 import { DraftPromotionCard } from "@/components/promotions/DraftPromotionCard";
 import { EditPromotionModal } from "@/components/promotions/EditPromotionModal";
 import { ManualPromotionForm } from "@/components/promotions/ManualPromotionForm";
@@ -39,7 +37,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { useAuth } from "@/contexts/AuthContext";
 import { useBusiness } from "@/contexts/CurrentBusinessContext";
 import { supabase } from "@/db/supabase";
 import {
@@ -1062,62 +1059,10 @@ function SocialWorkspace() {
   );
 }
 
-function SocialLocked({
-  message,
-  showUpgradeCta,
-}: {
-  message: string;
-  showUpgradeCta: boolean;
-}) {
-  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
-
-  return (
-    <div className="space-y-6 md:space-y-8">
-      <div>
-        <h1 className="text-3xl md:text-4xl font-bold text-balance mb-1">
-          Promotions
-        </h1>
-      </div>
-      <Card className="border-dashed">
-        <CardContent className="flex flex-col items-center justify-center py-20 text-center gap-4">
-          <div className="w-16 h-16 rounded-full bg-accent/10 flex items-center justify-center">
-            <Share2 className="w-8 h-8 text-accent" />
-          </div>
-          <p className="text-muted-foreground max-w-md text-pretty">
-            {message}
-          </p>
-          {showUpgradeCta && (
-            <Button onClick={() => setShowUpgradeModal(true)}>
-              <Crown className="w-4 h-4 mr-2" />
-              Upgrade to Agency
-            </Button>
-          )}
-        </CardContent>
-      </Card>
-      {showUpgradeCta && (
-        <UpgradeModal
-          open={showUpgradeModal}
-          onOpenChange={setShowUpgradeModal}
-        />
-      )}
-    </div>
-  );
-}
-
 export default function SocialPage() {
-  const { isAgency } = useAuth();
   const { isLoading } = useBusiness();
 
   if (isLoading) return null;
-
-  if (!isAgency) {
-    return (
-      <SocialLocked
-        message="AI-drafted promotions and competitor tracking are an agency-tier feature."
-        showUpgradeCta
-      />
-    );
-  }
 
   return <SocialWorkspace />;
 }

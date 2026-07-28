@@ -61,7 +61,7 @@ function getClientBadge(client: Client): ClientBadge {
 }
 
 export default function ClientsPage() {
-  const { isAgency, profile, user } = useAuth();
+  const { profile, user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
@@ -362,20 +362,15 @@ export default function ClientsPage() {
           <p className="text-sm md:text-base text-muted-foreground">Manage your client relationships</p>
         </div>
         <div className="flex flex-col sm:flex-row gap-2">
-          {isAgency && (
-            <Button
-              size="lg"
-              variant="outline"
-              className="border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10 w-full sm:w-auto"
-              onClick={() => setIsTeamMemberModalOpen(true)}
-            >
-              <UserPlus className="w-5 h-5 mr-2" />
-              Add Team Member
-              <Badge className="ml-2 bg-gradient-to-r from-emerald-500 to-amber-500 text-white text-xs px-1.5 py-0 h-5">
-                <Crown className="w-3 h-3" />
-              </Badge>
-            </Button>
-          )}
+          <Button
+            size="lg"
+            variant="outline"
+            className="border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10 w-full sm:w-auto"
+            onClick={() => setIsTeamMemberModalOpen(true)}
+          >
+            <UserPlus className="w-5 h-5 mr-2" />
+            Add Team Member
+          </Button>
           <Button size="lg" className="glow-accent w-full sm:w-auto" onClick={openCreateModal}>
             <Plus className="w-5 h-5 mr-2" />
             Add Client
@@ -690,17 +685,13 @@ export default function ClientsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Team Member Modal (Agency Only) */}
+      {/* Team Member Modal */}
       <Dialog open={isTeamMemberModalOpen} onOpenChange={setIsTeamMemberModalOpen}>
         <DialogContent className="max-w-[calc(100%-2rem)] md:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <UserPlus className="w-5 h-5 text-emerald-400" />
               Add Team Member
-              <Badge className="bg-gradient-to-r from-emerald-500 to-amber-500 text-white text-xs px-2 py-0.5">
-                <Crown className="w-3 h-3 mr-1" />
-                Agency
-              </Badge>
             </DialogTitle>
             <DialogDescription>
               Invite team members to collaborate on client projects

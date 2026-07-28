@@ -1,5 +1,6 @@
 import {
   Bell,
+  ChevronDown,
   LogOut,
   Settings,
   Sun,
@@ -9,6 +10,7 @@ import {
   MessageSquare,
   Sparkles,
 } from "lucide-react";
+import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useBusiness } from "@/contexts/CurrentBusinessContext";
 import { type UseNudgesResult } from "@/hooks/useNudges";
@@ -167,16 +169,47 @@ function NavLink({ item, onClick }: { item: NavEntry; onClick?: () => void }) {
   );
 }
 
-function SectionLabel({ label }: { label: string }) {
+function SectionLabel({
+  label,
+  open,
+  onToggle,
+}: {
+  label: string;
+  open: boolean;
+  onToggle: () => void;
+}) {
   return (
-    <p className="px-3 pt-3 pb-0.5 text-[10px] font-semibold text-sidebar-foreground/40 uppercase tracking-widest">
+    <button
+      type="button"
+      onClick={onToggle}
+      className="w-full flex items-center justify-between px-3 pt-3 pb-0.5 text-[10px] font-semibold text-sidebar-foreground/40 uppercase tracking-widest hover:text-sidebar-foreground/70 transition-colors"
+    >
       {label}
-    </p>
+      <ChevronDown
+        className={cn(
+          "h-3 w-3 shrink-0 transition-transform",
+          !open && "-rotate-90",
+        )}
+      />
+    </button>
   );
 }
 
 function toSlug(name: string) {
   return name.toLowerCase().replace(/\s+/g, "");
+}
+
+const SIDEBAR_SECTIONS_KEY = "sidebar-sections-open";
+const DEFAULT_OPEN_SECTIONS = { tools: true, clientele: true, project: true };
+
+function loadOpenSections(): typeof DEFAULT_OPEN_SECTIONS {
+  try {
+    const raw = localStorage.getItem(SIDEBAR_SECTIONS_KEY);
+    if (raw) return { ...DEFAULT_OPEN_SECTIONS, ...JSON.parse(raw) };
+  } catch {
+    // ignore malformed/unavailable storage, fall back to defaults
+  }
+  return DEFAULT_OPEN_SECTIONS;
 }
 
 interface AppSidebarProps {
@@ -196,6 +229,17 @@ export function AppSidebar({
   const { business, extractedData } = useBusiness();
   const { isDark, toggleTheme } = useTheme();
   const { navigateTo, activeNavId } = useAppNavigation();
+  const [openSections, setOpenSections] = useState(loadOpenSections);
+  const toggleSection = (key: keyof typeof openSections) =>
+    setOpenSections((prev) => {
+      const next = { ...prev, [key]: !prev[key] };
+      try {
+        localStorage.setItem(SIDEBAR_SECTIONS_KEY, JSON.stringify(next));
+      } catch {
+        // storage unavailable (private browsing, etc.) — state still works in-memory
+      }
+      return next;
+    });
 
   const identity = extractedData?.identity;
   const bizName =
@@ -296,18 +340,18 @@ export function AppSidebar({
             <LogTimeWidget />
           </div>
 
-          <SectionLabel label="Tools" />
-          {TOOLS_NAV.map((item) => (
+          <SectionLabel label="Tools" open={openSections.tools} onToggle={() => toggleSection("tools")} />
+          {openSections.tools && TOOLS_NAV.map((item) => (
             <NavLink key={item.id} item={item} onClick={onNavigate} />
           ))}
 
-          <SectionLabel label="Clientele" />
-          {CLIENTELE_NAV.map((item) => (
+          <SectionLabel label="Clientele" open={openSections.clientele} onToggle={() => toggleSection("clientele")} />
+          {openSections.clientele && CLIENTELE_NAV.map((item) => (
             <NavLink key={item.id} item={item} onClick={onNavigate} />
           ))}
 
-          <SectionLabel label="Project" />
-          {PROJECT_NAV.map((item) => (
+          <SectionLabel label="Project" open={openSections.project} onToggle={() => toggleSection("project")} />
+          {openSections.project && PROJECT_NAV.map((item) => (
             <NavLink key={item.id} item={item} onClick={onNavigate} />
           ))}
 

@@ -68,7 +68,7 @@ function urgencyClass(u: UpcomingItem['urgency']) {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
-  const { user, isAgency } = useAuth();
+  const { user } = useAuth();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { business, extractedData, isLoading: bizLoading } = useBusiness();
@@ -323,7 +323,7 @@ export default function DashboardPage() {
         </div>
 
         {/* ── AI promotions ready row ──────────────────────────────────────── */}
-        {isAgency && data?.hasDraftPromotions && (
+        {data?.hasDraftPromotions && (
           <button
             type="button"
             onClick={() => navigate('/dashboard/social')}
