@@ -25,11 +25,12 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/db/supabase";
 
-interface ExtractedService {
+interface ServiceRow {
+  id: string;
   name: string;
   price: string;
   type: "project" | "retainer" | "hourly";
-  description?: string;
+  description?: string | null;
 }
 
 interface Business {
@@ -48,7 +49,6 @@ interface Business {
       headerCoverUrl?: string;
       portalBgUrl?: string;
     };
-    services?: ExtractedService[];
   };
 }
 
@@ -240,6 +240,7 @@ export default function PublicPortfolioPage() {
   const [portalSections, setPortalSections] = useState<PortalSection[]>([]);
   const [workSamples, setWorkSamples] = useState<WorkSample[]>([]);
   const [testimonials, setTestimonials] = useState<Review[]>([]);
+  const [services, setServices] = useState<ServiceRow[]>([]);
   const [lightboxSample, setLightboxSample] = useState<WorkSample | null>(null);
 
   useEffect(() => {
@@ -256,7 +257,7 @@ export default function PublicPortfolioPage() {
         setNotFound(true);
       } else {
         setBusiness(data as unknown as Business);
-        const [sectionsRes, samplesRes, reviewsRes] = await Promise.all([
+        const [sectionsRes, samplesRes, reviewsRes, servicesRes] = await Promise.all([
           supabase
             .from("portal_sections")
             .select("*")
@@ -278,18 +279,23 @@ export default function PublicPortfolioPage() {
             .eq("ai_selected", true)
             .eq("portal_eligible", true)
             .order("ai_selected_at", { ascending: false }),
+          supabase
+            .from("services")
+            .select("id, name, price, type, description")
+            .eq("business_id", data.id)
+            .order("sort_order"),
         ]);
         if (sectionsRes.data)
           setPortalSections(sectionsRes.data as PortalSection[]);
         if (samplesRes.data) setWorkSamples(samplesRes.data as WorkSample[]);
         if (reviewsRes.data) setTestimonials(reviewsRes.data as Review[]);
+        if (servicesRes.data) setServices(servicesRes.data as ServiceRow[]);
       }
     })();
   }, [slug]);
 
   const identity = business?.extracted_data?.identity;
   const brand = business?.extracted_data?.brand;
-  const services: ExtractedService[] = business?.extracted_data?.services ?? [];
   const primaryColor = brand?.primaryColor ?? "#10B981";
   const bio = business?.bio ?? null;
   const contactEmail = business?.contact_email ?? null;
@@ -551,9 +557,9 @@ export default function PublicPortfolioPage() {
             <>
               <h2 className="text-xl font-semibold mb-6">Services</h2>
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {services.map((svc, i) => (
+                {services.map((svc) => (
                   <div
-                    key={i}
+                    key={svc.id}
                     className="border rounded-xl p-5 flex flex-col gap-3 hover:shadow-md transition-shadow"
                   >
                     <div className="flex items-start justify-between gap-2">
