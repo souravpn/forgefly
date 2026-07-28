@@ -104,16 +104,14 @@ export async function deleteInvoice(id: string): Promise<void> {
 async function generateInvoiceNumber(): Promise<string> {
   const today = new Date();
   const dateStr = today.toISOString().slice(0, 10).replace(/-/g, '');
-  
-  // Get count of invoices created today
-  const { count } = await supabase
-    .from('invoices')
-    .select('*', { count: 'exact', head: true })
-    .gte('created_at', `${today.toISOString().slice(0, 10)}T00:00:00`)
-    .lte('created_at', `${today.toISOString().slice(0, 10)}T23:59:59`);
 
-  const sequence = String((count || 0) + 1).padStart(3, '0');
-  return `INV-${dateStr}-${sequence}`;
+  // Atomic per-user, per-day counter (next_invoice_sequence RPC) — a plain
+  // count-then-insert here is racy (two near-simultaneous creates can read
+  // the same count and collide on the unique invoice_number constraint).
+  const { data: sequence, error } = await supabase.rpc('next_invoice_sequence', { p_date_key: dateStr });
+  if (error) throw error;
+
+  return `INV-${dateStr}-${String(sequence).padStart(3, '0')}`;
 }
 
 export function subscribeToInvoices(callback: (payload: unknown) => void) {
